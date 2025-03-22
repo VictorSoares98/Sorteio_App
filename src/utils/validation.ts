@@ -4,9 +4,16 @@ export const validateEmail = (email: string): boolean => {
 };
 
 export const validatePhone = (phone: string): boolean => {
-  // Formato brasileiro: (XX) XXXXX-XXXX ou XXXXXXXXXXX
-  const regex = /^\(?(\d{2})\)?[-. ]?(\d{5})[-. ]?(\d{4})$/;
-  return regex.test(phone);
+  // Primeiro remove todos os caracteres não numéricos
+  const numbersOnly = phone.replace(/\D/g, '');
+  
+  // Verifica se tem 10 ou 11 dígitos (com ou sem DDD)
+  if (numbersOnly.length !== 10 && numbersOnly.length !== 11) {
+    return false;
+  }
+
+  // Se chegou aqui, o número é válido em termos de quantidade de dígitos
+  return true;
 };
 
 export const validatePassword = (password: string): boolean => {

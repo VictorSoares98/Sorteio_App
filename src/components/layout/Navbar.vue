@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { useRouter } from 'vue-router';
-import { auth } from '../../firebase';
+import { useAuthStore } from '../../stores/authStore';
 
 const router = useRouter();
-const currentUser = computed(() => auth.currentUser);
+const authStore = useAuthStore();
+const currentUser = computed(() => authStore.currentUser);
 
 const navigateTo = (path: string) => {
   router.push(path);
@@ -12,8 +13,8 @@ const navigateTo = (path: string) => {
 
 const logout = async () => {
   try {
-    await auth.signOut();
-    router.push('/login');
+    await authStore.logout();
+    // O redirecionamento já é feito dentro do logout do authStore
   } catch (error) {
     console.error('Erro ao fazer logout:', error);
   }
@@ -28,7 +29,7 @@ const logout = async () => {
       </div>
       
       <div class="flex items-center space-x-6">
-        <template v-if="currentUser">
+        <template v-if="authStore.isAuthenticated">
           <button @click="navigateTo('/')" class="hover:text-secondary transition-colors">
             Início
           </button>

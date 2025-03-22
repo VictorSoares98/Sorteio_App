@@ -1,63 +1,101 @@
 import { createRouter, createWebHistory } from 'vue-router';
-import { auth } from '../firebase';
+import { auth, db } from '../firebase';
 import { doc, getDoc } from 'firebase/firestore';
-import { db } from '../firebase';
 import { UserRole } from '../types/user';
+import { isAdmin } from '../utils/permissions';
 
+// Define as rotas da aplicação
 const routes = [
   {
     path: '/',
+    name: 'home',
     component: () => import('../views/HomeView.vue'),
-    meta: { requiresAuth: true }
+    meta: { requiresAuth: true, title: 'Página Inicial' }
   },
+  
+  // Rotas de Autenticação
   {
     path: '/login',
+    name: 'login',
     component: () => import('../views/auth/LoginView.vue'),
+    meta: { title: 'Login' }
   },
   {
     path: '/register',
+    name: 'register',
     component: () => import('../views/auth/RegisterView.vue'),
+    meta: { title: 'Cadastro' }
   },
+  
+  // Rotas de Perfil
   {
     path: '/profile',
+    name: 'profile',
     component: () => import('../views/profile/ProfileView.vue'),
-    meta: { requiresAuth: true }
+    meta: { requiresAuth: true, title: 'Perfil' }
   },
+  
+  // Rotas de Administração
   {
     path: '/admin',
+    name: 'admin',
     component: () => import('../views/admin/AdminView.vue'),
-    meta: { requiresAuth: true, requiresAdmin: true }
+    meta: { requiresAuth: true, requiresAdmin: true, title: 'Administração' }
+  },
+  
+  // Rota para tratar URLs inválidas
+  {
+    path: '/:pathMatch(.*)*',
+    name: 'not-found',
+    component: () => import('../views/NotFoundView.vue'),
+    meta: { title: 'Página não encontrada' }
   }
 ];
 
+// Cria o roteador
 const router = createRouter({
   history: createWebHistory(),
-  routes
+  routes,
+  // Adicionar comportamento de scroll suave
+  scrollBehavior(to, from, savedPosition) {
+    if (savedPosition) {
+      return savedPosition;
+    } else {
+      return { top: 0, behavior: 'smooth' };
+    }
+  }
 });
 
 // Navegação com proteção de rotas
 router.beforeEach(async (to, from, next) => {
+  // Atualizar o título da página dinamicamente
+  document.title = `${to.meta.title || 'Sorteio UMADRIMC'}`;
+  
   const requiresAuth = to.matched.some(record => record.meta.requiresAuth);
   const requiresAdmin = to.matched.some(record => record.meta.requiresAdmin);
   const currentUser = auth.currentUser;
 
   if (requiresAuth && !currentUser) {
-    next('/login');
+    // Salvar a URL para redirecionamento após login
+    next({ 
+      name: 'login', 
+      query: { redirect: to.fullPath } 
+    });
   } else if (requiresAdmin && currentUser) {
     // Verificar se o usuário é admin
     try {
       const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
       const userData = userDoc.data();
       
-      if (userData?.role === UserRole.ADMIN) {
+      if (isAdmin(userData?.role as UserRole)) {
         next();
       } else {
-        // Não é admin, redirecionar para a home
-        next('/');
+        // Não é admin, redirecionar para home
+        next({ name: 'home' });
       }
     } catch (error) {
       console.error('Erro ao verificar permissões:', error);
-      next('/');
+      next({ name: 'home' });
     }
   } else {
     next();

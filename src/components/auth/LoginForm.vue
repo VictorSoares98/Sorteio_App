@@ -1,25 +1,27 @@
 <script setup lang="ts">
-import { ref } from 'vue';
-import { useRouter } from 'vue-router';
-import { signInWithEmailAndPassword } from 'firebase/auth';
-import { auth } from '../../firebase';
+import { ref, computed } from 'vue';
+import { useRoute } from 'vue-router';
+import { useAuthStore } from '../../stores/authStore';
 
 const email = ref('');
 const password = ref('');
 const errorMessage = ref('');
 const loading = ref(false);
-const router = useRouter();
+const authStore = useAuthStore();
+const route = useRoute();
+
+// Obter o redirecionamento da query string, se existir
+const redirectPath = computed(() => route.query.redirect?.toString() || '/');
 
 const login = async () => {
   errorMessage.value = '';
   loading.value = true;
   
   try {
-    await signInWithEmailAndPassword(auth, email.value, password.value);
-    router.push('/');
+    await authStore.login(email.value, password.value, redirectPath.value);
   } catch (error: any) {
-    errorMessage.value = 'Email ou senha incorretos. Tente novamente.';
-    console.error('Erro no login:', error.message);
+    errorMessage.value = authStore.error || 'Email ou senha incorretos. Tente novamente.';
+    console.error('Erro no login:', error);
   } finally {
     loading.value = false;
   }

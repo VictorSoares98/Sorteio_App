@@ -1,20 +1,23 @@
 import { defineStore } from 'pinia';
-import { ref, computed } from 'vue';
+import { ref, computed, markRaw } from 'vue';
+import type { Router } from 'vue-router';
 import { 
-  User as FirebaseUser, 
+  type User as FirebaseUser, 
   signInWithEmailAndPassword, 
   signOut, 
   onAuthStateChanged 
 } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from '../firebase';
-import { User, UserRole } from '../types/user';
+import { type User, UserRole } from '../types/user';
 
 export const useAuthStore = defineStore('auth', () => {
   const currentUser = ref<User | null>(null);
   const firebaseUser = ref<FirebaseUser | null>(null);
   const loading = ref(true);
   const error = ref<string | null>(null);
+  // Referência ao router (sem reatividade)
+  let router: Router | undefined;
 
   // Verifica se o usuário está autenticado
   const isAuthenticated = computed(() => !!currentUser.value);
@@ -25,18 +28,42 @@ export const useAuthStore = defineStore('auth', () => {
   // Verifica se o usuário é admin
   const isAdmin = computed(() => currentUser.value?.role === UserRole.ADMIN);
 
+  /**
+   * Inicializa o store com o router 
+   */
+  function init(routerInstance: Router): void {
+    // Armazena o router sem torná-lo reativo
+    router = markRaw(routerInstance);
+    
+    // Inicializa o listener de autenticação
+    initAuthListener();
+  }
+
   // Login com email e senha
-  const login = async (email: string, password: string): Promise<void> => {
+  const login = async (email: string, password: string, redirectPath?: string): Promise<void> => {
     loading.value = true;
     error.value = null;
     
     try {
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const userCredential = await signInWithEmailAndPassword(auth, email.trim(), password);
       firebaseUser.value = userCredential.user;
       await fetchUserData();
+      
+      // Redireciona após login, usando o caminho passado ou o padrão
+      if (router) {
+        router.push(redirectPath || '/');
+      }
     } catch (err: any) {
       console.error('Erro de login:', err);
-      error.value = 'Credenciais inválidas. Por favor, tente novamente.';
+      
+      if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password') {
+        error.value = 'Email ou senha incorretos.';
+      } else if (err.code === 'auth/too-many-requests') {
+        error.value = 'Muitas tentativas. Tente novamente mais tarde.';
+      } else {
+        error.value = 'Erro ao fazer login. Tente novamente.';
+      }
+      
       throw err;
     } finally {
       loading.value = false;
@@ -49,6 +76,10 @@ export const useAuthStore = defineStore('auth', () => {
       await signOut(auth);
       currentUser.value = null;
       firebaseUser.value = null;
+      
+      if (router) {
+        router.push('/login');
+      }
     } catch (err) {
       console.error('Erro ao fazer logout:', err);
       throw err;
@@ -81,17 +112,29 @@ export const useAuthStore = defineStore('auth', () => {
     onAuthStateChanged(auth, async (user) => {
       loading.value = true;
       
-      if (user) {
-        firebaseUser.value = user;
-        await fetchUserData();
-      } else {
-        currentUser.value = null;
-        firebaseUser.value = null;
+      try {
+        if (user) {
+          firebaseUser.value = user;
+          await fetchUserData();
+        } else {
+          currentUser.value = null;
+          firebaseUser.value = null;
+        }
+      } catch (err) {
+        console.error('Erro no listener de autenticação:', err);
+        error.value = 'Erro ao verificar autenticação.';
+      } finally {
+        loading.value = false;
       }
-      
-      loading.value = false;
     });
   };
+
+  /**
+   * Limpa os listeners quando o aplicativo é fechado
+   */
+  function cleanup(): void {
+    // Qualquer limpeza necessária
+  }
 
   return {
     currentUser,
@@ -103,6 +146,8 @@ export const useAuthStore = defineStore('auth', () => {
     login,
     logout,
     fetchUserData,
-    initAuthListener
+    initAuthListener,
+    init,
+    cleanup
   };
 });

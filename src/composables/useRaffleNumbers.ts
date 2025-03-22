@@ -81,7 +81,8 @@ export function useRaffleNumbers() {
   };
   
   return {
-    generatedNumbers: computed(() => generatedNumbers.value),
+    // Retornar o ref diretamente para manter compatibilidade
+    generatedNumbers,
     isGenerating,
     error,
     numbersPerOrder,
