@@ -17,9 +17,10 @@ const generateRandomCode = () => {
  * Verifica se um código de afiliado já existe
  */
 const checkCodeExists = async (code: string): Promise<boolean> => {
-  // No mundo real, verificaríamos no Firestore se o código já existe
-  // Por simplicidade, estamos sempre retornando false
-  return false;
+  // Verificar no Firestore se o código já existe
+  const codeQuery = doc(db, 'affiliateCodes', code);
+  const codeSnap = await getDoc(codeQuery);
+  return codeSnap.exists();
 };
 
 /**
@@ -43,8 +44,8 @@ export const generateAffiliateCode = async (userId: string): Promise<string> => 
     }
     
     // Gerar um novo código único
-    let code;
-    let codeExists = true;
+    let code = generateRandomCode();
+    let codeExists = await checkCodeExists(code);
     
     // Tentar até encontrar um código único
     while (codeExists) {
@@ -58,6 +59,7 @@ export const generateAffiliateCode = async (userId: string): Promise<string> => 
     });
     
     return code;
+    
   } catch (error) {
     console.error('Erro ao gerar código de afiliado:', error);
     throw new Error('Não foi possível gerar o código de afiliado.');

@@ -2,6 +2,13 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Classes personalizadas */
+@layer utilities {
+  .max-w-lg {
+    max-width: 32rem;
+  }
+}
+
 /* Estilos personalizados abaixo do Tailwind */
 :root {
   font-synthesis: none;

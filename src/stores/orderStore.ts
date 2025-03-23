@@ -3,7 +3,7 @@ import { ref, computed } from 'vue';
 import { collection, query, where, getDocs, addDoc, serverTimestamp, setDoc, doc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useAuthStore } from './authStore';
-import { Order, OrderFormData, PaymentMethod } from '../types/order';
+import type { Order, OrderFormData, PaymentMethod } from '../types/order';
 
 export const useOrderStore = defineStore('order', () => {
   const orders = ref<Order[]>([]);

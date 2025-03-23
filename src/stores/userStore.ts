@@ -1,8 +1,8 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
-import { collection, query, where, getDocs, doc, updateDoc, getDoc } from 'firebase/firestore';
+import { collection, getDocs, doc, updateDoc, getDoc, query, where } from 'firebase/firestore';
 import { db } from '../firebase';
-import { User, UserRole } from '../types/user';
+import type { User, UserRole } from '../types/user';
 import { useAuthStore } from './authStore';
 
 export const useUserStore = defineStore('users', () => {
@@ -21,10 +21,10 @@ export const useUserStore = defineStore('users', () => {
     
     // Filtrar por texto de busca
     if (searchQuery.value) {
-      const query = searchQuery.value.toLowerCase();
+      const searchText = searchQuery.value.toLowerCase();
       result = result.filter(user => 
-        user.displayName.toLowerCase().includes(query) || 
-        user.email.toLowerCase().includes(query)
+        user.displayName.toLowerCase().includes(searchText) || 
+        user.email.toLowerCase().includes(searchText)
       );
     }
     
@@ -98,6 +98,37 @@ export const useUserStore = defineStore('users', () => {
     }
   };
   
+  // Nova função que utiliza query e where
+  const fetchUsersByRole = async (role: UserRole) => {
+    loading.value = true;
+    error.value = null;
+    
+    try {
+      const usersRef = collection(db, 'users');
+      const roleQuery = query(usersRef, where('role', '==', role));
+      const querySnapshot = await getDocs(roleQuery);
+      
+      const filteredUsers: User[] = [];
+      
+      querySnapshot.forEach(doc => {
+        const userData = doc.data();
+        const createdAt = userData.createdAt?.toDate ? userData.createdAt.toDate() : new Date();
+        filteredUsers.push({
+          ...userData,
+          createdAt
+        } as User);
+      });
+      
+      return filteredUsers;
+    } catch (err: any) {
+      console.error('Erro ao buscar usuários por função:', err);
+      error.value = 'Não foi possível carregar os usuários com esta função.';
+      return [];
+    } finally {
+      loading.value = false;
+    }
+  };
+  
   // Atualizar papel do usuário (permissões)
   const updateUserRole = async (userId: string, newRole: UserRole) => {
     if (!authStore.isAdmin) {
@@ -148,6 +179,7 @@ export const useUserStore = defineStore('users', () => {
     roleFilter,
     fetchAllUsers,
     fetchUserById,
+    fetchUsersByRole, // Nova função adicionada
     updateUserRole,
     getUsersByActivity
   };
