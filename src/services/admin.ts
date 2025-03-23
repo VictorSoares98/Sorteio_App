@@ -1,7 +1,7 @@
 import { collection, getDocs, doc, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import type { UserRole, SalesData } from '../types/user';
-import type { Order, OrderFormData, PaymentMethod } from '../types/order';
+import type { Order } from '../types/order';
 import { updateOrderPayment } from './orders';
 
 export const fetchSalesReport = async () => {
