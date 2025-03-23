@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, computed } from 'vue';
 import { useAuthStore } from '../../stores/authStore';
 import { useOrderStore } from '../../stores/orderStore';
+import { UserRole } from '../../types/user';
 import ProfileEdit from '../../components/profile/ProfileEdit.vue';
 import AffiliateLink from '../../components/profile/AffiliateLink.vue';
 import SoldNumbersList from '../../components/profile/SoldNumbersList.vue';
@@ -10,6 +11,20 @@ const authStore = useAuthStore();
 const orderStore = useOrderStore();
 const isLoading = ref(true);
 const activeTab = ref('profile'); // 'profile', 'sales', 'affiliate'
+
+// Função para formatar o papel do usuário para exibição em português
+const formatUserRole = computed(() => {
+  if (!authStore.currentUser) return '';
+  
+  const roleMap = {
+    [UserRole.USER]: 'Membro',
+    [UserRole.CONTADOR]: 'Contador',
+    [UserRole.SECRETARIA]: 'Secretaria',
+    [UserRole.ADMIN]: 'Administrador'
+  };
+  
+  return roleMap[authStore.currentUser.role] || 'Membro';
+});
 
 // Carregar pedidos do usuário quando o componente for montado
 onMounted(async () => {
@@ -56,8 +71,8 @@ onMounted(async () => {
             </div>
             
             <div>
-              <p class="text-sm text-gray-500">Tipo de Conta</p>
-              <p class="font-medium capitalize">{{ authStore.currentUser.role }}</p>
+              <p class="text-sm text-gray-500">Função</p>
+              <p class="font-medium capitalize">{{ formatUserRole }}</p>
             </div>
           </div>
           

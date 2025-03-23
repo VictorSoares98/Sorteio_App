@@ -18,7 +18,7 @@ const actionError = ref<string | null>(null);
 
 // Mapear nomes das funções para exibição
 const roleNames = {
-  [UserRole.USER]: 'Usuário',
+  [UserRole.USER]: 'Membro',
   [UserRole.CONTADOR]: 'Contador',
   [UserRole.SECRETARIA]: 'Secretaria',
   [UserRole.ADMIN]: 'Administrador'
@@ -27,7 +27,7 @@ const roleNames = {
 // Opções de filtro para o select
 const roleOptions = [
   { value: '', label: 'Todos' },
-  { value: UserRole.USER, label: 'Usuários' },
+  { value: UserRole.USER, label: 'Membro' },
   { value: UserRole.CONTADOR, label: 'Contadores' },
   { value: UserRole.SECRETARIA, label: 'Secretaria' },
   { value: UserRole.ADMIN, label: 'Administradores' }

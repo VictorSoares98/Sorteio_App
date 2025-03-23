@@ -30,7 +30,7 @@ const submitForm = async () => {
   let isValid = true;
 
   if (!validateName(profileFormData.value.displayName)) {
-    validationErrors.value.displayName = 'O nome deve ter pelo menos 3 caracteres';
+    validationErrors.value.displayName = 'O nome deve ter pelo menos 5 caracteres';
     isValid = false;
   }
 
