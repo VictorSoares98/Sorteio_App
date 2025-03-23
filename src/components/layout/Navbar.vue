@@ -32,7 +32,7 @@ const toggleMenu = () => {
       <div class="flex justify-between items-center h-16">
         <!-- Logo/Brand -->
         <div class="flex-shrink-0">
-          <h1 class="text-xl font-bold">Sorteio UMADRIMC</h1>
+          <h1 class="text-xl font-bold">Tá nas Mãos de Deus</h1>
         </div>
         
         <!-- Menu Desktop -->
