@@ -1,6 +1,8 @@
-import { collection, query, where, getDocs, doc, getDoc, setDoc, serverTimestamp, orderBy } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, getDoc, setDoc, serverTimestamp, orderBy, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase';
-import { Order, OrderFormData, PaymentMethod } from '../types/order';
+import type { Order, OrderFormData } from '../types/order';
+// PaymentMethod é usado apenas como tipo, então usamos import type
+import type { PaymentMethod } from '../types/order';
 
 /**
  * Busca todos os pedidos feitos por um vendedor específico
@@ -171,5 +173,115 @@ export const fetchOrdersStatistics = async () => {
   } catch (error) {
     console.error('Erro ao buscar estatísticas de pedidos:', error);
     throw new Error('Não foi possível obter estatísticas de vendas.');
+  }
+};
+
+/**
+ * Sincroniza os pedidos locais com o servidor
+ * Útil para garantir dados atualizados sem recarregar tudo
+ */
+export const syncOrdersWithServer = async (localOrders: Order[], userId: string): Promise<Order[]> => {
+  try {
+    // Obter última data de atualização do pedido mais recente
+    const lastUpdateTime = localOrders.length > 0 
+      ? Math.max(...localOrders.map(o => o.createdAt.getTime()))
+      : 0;
+      
+    // Buscar apenas pedidos mais recentes que o último conhecido
+    const recentOrdersQuery = query(
+      collection(db, 'orders'),
+      where('sellerId', '==', userId),
+      where('createdAt', '>', new Date(lastUpdateTime)),
+      orderBy('createdAt', 'desc')
+    );
+    
+    const querySnapshot = await getDocs(recentOrdersQuery);
+    const newOrders: Order[] = [];
+    
+    querySnapshot.forEach((doc) => {
+      const data = doc.data();
+      const createdAt = data.createdAt?.toDate ? data.createdAt.toDate() : new Date();
+      
+      newOrders.push({
+        ...data,
+        createdAt
+      } as Order);
+    });
+    
+    // Combinar pedidos antigos com novos e ordenar
+    return [...newOrders, ...localOrders]
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+      
+  } catch (error) {
+    console.error('Erro ao sincronizar pedidos:', error);
+    return localOrders; // Retorna os pedidos locais em caso de erro
+  }
+};
+
+/**
+ * Busca pedidos que contêm um número específico
+ */
+export const findOrdersByNumber = async (number: string): Promise<Order[]> => {
+  try {
+    const ordersRef = collection(db, 'orders');
+    const ordersSnapshot = await getDocs(ordersRef);
+    const orders: Order[] = [];
+    
+    ordersSnapshot.forEach((doc) => {
+      const data = doc.data();
+      if (data.generatedNumbers && Array.isArray(data.generatedNumbers) && 
+          data.generatedNumbers.includes(number)) {
+        
+        // Converter timestamp para Date
+        const createdAt = data.createdAt?.toDate ? data.createdAt.toDate() : new Date();
+        
+        orders.push({
+          ...data,
+          createdAt
+        } as Order);
+      }
+    });
+    
+    return orders;
+  } catch (error) {
+    console.error('Erro ao buscar pedidos por número:', error);
+    throw new Error('Não foi possível buscar os pedidos com este número.');
+  }
+};
+
+/**
+ * Atualiza o status de pagamento de um pedido
+ */
+export const updateOrderPayment = async (
+  orderId: string, 
+  isPaid: boolean = true,
+  paymentInfo?: { date: Date; method: PaymentMethod; reference?: string }
+): Promise<boolean> => {
+  try {
+    const orderRef = doc(db, 'orders', orderId);
+    const orderDoc = await getDoc(orderRef);
+    
+    if (!orderDoc.exists()) {
+      throw new Error('Pedido não encontrado');
+    }
+    
+    const updateData: Record<string, any> = { 
+      isPaid,
+      paymentUpdatedAt: serverTimestamp()
+    };
+    
+    if (paymentInfo) {
+      updateData.paymentDate = paymentInfo.date;
+      updateData.paymentMethod = paymentInfo.method;
+      if (paymentInfo.reference) {
+        updateData.paymentReference = paymentInfo.reference;
+      }
+    }
+    
+    await updateDoc(orderRef, updateData);
+    return true;
+  } catch (error) {
+    console.error('Erro ao atualizar status de pagamento:', error);
+    throw new Error('Não foi possível atualizar o status de pagamento do pedido.');
   }
 };

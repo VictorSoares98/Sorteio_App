@@ -3,7 +3,7 @@ import { updateProfile } from 'firebase/auth';
 import { doc, updateDoc } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 import { useAuthStore } from '../stores/authStore';
-import { User } from '../types/user';
+import type { User } from '../types/user';
 import * as profileService from '../services/profile';
 
 export function useProfile() {
@@ -12,7 +12,7 @@ export function useProfile() {
   const error = ref<string | null>(null);
   const updateSuccess = ref(false);
   
-  const currentUser = computed(() => authStore.currentUser);
+  const currentUser = computed<User | null>(() => authStore.currentUser);
   
   // Form data para edição de perfil
   const profileFormData = ref<{

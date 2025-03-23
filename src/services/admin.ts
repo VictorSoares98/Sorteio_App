@@ -1,7 +1,7 @@
-import { collection, query, where, getDocs, getDoc, doc, updateDoc, Timestamp } from 'firebase/firestore';
+import { collection, getDocs, doc, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase';
-import { User, UserRole, SalesData } from '../types/user';
-import { Order } from '../types/order';
+import type { UserRole, SalesData } from '../types/user';
+import type { Order, OrderFormData, PaymentMethod } from '../types/order';
 
 /**
  * Recuperar dados de vendas para relatórios administrativos
@@ -100,6 +100,20 @@ export const fetchUserSalesData = async (): Promise<Map<string, SalesData>> => {
   } catch (error) {
     console.error('Erro ao buscar dados de vendas dos usuários:', error);
     throw new Error('Não foi possível carregar os dados de vendas dos usuários.');
+  }
+};
+
+/**
+ * Atualizar status de pagamento de um pedido
+ */
+export const updateOrderPaymentStatus = async (orderId: string, isPaid: boolean): Promise<boolean> => {
+  try {
+    const orderRef = doc(db, 'orders', orderId);
+    await updateDoc(orderRef, { isPaid });
+    return true;
+  } catch (error) {
+    console.error('Erro ao atualizar status de pagamento:', error);
+    return false;
   }
 };
 
