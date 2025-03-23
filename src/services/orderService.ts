@@ -1,6 +1,6 @@
 import { collection, query, where, getDocs, serverTimestamp, setDoc, doc } from 'firebase/firestore';
 import { db } from '../firebase';
-import type { Order, OrderFormData } from '../types/order';
+import { type Order, type OrderFormData } from '../types/order';
 
 /**
  * Busca todos os pedidos de um usuário específico
@@ -48,11 +48,16 @@ export const createOrder = async (
   try {
     const newOrderId = `order_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     
+    // Verificar se paymentMethod está definido
+    if (orderData.paymentMethod === undefined) {
+      throw new Error('É necessário selecionar uma forma de pagamento');
+    }
+    
     // Preparar dados do pedido
     const newOrder: Order = {
       id: newOrderId,
       buyerName: orderData.buyerName,
-      paymentMethod: orderData.paymentMethod,
+      paymentMethod: orderData.paymentMethod, // Agora sabemos que está definido
       contactNumber: orderData.contactNumber,
       addressOrCongregation: orderData.addressOrCongregation,
       observations: orderData.observations,
