@@ -24,3 +24,16 @@ export const formatDate = (date: Date): string => {
     year: 'numeric',
   }).format(date);
 };
+
+export const formatRaffleNumber = (number: string): string => {
+  // Se o número já tem o formato correto (5 dígitos), apenas retorne
+  if (/^\d{5}$/.test(number)) {
+    return number;
+  }
+  
+  // Limpa caracteres não numéricos
+  const cleaned = number.replace(/\D/g, '');
+  
+  // Formata para ter 5 dígitos com zeros à esquerda
+  return cleaned.padStart(5, '0').substring(0, 5);
+};

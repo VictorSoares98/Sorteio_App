@@ -18,14 +18,6 @@ const props = defineProps({
 
 const emit = defineEmits(['close', 'confirm']);
 
-// Controlar visibilidade do modal
-const isVisible = ref(props.show);
-
-// Sincronizar props com estado local
-watch(() => props.show, (newValue) => {
-  isVisible.value = newValue;
-});
-
 const closeModal = () => {
   emit('close');
 };

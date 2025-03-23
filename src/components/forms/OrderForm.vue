@@ -84,8 +84,24 @@ const submitForm = async () => {
     const newOrderId = await orderStore.createOrder(formData.value, generatedNumbers.value);
     
     // 4. Buscar o pedido criado para o modal
-    // Simplificando para evitar duplicação de lógica
     createdOrder.value = orderStore.orders.find(order => order.id === newOrderId);
+    
+    if (!createdOrder.value) {
+      console.warn('Pedido criado não encontrado na lista, buscando dados do ID');
+      // Tentar uma abordagem alternativa - em um sistema real, poderíamos buscar o pedido da API
+      createdOrder.value = {
+        id: newOrderId,
+        buyerName: formData.value.buyerName,
+        paymentMethod: formData.value.paymentMethod,
+        contactNumber: formData.value.contactNumber,
+        addressOrCongregation: formData.value.addressOrCongregation,
+        observations: formData.value.observations,
+        generatedNumbers: generatedNumbers.value,
+        sellerId: authStore.currentUser.id,
+        sellerName: authStore.currentUser.displayName,
+        createdAt: new Date()
+      };
+    }
     
     // 5. Mostrar confirmação e resetar formulário
     orderId.value = newOrderId;

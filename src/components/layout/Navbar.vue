@@ -36,6 +36,13 @@ const logout = async () => {
           <button @click="navigateTo('/profile')" class="hover:text-secondary transition-colors">
             Perfil
           </button>
+          <button 
+            v-if="authStore.isAdmin" 
+            @click="navigateTo('/admin')" 
+            class="hover:text-secondary transition-colors"
+          >
+            Admin
+          </button>
           <button @click="logout" class="hover:text-danger transition-colors">
             Sair
           </button>

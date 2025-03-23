@@ -1,4 +1,9 @@
 {
+  "compilerOptions": {
+    "paths": {
+      "vue-router": ["./node_modules/vue-router"]
+    }
+  },
   "files": [],
   "references": [
     { "path": "./tsconfig.app.json" },

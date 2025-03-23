@@ -1,11 +1,24 @@
 import { createRouter, createWebHistory } from 'vue-router';
+import type { RouteRecordRaw, NavigationGuardNext, RouteLocationNormalized } from 'vue-router';
 import { auth, db } from '../firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import { UserRole } from '../types/user';
 import { isAdmin } from '../utils/permissions';
 
+// Interface para metadados de rota personalizados
+interface RouteMeta {
+  requiresAuth?: boolean;
+  requiresAdmin?: boolean;
+  title?: string;
+}
+
+// Estender RouteRecordRaw para incluir nossos metadados personalizados
+type AppRouteRecordRaw = RouteRecordRaw & {
+  meta?: RouteMeta;
+};
+
 // Define as rotas da aplicação
-const routes = [
+const routes: AppRouteRecordRaw[] = [
   {
     path: '/',
     name: 'home',
@@ -67,7 +80,11 @@ const router = createRouter({
 });
 
 // Navegação com proteção de rotas
-router.beforeEach(async (to, from, next) => {
+router.beforeEach(async (
+  to: RouteLocationNormalized,
+  from: RouteLocationNormalized,
+  next: NavigationGuardNext
+) => {
   // Atualizar o título da página dinamicamente
   document.title = `${to.meta.title || 'Sorteio UMADRIMC'}`;
   

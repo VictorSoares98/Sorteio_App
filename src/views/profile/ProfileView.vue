@@ -2,10 +2,14 @@
 import { ref, onMounted } from 'vue';
 import { useAuthStore } from '../../stores/authStore';
 import { useOrderStore } from '../../stores/orderStore';
+import ProfileEdit from '../../components/profile/ProfileEdit.vue';
+import AffiliateLink from '../../components/profile/AffiliateLink.vue';
+import SoldNumbersList from '../../components/profile/SoldNumbersList.vue';
 
 const authStore = useAuthStore();
 const orderStore = useOrderStore();
 const isLoading = ref(true);
+const activeTab = ref('profile'); // 'profile', 'sales', 'affiliate'
 
 // Carregar pedidos do usuário quando o componente for montado
 onMounted(async () => {
@@ -57,55 +61,48 @@ onMounted(async () => {
             </div>
           </div>
           
-          <button class="mt-6 w-full bg-primary hover:bg-blue-700 text-white py-2 px-4 rounded">
-            Editar Perfil
-          </button>
+          <!-- Tabs para navegar entre as diferentes seções -->
+          <div class="mt-6 flex border-b">
+            <button 
+              @click="activeTab = 'profile'" 
+              class="px-4 py-2 border-b-2 focus:outline-none"
+              :class="activeTab === 'profile' ? 'border-primary text-primary' : 'border-transparent'"
+            >
+              Editar Perfil
+            </button>
+            <button 
+              @click="activeTab = 'sales'" 
+              class="px-4 py-2 border-b-2 focus:outline-none"
+              :class="activeTab === 'sales' ? 'border-primary text-primary' : 'border-transparent'"
+            >
+              Vendas
+            </button>
+            <button 
+              @click="activeTab = 'affiliate'" 
+              class="px-4 py-2 border-b-2 focus:outline-none"
+              :class="activeTab === 'affiliate' ? 'border-primary text-primary' : 'border-transparent'"
+            >
+              Afiliado
+            </button>
+          </div>
         </div>
       </div>
       
-      <!-- Meus Pedidos -->
+      <!-- Conteúdo dinâmico baseado na tab ativa -->
       <div class="md:col-span-2">
-        <div class="bg-white p-6 rounded-lg shadow-md">
-          <h2 class="text-xl font-semibold mb-4 text-primary">Meus Pedidos</h2>
-          
-          <div v-if="orderStore.loading" class="text-center py-4">
-            <p>Carregando pedidos...</p>
-          </div>
-          
-          <div v-else-if="orderStore.userOrders.length === 0" class="text-center py-4">
-            <p class="text-gray-500">Você ainda não realizou nenhum pedido.</p>
-            <router-link to="/" class="text-primary hover:underline block mt-2">
-              Criar meu primeiro pedido
-            </router-link>
-          </div>
-          
-          <div v-else class="space-y-4">
-            <div v-for="order in orderStore.userOrders" :key="order.id" 
-              class="border border-gray-200 rounded-md p-4">
-              <div class="flex justify-between items-start">
-                <div>
-                  <p class="font-medium">{{ order.buyerName }}</p>
-                  <p class="text-sm text-gray-500">
-                    {{ new Date(order.createdAt).toLocaleDateString('pt-BR') }}
-                  </p>
-                </div>
-                <div class="text-right">
-                  <p class="font-medium">{{ order.paymentMethod === 'pix' ? 'Pix' : 'Dinheiro' }}</p>
-                  <p class="text-sm text-gray-500">{{ order.generatedNumbers.length }} números</p>
-                </div>
-              </div>
-              
-              <div class="mt-3">
-                <p class="text-sm font-semibold">Números:</p>
-                <div class="flex flex-wrap gap-1 mt-1">
-                  <span v-for="number in order.generatedNumbers" :key="number"
-                    class="bg-primary text-white text-xs px-2 py-1 rounded-full">
-                    {{ number }}
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
+        <!-- Editar Perfil -->
+        <div v-if="activeTab === 'profile'">
+          <ProfileEdit />
+        </div>
+        
+        <!-- Números Vendidos -->
+        <div v-else-if="activeTab === 'sales'">
+          <SoldNumbersList />
+        </div>
+        
+        <!-- Link de Afiliado -->
+        <div v-else-if="activeTab === 'affiliate'">
+          <AffiliateLink />
         </div>
       </div>
     </div>

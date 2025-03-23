@@ -79,7 +79,7 @@ export function useProfile() {
   const generateAffiliateCode = async () => {
     if (!currentUser.value) {
       error.value = 'Usuário não está autenticado.';
-      return;
+      return null;
     }
     
     loading.value = true;
@@ -87,12 +87,16 @@ export function useProfile() {
     
     try {
       const code = await profileService.generateAffiliateCode(currentUser.value.id);
+      if (!code) {
+        throw new Error('Não foi possível gerar o código de afiliado.');
+      }
       // Atualizar store para refletir novo código
       await authStore.fetchUserData();
       return code;
     } catch (err: any) {
       console.error('Erro ao gerar código de afiliado:', err);
       error.value = err.message || 'Erro ao gerar código de afiliado.';
+      return null;
     } finally {
       loading.value = false;
     }
