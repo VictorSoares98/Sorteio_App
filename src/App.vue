@@ -16,7 +16,7 @@ const isAuthPage = computed(() => {
 
 <template>
   <div class="flex flex-col min-h-screen">
-    <header class="w-full sticky top-0 z-50">
+    <header v-if="!isAuthPage" class="w-full sticky top-0 z-50">
       <Navbar />
     </header>
     
