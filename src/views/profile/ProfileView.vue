@@ -1,30 +1,15 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted } from 'vue';
 import { useAuthStore } from '../../stores/authStore';
 import { useOrderStore } from '../../stores/orderStore';
-import { UserRole } from '../../types/user';
 import ProfileEdit from '../../components/profile/ProfileEdit.vue';
 import AffiliateLink from '../../components/profile/AffiliateLink.vue';
-import SoldNumbersList from '../../components/profile/SoldNumbersList.vue';
+import SalesAccordion from '../../components/profile/SalesAccordion.vue';
 
 const authStore = useAuthStore();
 const orderStore = useOrderStore();
 const isLoading = ref(true);
 const activeTab = ref('profile'); // 'profile', 'sales', 'affiliate'
-
-// Função para formatar o papel do usuário para exibição em português
-const formatUserRole = computed(() => {
-  if (!authStore.currentUser) return '';
-  
-  const roleMap = {
-    [UserRole.USER]: 'Membro',
-    [UserRole.CONTADOR]: 'Contador',
-    [UserRole.SECRETARIA]: 'Secretaria',
-    [UserRole.ADMIN]: 'Administrador'
-  };
-  
-  return roleMap[authStore.currentUser.role] || 'Membro';
-});
 
 // Carregar pedidos do usuário quando o componente for montado
 onMounted(async () => {
@@ -49,55 +34,60 @@ onMounted(async () => {
     </div>
     
     <div v-else-if="authStore.currentUser" class="grid grid-cols-1 md:grid-cols-3 gap-6">
-      <!-- Informações do usuário -->
+      <!-- Navegação lateral -->
       <div class="md:col-span-1">
         <div class="bg-white p-6 rounded-lg shadow-md">
-          <h2 class="text-xl font-semibold mb-4 text-primary">Dados Pessoais</h2>
-          
-          <div class="space-y-4">
-            <div>
-              <p class="text-sm text-gray-500">Nome</p>
-              <p class="font-medium">{{ authStore.currentUser.displayName }}</p>
-            </div>
-            
-            <div>
-              <p class="text-sm text-gray-500">Email</p>
-              <p class="font-medium">{{ authStore.currentUser.email }}</p>
-            </div>
-            
-            <div v-if="authStore.currentUser.congregation">
-              <p class="text-sm text-gray-500">Congregação</p>
-              <p class="font-medium">{{ authStore.currentUser.congregation }}</p>
-            </div>
-            
-            <div>
-              <p class="text-sm text-gray-500">Função</p>
-              <p class="font-medium capitalize">{{ formatUserRole }}</p>
-            </div>
+          <!-- Nome do usuário para contexto -->
+          <div class="mb-6 pb-4 border-b border-gray-200">
+            <h2 class="text-xl font-semibold text-primary mb-1">{{ authStore.currentUser.displayName }}</h2>
+            <p class="text-sm text-gray-500">{{ authStore.currentUser.email }}</p>
           </div>
           
           <!-- Tabs para navegar entre as diferentes seções -->
-          <div class="mt-6 flex border-b">
+          <div class="flex flex-col space-y-2">
             <button 
               @click="activeTab = 'profile'" 
-              class="px-4 py-2 border-b-2 focus:outline-none"
-              :class="activeTab === 'profile' ? 'border-primary text-primary' : 'border-transparent'"
+              class="py-2 px-4 rounded-md text-left transition-colors"
+              :class="activeTab === 'profile' 
+                ? 'bg-primary bg-opacity-10 text-primary font-medium' 
+                : 'hover:bg-gray-100'"
             >
-              Editar Perfil
+              <span class="flex items-center">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+                Informações do Perfil
+              </span>
             </button>
+            
             <button 
               @click="activeTab = 'sales'" 
-              class="px-4 py-2 border-b-2 focus:outline-none"
-              :class="activeTab === 'sales' ? 'border-primary text-primary' : 'border-transparent'"
+              class="py-2 px-4 rounded-md text-left transition-colors"
+              :class="activeTab === 'sales' 
+                ? 'bg-primary bg-opacity-10 text-primary font-medium' 
+                : 'hover:bg-gray-100'"
             >
-              Vendas
+              <span class="flex items-center">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                </svg>
+                Minhas Vendas
+              </span>
             </button>
+            
             <button 
               @click="activeTab = 'affiliate'" 
-              class="px-4 py-2 border-b-2 focus:outline-none"
-              :class="activeTab === 'affiliate' ? 'border-primary text-primary' : 'border-transparent'"
+              class="py-2 px-4 rounded-md text-left transition-colors"
+              :class="activeTab === 'affiliate' 
+                ? 'bg-primary bg-opacity-10 text-primary font-medium' 
+                : 'hover:bg-gray-100'"
             >
-              Afiliado
+              <span class="flex items-center">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                Programa de Afiliados
+              </span>
             </button>
           </div>
         </div>
@@ -110,9 +100,9 @@ onMounted(async () => {
           <ProfileEdit />
         </div>
         
-        <!-- Números Vendidos -->
+        <!-- Vendas -->
         <div v-else-if="activeTab === 'sales'">
-          <SoldNumbersList />
+          <SalesAccordion />
         </div>
         
         <!-- Link de Afiliado -->

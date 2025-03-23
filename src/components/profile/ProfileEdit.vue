@@ -8,6 +8,7 @@ import Card from '../ui/Card.vue';
 import { validateName, validatePhone } from '../../utils/validation';
 
 const { 
+  currentUser,
   profileFormData, 
   loading, 
   error, 
@@ -17,6 +18,7 @@ const {
 } = useProfileUpdate();
 
 const validationErrors = ref<Record<string, string>>({});
+const isEditMode = ref(false); // Novo estado para controlar o modo de edição
 
 // Inicializar dados do formulário quando o componente for montado
 onMounted(() => {
@@ -42,12 +44,29 @@ const submitForm = async () => {
   if (!isValid) return;
 
   // Envia os dados para atualização
-  await updateUserProfile();
+  const success = await updateUserProfile();
+  
+  // Se a atualização foi bem-sucedida, sai do modo de edição
+  if (success) {
+    isEditMode.value = false;
+  }
+};
+
+// Alternar para o modo de edição
+const enableEditMode = () => {
+  isEditMode.value = true;
+};
+
+// Cancelar edição
+const cancelEdit = () => {
+  isEditMode.value = false;
+  initProfileForm(); // Restaurar os dados originais
+  validationErrors.value = {}; // Limpar erros de validação
 };
 </script>
 
 <template>
-  <Card title="Editar Perfil">
+  <Card title="Informações do Perfil">
     <div class="p-4">
       <!-- Alertas -->
       <Alert
@@ -67,8 +86,57 @@ const submitForm = async () => {
         class="mb-4"
       />
       
-      <!-- Formulário -->
-      <form @submit.prevent="submitForm">
+      <!-- Modo de Visualização -->
+      <div v-if="!isEditMode && currentUser" class="space-y-4">
+        <div class="border-b pb-2 mb-4">
+          <div class="flex justify-between items-center">
+            <h3 class="text-lg font-medium text-primary">Seus Dados</h3>
+            <Button 
+              @click="enableEditMode" 
+              variant="outline" 
+              size="sm"
+            >
+              Editar Perfil
+            </Button>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <p class="text-sm text-gray-500">Nome Completo</p>
+            <p class="font-medium">{{ currentUser.displayName }}</p>
+          </div>
+          
+          <div>
+            <p class="text-sm text-gray-500">Nome de usuário</p>
+            <p class="font-medium">{{ currentUser.username }}</p>
+          </div>
+          
+          <div>
+            <p class="text-sm text-gray-500">Email</p>
+            <p class="font-medium">{{ currentUser.email }}</p>
+          </div>
+          
+          <div>
+            <p class="text-sm text-gray-500">Telefone</p>
+            <p class="font-medium">{{ currentUser.phone || 'Não informado' }}</p>
+          </div>
+          
+          <div>
+            <p class="text-sm text-gray-500">Congregação</p>
+            <p class="font-medium">{{ currentUser.congregation || 'Não informada' }}</p>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Modo de Edição (Formulário) -->
+      <form v-if="isEditMode" @submit.prevent="submitForm">
+        <div class="border-b pb-2 mb-4">
+          <div class="flex justify-between items-center">
+            <h3 class="text-lg font-medium text-primary">Editar Perfil</h3>
+          </div>
+        </div>
+
         <Input
           v-model="profileFormData.displayName"
           label="Nome Completo"
@@ -88,11 +156,18 @@ const submitForm = async () => {
           label="Congregação"
         />
         
-        <div class="mt-6">
+        <div class="mt-6 flex space-x-3">
+          <Button
+            type="button"
+            variant="outline" 
+            @click="cancelEdit"
+          >
+            Cancelar
+          </Button>
+          
           <Button
             type="submit"
             variant="primary"
-            block
             :disabled="loading"
           >
             <span v-if="loading">Salvando...</span>
