@@ -4,7 +4,6 @@ import { doc, updateDoc } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 import { useAuthStore } from '../stores/authStore';
 import type { User } from '../types/user';
-import * as profileService from '../services/profile';
 
 export function useProfileUpdate() {
   const authStore = useAuthStore();
