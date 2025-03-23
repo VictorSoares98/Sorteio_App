@@ -4,6 +4,7 @@ import { useUserStore } from '../../stores/userStore';
 import { UserRole } from '../../types/user';
 import Card from '../ui/Card.vue';
 import Alert from '../ui/Alert.vue';
+import { formatDate } from '../../utils/formatting';
 
 // Store
 const userStore = useUserStore();
@@ -48,15 +49,6 @@ onMounted(() => {
 // Buscar usuários
 const fetchUsers = async () => {
   await userStore.fetchAllUsers();
-};
-
-// Formatar data
-const formatDate = (date: Date) => {
-  return new Intl.DateTimeFormat('pt-BR', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric'
-  }).format(date);
 };
 
 // Abrir modal para alterar papel

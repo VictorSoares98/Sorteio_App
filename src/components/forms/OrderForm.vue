@@ -6,12 +6,13 @@ import { useRaffleNumbers } from '../../composables/useRaffleNumbers';
 import { validateName, validatePhone } from '../../utils/validation';
 import { useAuthStore } from '../../stores/authStore';
 import { formatPhone } from '../../utils/formatting';
+import { useFormValidation } from '../../composables/useFormValidation';
 import Input from '../ui/Input.vue';
 import Button from '../ui/Button.vue';
 import ConfirmationModal from '../modals/ConfirmationModal.vue';
 import { useOrderStore } from '../../stores/orderStore';
 
-// Form data com validação
+// Form data
 const formData = ref<OrderFormData>({
   buyerName: '',
   paymentMethod: PaymentMethod.PIX,
@@ -21,12 +22,12 @@ const formData = ref<OrderFormData>({
 });
 
 // Estados do formulário
-const errors = ref<Record<string, string>>({});
 const isSubmitting = ref(false);
 const showConfirmation = ref(false);
 const orderId = ref<string | null>(null);
 
 // Composables
+const { errors, validateFormField, isFormValid } = useFormValidation();
 const { generatedNumbers, isGenerating, error: raffleError, generateUniqueNumbers } = useRaffleNumbers();
 const authStore = useAuthStore();
 const orderStore = useOrderStore();
@@ -36,21 +37,19 @@ const createdOrder = ref<any>(null);
 
 // Faz validação dos campos antes de submit
 const validateForm = () => {
-  errors.value = {};
+  validateFormField('buyerName', formData.value.buyerName, {
+    'Nome deve ter pelo menos 3 caracteres': value => validateName(value)
+  });
   
-  if (!validateName(formData.value.buyerName)) {
-    errors.value.buyerName = 'Nome deve ter pelo menos 3 caracteres';
-  }
+  validateFormField('contactNumber', formData.value.contactNumber, {
+    'Formato inválido. Use: (00) 00000-0000': value => validatePhone(value)
+  });
   
-  if (!validatePhone(formData.value.contactNumber)) {
-    errors.value.contactNumber = 'Formato inválido. Use: (00) 00000-0000';
-  }
+  validateFormField('addressOrCongregation', formData.value.addressOrCongregation, {
+    'Este campo é obrigatório': value => !!value
+  });
   
-  if (!formData.value.addressOrCongregation) {
-    errors.value.addressOrCongregation = 'Este campo é obrigatório';
-  }
-  
-  return Object.keys(errors.value).length === 0;
+  return isFormValid();
 };
 
 // Formata o telefone durante a digitação

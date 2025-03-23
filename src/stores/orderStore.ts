@@ -1,9 +1,9 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
-import { collection, query, where, getDocs, addDoc, serverTimestamp, setDoc, doc } from 'firebase/firestore';
+import { collection, query, where, getDocs, serverTimestamp, setDoc, doc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useAuthStore } from './authStore';
-import type { Order, OrderFormData, PaymentMethod } from '../types/order';
+import type { Order, OrderFormData } from '../types/order';
 
 export const useOrderStore = defineStore('order', () => {
   const orders = ref<Order[]>([]);

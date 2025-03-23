@@ -5,9 +5,11 @@ import {
   type User as FirebaseUser, 
   signInWithEmailAndPassword, 
   signOut, 
-  onAuthStateChanged 
+  onAuthStateChanged,
+  createUserWithEmailAndPassword,
+  updateProfile
 } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 import { type User, UserRole } from '../types/user';
 
@@ -86,6 +88,53 @@ export const useAuthStore = defineStore('auth', () => {
     }
   };
 
+  // Registro de novo usuário
+  const register = async (email: string, password: string, userData: { 
+    displayName: string;
+    congregation?: string;
+  }) => {
+    loading.value = true;
+    error.value = null;
+    
+    try {
+      // Criar o usuário no Firebase Authentication
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
+      
+      // Atualizar o perfil do usuário
+      await updateProfile(user, {
+        displayName: userData.displayName
+      });
+      
+      // Salvar dados adicionais no Firestore
+      await setDoc(doc(db, 'users', user.uid), {
+        id: user.uid,
+        displayName: userData.displayName,
+        email: email,
+        role: UserRole.USER,
+        congregation: userData.congregation || '',
+        createdAt: serverTimestamp(),
+      });
+      
+      // Buscar dados completos
+      await fetchUserData();
+      
+      return true;
+    } catch (err: any) {
+      console.error('Erro no cadastro:', err);
+      
+      if (err.code === 'auth/email-already-in-use') {
+        error.value = 'Este email já está em uso.';
+      } else {
+        error.value = 'Erro ao criar conta. Tente novamente.';
+      }
+      
+      throw err;
+    } finally {
+      loading.value = false;
+    }
+  };
+
   // Busca dados do usuário no Firestore
   const fetchUserData = async (): Promise<void> => {
     if (!firebaseUser.value) return;
@@ -145,6 +194,7 @@ export const useAuthStore = defineStore('auth', () => {
     isAdmin,
     login,
     logout,
+    register,
     fetchUserData,
     initAuthListener,
     init,

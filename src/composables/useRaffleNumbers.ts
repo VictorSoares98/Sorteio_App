@@ -1,45 +1,16 @@
-import { ref, computed } from 'vue';
-import { collection, getDocs, query, where } from 'firebase/firestore';
-import { db } from '../firebase';
+import { ref } from 'vue';
+import * as raffleService from '../services/raffle';
 
 export function useRaffleNumbers() {
   const generatedNumbers = ref<string[]>([]);
   const isGenerating = ref(false);
   const error = ref<string | null>(null);
   
-  // Quantidade de números a serem gerados por pedido (ajustável conforme necessidade)
+  // Quantidade de números a serem gerados por pedido
   const numbersPerOrder = ref(5);
   
-  // Total de números disponíveis (baseado no padrão da Loteria Federal)
-  const totalAvailableNumbers = 100000; // De 00000 a 99999
-  
-  // Verifica números já vendidos no Firestore
-  const fetchSoldNumbers = async (): Promise<string[]> => {
-    try {
-      const ordersRef = collection(db, 'orders');
-      const ordersSnapshot = await getDocs(ordersRef);
-      
-      const soldNumbers: string[] = [];
-      
-      ordersSnapshot.forEach((doc) => {
-        const orderData = doc.data();
-        if (orderData.generatedNumbers && Array.isArray(orderData.generatedNumbers)) {
-          soldNumbers.push(...orderData.generatedNumbers);
-        }
-      });
-      
-      return soldNumbers;
-    } catch (err) {
-      console.error('Erro ao buscar números vendidos:', err);
-      throw new Error('Não foi possível verificar os números já vendidos.');
-    }
-  };
-  
-  // Gera um número aleatório formatado com zeros à esquerda
-  const generateFormattedNumber = (): string => {
-    const randomNum = Math.floor(Math.random() * totalAvailableNumbers);
-    return randomNum.toString().padStart(5, '0');
-  };
+  // Total de números disponíveis
+  const totalAvailableNumbers = 100000;
   
   // Gera números únicos para um novo pedido
   const generateUniqueNumbers = async () => {
@@ -48,18 +19,17 @@ export function useRaffleNumbers() {
     generatedNumbers.value = [];
     
     try {
-      // Busca números já vendidos
-      const soldNumbers = await fetchSoldNumbers();
+      // Busca números já vendidos usando o serviço
+      const soldNumbers = await raffleService.fetchSoldNumbers();
       const uniqueNumbers: string[] = [];
       
-      // Tenta encontrar números únicos (não vendidos ainda)
+      // Tenta encontrar números únicos
       let attempts = 0;
-      const maxAttempts = numbersPerOrder.value * 10; // Limite de tentativas para evitar loop infinito
+      const maxAttempts = numbersPerOrder.value * 10;
       
       while (uniqueNumbers.length < numbersPerOrder.value && attempts < maxAttempts) {
-        const newNumber = generateFormattedNumber();
+        const newNumber = raffleService.generateFormattedNumber(totalAvailableNumbers);
         
-        // Verifica se o número já existe nos vendidos ou nos que acabamos de gerar
         if (!soldNumbers.includes(newNumber) && !uniqueNumbers.includes(newNumber)) {
           uniqueNumbers.push(newNumber);
         }
@@ -81,7 +51,6 @@ export function useRaffleNumbers() {
   };
   
   return {
-    // Retornar o ref diretamente para manter compatibilidade
     generatedNumbers,
     isGenerating,
     error,

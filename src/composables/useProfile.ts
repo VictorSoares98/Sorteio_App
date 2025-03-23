@@ -1,6 +1,6 @@
 import { ref, computed } from 'vue';
 import { updateProfile } from 'firebase/auth';
-import { doc, updateDoc } from 'firebase/firestore';
+import { doc, updateDoc, query, where, collection, getDocs } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 import { useAuthStore } from '../stores/authStore';
 import type { User } from '../types/user';
@@ -101,6 +101,24 @@ export function useProfile() {
       loading.value = false;
     }
   };
+
+  // Adicionar função para verificar código de afiliado
+  const checkAffiliateCode = async (code: string): Promise<User | null> => {
+    if (!code) return null;
+    
+    loading.value = true;
+    error.value = null;
+    
+    try {
+      return await profileService.findUserByAffiliateCode(code);
+    } catch (err: any) {
+      console.error('Erro ao verificar código de afiliado:', err);
+      error.value = err.message || 'Erro ao verificar código de afiliado.';
+      return null;
+    } finally {
+      loading.value = false;
+    }
+  };
   
   return {
     currentUser,
@@ -110,6 +128,7 @@ export function useProfile() {
     updateSuccess,
     initProfileForm,
     updateUserProfile,
-    generateAffiliateCode
+    generateAffiliateCode,
+    checkAffiliateCode  // Adicionando a nova função ao retorno
   };
 }

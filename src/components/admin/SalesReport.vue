@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { fetchSalesReport } from '../../services/admin';
+import { formatDate } from '../../utils/formatting';
 import Card from '../ui/Card.vue';
 
 const loading = ref(true);
@@ -38,14 +39,6 @@ const loadReportData = async () => {
 onMounted(() => {
   loadReportData();
 });
-
-const formatDate = (date: Date) => {
-  return new Intl.DateTimeFormat('pt-BR', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  }).format(date);
-};
 </script>
 
 <template>

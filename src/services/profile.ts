@@ -1,5 +1,6 @@
-import { doc, updateDoc, getDoc } from 'firebase/firestore';
+import { doc, updateDoc, getDoc, query, where, collection, getDocs } from 'firebase/firestore';
 import { db } from '../firebase';
+import type { User } from '../types/user';
 
 /**
  * Gera um código de afiliado aleatório
@@ -17,10 +18,16 @@ const generateRandomCode = () => {
  * Verifica se um código de afiliado já existe
  */
 const checkCodeExists = async (code: string): Promise<boolean> => {
-  // Verificar no Firestore se o código já existe
-  const codeQuery = doc(db, 'affiliateCodes', code);
-  const codeSnap = await getDoc(codeQuery);
-  return codeSnap.exists();
+  try {
+    const usersRef = collection(db, 'users');
+    const q = query(usersRef, where('affiliateCode', '==', code));
+    const querySnapshot = await getDocs(q);
+    
+    return !querySnapshot.empty;
+  } catch (error) {
+    console.error('Erro ao verificar existência de código:', error);
+    return false;
+  }
 };
 
 /**
@@ -80,5 +87,31 @@ export const updateProfile = async (
   } catch (error) {
     console.error('Erro ao atualizar perfil:', error);
     throw new Error('Não foi possível atualizar o perfil.');
+  }
+};
+
+/**
+ * Busca um usuário pelo código de afiliado
+ */
+export const findUserByAffiliateCode = async (code: string): Promise<User | null> => {
+  try {
+    const usersRef = collection(db, 'users');
+    const q = query(usersRef, where('affiliateCode', '==', code));
+    const querySnapshot = await getDocs(q);
+    
+    if (querySnapshot.empty) {
+      return null;
+    }
+    
+    const userData = querySnapshot.docs[0].data();
+    const createdAt = userData.createdAt?.toDate ? userData.createdAt.toDate() : new Date();
+    
+    return {
+      ...userData,
+      createdAt
+    } as User;
+  } catch (error) {
+    console.error('Erro ao buscar usuário por código de afiliado:', error);
+    return null;
   }
 };

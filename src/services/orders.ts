@@ -93,15 +93,18 @@ export const createOrder = async (
 
 export const fetchAllSoldNumbers = async (): Promise<string[]> => {
   try {
-    const ordersRef = collection(db, 'orders');
-    const ordersSnapshot = await getDocs(ordersRef);
+    // Buscar todos os documentos de pedidos
+    const soldNumbersQuery = query(
+      collection(db, 'orders')
+    );
+    const querySnapshot = await getDocs(soldNumbersQuery);
     
     const soldNumbers: string[] = [];
     
-    ordersSnapshot.forEach((doc) => {
-      const orderData = doc.data();
-      if (orderData.generatedNumbers && Array.isArray(orderData.generatedNumbers)) {
-        soldNumbers.push(...orderData.generatedNumbers);
+    querySnapshot.forEach((doc) => {
+      const data = doc.data();
+      if (data.generatedNumbers && Array.isArray(data.generatedNumbers)) {
+        soldNumbers.push(...data.generatedNumbers);
       }
     });
     

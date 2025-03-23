@@ -2,6 +2,7 @@
 import { ref, onMounted, computed } from 'vue';
 import { useOrderStore } from '../../stores/orderStore';
 import Card from '../ui/Card.vue';
+import { formatDate } from '../../utils/formatting';
 
 const orderStore = useOrderStore();
 const isLoading = ref(true);
@@ -45,14 +46,6 @@ onMounted(async () => {
   }
   isLoading.value = false;
 });
-
-const formatDate = (date: Date) => {
-  return new Intl.DateTimeFormat('pt-BR', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric'
-  }).format(date);
-};
 </script>
 
 <template>
