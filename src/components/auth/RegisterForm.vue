@@ -6,6 +6,8 @@ import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '../../firebase';
 import { validateEmail, validatePassword, validateName } from '../../utils/validation';
 import { UserRole } from '../../types/user';
+import { useFormValidation } from '../../composables/useFormValidation';
+import Input from '../ui/Input.vue';
 
 const displayName = ref('');
 const email = ref('');
@@ -16,30 +18,35 @@ const errorMessage = ref('');
 const loading = ref(false);
 const router = useRouter();
 
+const { errors, validateFormField, isFormValid } = useFormValidation();
+
+// Validação de formulário unificada
+const validateFields = () => {
+  validateFormField('displayName', displayName.value, {
+    'O nome deve ter pelo menos 3 caracteres': value => validateName(value)
+  });
+  
+  validateFormField('email', email.value, {
+    'Por favor, insira um email válido': value => validateEmail(value)
+  });
+  
+  validateFormField('password', password.value, {
+    'A senha deve ter pelo menos 6 caracteres': value => validatePassword(value)
+  });
+  
+  validateFormField('confirmPassword', confirmPassword.value, {
+    'As senhas não correspondem': value => value === password.value
+  });
+  
+  return isFormValid();
+};
+
 const register = async () => {
   // Limpar mensagem de erro anterior
   errorMessage.value = '';
   
-  // Validar campos
-  if (!validateName(displayName.value)) {
-    errorMessage.value = 'O nome deve ter pelo menos 3 caracteres.';
-    return;
-  }
-  
-  if (!validateEmail(email.value)) {
-    errorMessage.value = 'Por favor, insira um email válido.';
-    return;
-  }
-  
-  if (!validatePassword(password.value)) {
-    errorMessage.value = 'A senha deve ter pelo menos 6 caracteres.';
-    return;
-  }
-  
-  if (password.value !== confirmPassword.value) {
-    errorMessage.value = 'As senhas não correspondem.';
-    return;
-  }
+  // Validar usando o composable
+  if (!validateFields()) return;
   
   loading.value = true;
   
@@ -61,7 +68,6 @@ const register = async () => {
       role: UserRole.USER, // Padrão para novos usuários
       congregation: congregation.value,
       createdAt: serverTimestamp(),
-      // O affiliateCode será gerado em uma função separada ou pelo admin
     });
     
     // Redirecionar para a página inicial após o cadastro
@@ -83,69 +89,46 @@ const register = async () => {
 
 <template>
   <form @submit.prevent="register" class="bg-white p-6 rounded-lg shadow-md">
-    <div class="mb-4">
-      <label class="block text-gray-700 text-sm font-bold mb-2" for="displayName">
-        Nome Completo
-      </label>
-      <input
-        id="displayName"
-        v-model="displayName"
-        type="text"
-        required
-        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
-      />
-    </div>
+    <Input
+      id="displayName"
+      v-model="displayName"
+      label="Nome Completo"
+      required
+      :error="errors.displayName || ''"
+    />
     
-    <div class="mb-4">
-      <label class="block text-gray-700 text-sm font-bold mb-2" for="email">
-        Email
-      </label>
-      <input
-        id="email"
-        v-model="email"
-        type="email"
-        required
-        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
-      />
-    </div>
+    <Input
+      id="email"
+      v-model="email"
+      label="Email"
+      type="email"
+      required
+      :error="errors.email || ''"
+    />
     
-    <div class="mb-4">
-      <label class="block text-gray-700 text-sm font-bold mb-2" for="congregation">
-        Congregação
-      </label>
-      <input
-        id="congregation"
-        v-model="congregation"
-        type="text"
-        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
-      />
-    </div>
+    <Input
+      id="congregation"
+      v-model="congregation"
+      label="Congregação"
+    />
     
-    <div class="mb-4">
-      <label class="block text-gray-700 text-sm font-bold mb-2" for="password">
-        Senha
-      </label>
-      <input
-        id="password"
-        v-model="password"
-        type="password"
-        required
-        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
-      />
-    </div>
+    <Input
+      id="password"
+      v-model="password"
+      label="Senha"
+      type="password"
+      required
+      :error="errors.password || ''"
+    />
     
-    <div class="mb-6">
-      <label class="block text-gray-700 text-sm font-bold mb-2" for="confirmPassword">
-        Confirmar Senha
-      </label>
-      <input
-        id="confirmPassword"
-        v-model="confirmPassword"
-        type="password"
-        required
-        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
-      />
-    </div>
+    <Input
+      id="confirmPassword"
+      v-model="confirmPassword"
+      label="Confirmar Senha"
+      type="password"
+      required
+      :error="errors.confirmPassword || ''"
+    />
     
     <div v-if="errorMessage" class="mb-4 text-danger text-sm">
       {{ errorMessage }}

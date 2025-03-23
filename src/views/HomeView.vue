@@ -2,17 +2,17 @@
 import { onMounted } from 'vue';
 import OrderForm from '../components/forms/OrderForm.vue';
 import { useAuthStore } from '../stores/authStore';
-// Adicionar useOrderStore para pré-carregar pedidos do usuário
 import { useOrderStore } from '../stores/orderStore';
 
 const authStore = useAuthStore();
 const orderStore = useOrderStore();
 
-// Garantir que os dados do usuário e pedidos estejam carregados
+// Carrega dados necessários quando o componente é montado
 onMounted(async () => {
-  if (!authStore.currentUser && authStore.isAuthenticated) {
+  // Apenas carregue dados se o usuário estiver autenticado mas sem dados carregados
+  if (authStore.isAuthenticated && !authStore.currentUser) {
     await authStore.fetchUserData();
-    // Após carregar dados do usuário, carregamos os pedidos
+    // Carrega os pedidos do usuário após buscar seus dados
     await orderStore.fetchUserOrders();
   }
 });

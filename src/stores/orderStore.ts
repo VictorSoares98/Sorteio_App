@@ -1,9 +1,11 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
-import { collection, query, where, getDocs, serverTimestamp, setDoc, doc } from 'firebase/firestore';
+import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useAuthStore } from './authStore';
 import type { Order, OrderFormData } from '../types/order';
+// Importar corretamente o serviço de pedidos
+import * as orderService from '../services/orders';
 
 export const useOrderStore = defineStore('order', () => {
   const orders = ref<Order[]>([]);
@@ -23,34 +25,12 @@ export const useOrderStore = defineStore('order', () => {
     if (!authStore.currentUser) return;
     
     loading.value = true;
-    orders.value = [];
     error.value = null;
     
     try {
       const userId = authStore.currentUser.id;
-      const ordersQuery = query(
-        collection(db, 'orders'), 
-        where('sellerId', '==', userId)
-      );
-      
-      const querySnapshot = await getDocs(ordersQuery);
-      const fetchedOrders: Order[] = [];
-      
-      querySnapshot.forEach((doc) => {
-        const data = doc.data();
-        const createdAt = data.createdAt?.toDate ? data.createdAt.toDate() : new Date();
-        
-        fetchedOrders.push({
-          ...data,
-          createdAt
-        } as Order);
-      });
-      
-      // Ordena pedidos por data (mais recente primeiro)
-      orders.value = fetchedOrders.sort((a, b) => 
-        b.createdAt.getTime() - a.createdAt.getTime()
-      );
-      
+      const fetchedOrders = await orderService.fetchUserOrders(userId);
+      orders.value = fetchedOrders;
     } catch (err: any) {
       console.error('Erro ao buscar pedidos:', err);
       error.value = 'Não foi possível carregar seus pedidos.';
@@ -67,33 +47,18 @@ export const useOrderStore = defineStore('order', () => {
     error.value = null;
     
     try {
-      const newOrderId = `order_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      // Usar o serviço ao invés de reimplementar lógica
+      const newOrderId = await orderService.createOrder(
+        orderData,
+        generatedNumbers,
+        authStore.currentUser.id,
+        authStore.currentUser.displayName
+      );
       
-      // Preparar dados do pedido
-      const newOrder: Order = {
-        id: newOrderId,
-        buyerName: orderData.buyerName,
-        paymentMethod: orderData.paymentMethod,
-        contactNumber: orderData.contactNumber,
-        addressOrCongregation: orderData.addressOrCongregation,
-        observations: orderData.observations,
-        generatedNumbers: generatedNumbers,
-        sellerName: authStore.currentUser.displayName,
-        sellerId: authStore.currentUser.id,
-        createdAt: new Date()
-      };
-      
-      // Salvar pedido no Firestore
-      await setDoc(doc(db, 'orders', newOrderId), {
-        ...newOrder,
-        createdAt: serverTimestamp() 
-      });
-      
-      // Adicionar pedido ao estado local
-      orders.value.unshift(newOrder);
+      // Atualizar a store após criar o pedido
+      await fetchUserOrders();
       
       return newOrderId;
-      
     } catch (err: any) {
       console.error('Erro ao criar pedido:', err);
       error.value = err.message || 'Erro ao criar pedido. Tente novamente.';

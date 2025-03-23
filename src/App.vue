@@ -15,7 +15,7 @@ import Sidebar from './components/layout/Sidebar.vue'
       <Sidebar />
     </aside>
     
-    <main class="w-full">
+    <main class="w-full p-4 min-h-[calc(100vh-200px)]">
       <RouterView />
     </main>
   </div>
@@ -24,10 +24,3 @@ import Sidebar from './components/layout/Sidebar.vue'
     <Footer />
   </footer>
 </template>
-
-<style scoped>
-main {
-  padding: 1rem;
-  min-height: calc(100vh - 200px); /* Ajuste para acomodar o footer */
-}
-</style>

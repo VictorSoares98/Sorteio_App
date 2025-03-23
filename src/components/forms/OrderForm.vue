@@ -7,10 +7,10 @@ import { validateName, validatePhone } from '../../utils/validation';
 import { useAuthStore } from '../../stores/authStore';
 import { formatPhone } from '../../utils/formatting';
 import { useFormValidation } from '../../composables/useFormValidation';
-import Input from '../ui/Input.vue';
 import Button from '../ui/Button.vue';
 import ConfirmationModal from '../modals/ConfirmationModal.vue';
 import { useOrderStore } from '../../stores/orderStore';
+import OrderFormFields from './OrderFormFields.vue';
 
 // Form data
 const formData = ref<OrderFormData>({
@@ -56,6 +56,11 @@ const validateForm = () => {
 const formatContactNumber = (event: Event) => {
   const input = event.target as HTMLInputElement;
   formData.value.contactNumber = formatPhone(input.value);
+};
+
+// Atualizar dados do formulário do componente filho
+const updateFormData = (newFormData: OrderFormData) => {
+  formData.value = newFormData;
 };
 
 // Processa o envio do formulário
@@ -135,75 +140,13 @@ const closeConfirmation = () => {
     <!-- Form Title -->
     <h2 class="form-title">Novo Pedido</h2>
     
-    <!-- Buyer Name -->
-    <Input
-      id="buyerName"
-      v-model="formData.buyerName"
-      label="Nome do Comprador"
-      required
-      :error="errors.buyerName || ''"
+    <!-- Form Fields Component -->
+    <OrderFormFields
+      :formData="formData"
+      :errors="errors"
+      @update:formData="updateFormData"
+      @input-phone="formatContactNumber"
     />
-    
-    <!-- Payment Method -->
-    <div class="mb-4">
-      <label class="form-label">
-        Forma de Pagamento <span class="text-danger">*</span>
-      </label>
-      <div class="flex space-x-4">
-        <label class="inline-flex items-center">
-          <input 
-            type="radio" 
-            v-model="formData.paymentMethod" 
-            :value="PaymentMethod.PIX" 
-            class="form-radio text-primary"
-          />
-          <span class="ml-2">Pix</span>
-        </label>
-        <label class="inline-flex items-center">
-          <input 
-            type="radio" 
-            v-model="formData.paymentMethod" 
-            :value="PaymentMethod.DINHEIRO" 
-            class="form-radio text-primary"
-          />
-          <span class="ml-2">Dinheiro</span>
-        </label>
-      </div>
-    </div>
-    
-    <!-- Contact Number -->
-    <Input
-      id="contactNumber"
-      v-model="formData.contactNumber"
-      label="Número de Contato"
-      type="tel"
-      required
-      placeholder="(00) 00000-0000"
-      :error="errors.contactNumber || ''"
-      @input="formatContactNumber"
-    />
-    
-    <!-- Address or Congregation -->
-    <Input
-      id="addressOrCongregation"
-      v-model="formData.addressOrCongregation"
-      label="Endereço ou Congregação"
-      required
-      :error="errors.addressOrCongregation || ''"
-    />
-    
-    <!-- Observations -->
-    <div class="mb-6">
-      <label class="form-label" for="observations">
-        Observações (opcional)
-      </label>
-      <textarea
-        id="observations"
-        v-model="formData.observations"
-        class="form-input"
-        rows="3"
-      ></textarea>
-    </div>
     
     <!-- Submit Error -->
     <div v-if="errors.submit" class="form-error-container">
