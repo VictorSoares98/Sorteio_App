@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { PaymentMethod } from '../../types/order';
-import type { OrderFormData } from '../../types/order';
+import { PaymentMethod, type OrderFormData } from '../../types/order';
 import { formatPhone } from '../../utils/formatting';
 import Input from '../ui/Input.vue';
 import NumberSelector from './NumberSelector.vue';

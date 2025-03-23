@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { Order } from '../../types/order';
+import { PaymentMethod, type Order } from '../../types/order';
 
 defineProps<{
   show: boolean;
@@ -32,7 +32,7 @@ const close = () => {
       <div v-if="order" class="space-y-3">
         <p><span class="font-semibold">Vendedor:</span> {{ order.sellerName }}</p>
         <p><span class="font-semibold">Comprador:</span> {{ order.buyerName }}</p>
-        <p><span class="font-semibold">Forma de pagamento:</span> {{ order.paymentMethod === 'pix' ? 'Pix' : 'Dinheiro' }}</p>
+        <p><span class="font-semibold">Forma de pagamento:</span> {{ order.paymentMethod === PaymentMethod.PIX ? 'Pix' : 'Dinheiro' }}</p>
         <p><span class="font-semibold">Contato:</span> {{ order.contactNumber }}</p>
         <p><span class="font-semibold">Local:</span> {{ order.addressOrCongregation }}</p>
         

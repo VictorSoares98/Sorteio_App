@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue';
-import { PaymentMethod } from '../../types/order';
-import type { OrderFormData } from '../../types/order';
+import { PaymentMethod, type OrderFormData } from '../../types/order';
 import { useRaffleNumbers } from '../../composables/useRaffleNumbers';
 import { validateName, validatePhone } from '../../utils/validation';
 import { useAuthStore } from '../../stores/authStore';
@@ -42,7 +41,7 @@ const validateForm = () => {
     'Nome deve ter pelo menos 3 caracteres': value => validateName(value)
   });
   
-  validateFormField('paymentMethod', formData.value.paymentMethod, {
+  validateFormField<PaymentMethod | undefined>('paymentMethod', formData.value.paymentMethod, {
     'Selecione uma forma de pagamento': value => value !== undefined
   });
   
@@ -55,7 +54,7 @@ const validateForm = () => {
   });
   
   // Validação para o campo numTickets
-  validateFormField('numTickets', formData.value.numTickets?.toString() || '', {
+  validateFormField<string>('numTickets', formData.value.numTickets?.toString() || '', {
     'Selecione ou insira a quantidade de números': value => !!value && parseInt(value) > 0
   });
   

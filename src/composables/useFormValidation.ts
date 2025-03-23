@@ -3,7 +3,7 @@ import { ref } from 'vue';
 export function useFormValidation() {
   const errors = ref<Record<string, string>>({});
   
-  const validateFormField = (field: string, value: string, validators: Record<string, (value: string) => boolean>) => {
+  const validateFormField = <T>(field: string, value: T, validators: Record<string, (value: T) => boolean>) => {
     for (const [errorMessage, validator] of Object.entries(validators)) {
       if (!validator(value)) {
         errors.value[field] = errorMessage;
