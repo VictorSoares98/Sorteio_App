@@ -4,6 +4,7 @@ import { useUserStore } from '../../stores/userStore';
 import { UserRole } from '../../types/user';
 import Card from '../ui/Card.vue';
 import Alert from '../ui/Alert.vue';
+import RoleEditModal from '../modals/RoleEditModal.vue';
 import { formatDate } from '../../utils/formatting';
 
 // Store
@@ -11,7 +12,7 @@ const userStore = useUserStore();
 
 // Estado local
 const selectedUserId = ref<string | null>(null);
-const selectedRole = ref<UserRole | ''>('');
+const selectedRole = ref<UserRole | undefined>(undefined); // Modificado para UserRole | undefined
 const showRoleModal = ref(false);
 const actionSuccess = ref(false);
 const actionError = ref<string | null>(null);
@@ -54,7 +55,7 @@ const fetchUsers = async () => {
 // Abrir modal para alterar papel
 const openRoleModal = (userId: string, currentRole: UserRole) => {
   selectedUserId.value = userId;
-  selectedRole.value = currentRole;
+  selectedRole.value = currentRole; // Aqui atribuímos o valor correto (UserRole)
   showRoleModal.value = true;
 };
 
@@ -65,14 +66,9 @@ const closeRoleModal = () => {
 };
 
 // Atualizar papel do usuário
-const updateUserRole = async () => {
-  if (!selectedUserId.value || !selectedRole.value) return;
-  
+const updateUserRole = async (userId: string, newRole: UserRole) => {
   try {
-    const success = await userStore.updateUserRole(
-      selectedUserId.value, 
-      selectedRole.value as UserRole
-    );
+    const success = await userStore.updateUserRole(userId, newRole);
     
     if (success) {
       actionSuccess.value = true;
@@ -226,44 +222,13 @@ const updateUserRole = async () => {
     </Card>
     
     <!-- Role Edit Modal -->
-    <div 
-      v-if="showRoleModal" 
-      class="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center"
-    >
-      <div class="bg-white rounded-lg p-6 w-full max-w-md mx-4">
-        <h3 class="text-lg font-bold mb-4">Alterar Função do Usuário</h3>
-        
-        <div class="mb-4">
-          <label class="block text-sm font-medium text-gray-700 mb-1">
-            Nova Função
-          </label>
-          <select 
-            v-model="selectedRole"
-            class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
-          >
-            <option value="" disabled>Selecione uma função</option>
-            <option v-for="(label, role) in roleNames" :key="role" :value="role">
-              {{ label }}
-            </option>
-          </select>
-        </div>
-        
-        <div class="flex justify-end gap-2">
-          <button 
-            @click="closeRoleModal"
-            class="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
-          >
-            Cancelar
-          </button>
-          <button 
-            @click="updateUserRole"
-            class="px-4 py-2 bg-primary text-white rounded-md hover:bg-primary-dark transition-colors"
-            :disabled="!selectedRole"
-          >
-            Confirmar
-          </button>
-        </div>
-      </div>
-    </div>
+    <RoleEditModal
+      :show="showRoleModal"
+      :userId="selectedUserId || undefined"
+      :initialRole="selectedRole"
+      :roleNames="roleNames"
+      @close="closeRoleModal"
+      @confirm="updateUserRole"
+    />
   </div>
 </template>

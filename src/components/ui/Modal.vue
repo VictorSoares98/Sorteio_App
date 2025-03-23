@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue';
-
+/**
+ * Componente Modal base reutilizável
+ * Fornece estrutura, overlay e funcionalidades básicas de um modal
+ */
 const props = defineProps({
   show: {
     type: Boolean,
