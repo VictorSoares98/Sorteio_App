@@ -10,7 +10,7 @@ const currentYear = new Date().getFullYear();
         <!-- Logo e informações à esquerda -->
         <div class="text-center md:text-left w-full md:w-auto mb-4 md:mb-0">
           <h2 class="text-lg md:text-xl font-bold text-primary">Tá nas Mãos de Deus</h2>
-          <p class="text-gray-400 text-xs md:text-sm mt-1">União de Mocidade da Assembleia de Deus Rio Mole</p>
+          <p class="text-gray-400 text-xs md:text-sm mt-1">União de Mocidade da Assembleia de Deus Rio Mole e Congregações</p>
         </div>
         
         <!-- Links agrupados à direita -->

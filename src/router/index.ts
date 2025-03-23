@@ -86,7 +86,7 @@ router.beforeEach(async (
   next: NavigationGuardNext
 ) => {
   // Atualizar o título da página dinamicamente
-  document.title = `${to.meta.title || 'Sorteio UMADRIMC'}`;
+  document.title = `${to.meta.title || 'Tá nas Mãos de Deus'}`;
   
   const requiresAuth = to.matched.some(record => record.meta.requiresAuth);
   const requiresAdmin = to.matched.some(record => record.meta.requiresAdmin);
