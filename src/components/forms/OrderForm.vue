@@ -1,13 +1,11 @@
 <script setup lang="ts">
 import { ref } from 'vue';
-import { PaymentMethod, OrderFormData } from '../../types/order';
+import { PaymentMethod } from '../../types/order';
+import type { OrderFormData } from '../../types/order';
 import { useRaffleNumbers } from '../../composables/useRaffleNumbers';
 import { validateName, validatePhone } from '../../utils/validation';
 import { useAuthStore } from '../../stores/authStore';
 import { formatPhone } from '../../utils/formatting';
-// Remover importações desnecessárias já que estamos usando orderStore
-// import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
-// import { db } from '../../firebase';
 import Input from '../ui/Input.vue';
 import Button from '../ui/Button.vue';
 import ConfirmationModal from '../modals/ConfirmationModal.vue';

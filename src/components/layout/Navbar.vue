@@ -1,12 +1,9 @@
 <script setup lang="ts">
-import { computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '../../stores/authStore';
 
 const router = useRouter();
 const authStore = useAuthStore();
-const currentUser = computed(() => authStore.currentUser);
-
 const navigateTo = (path: string) => {
   router.push(path);
 };
@@ -14,7 +11,6 @@ const navigateTo = (path: string) => {
 const logout = async () => {
   try {
     await authStore.logout();
-    // O redirecionamento já é feito dentro do logout do authStore
   } catch (error) {
     console.error('Erro ao fazer logout:', error);
   }
@@ -30,6 +26,9 @@ const logout = async () => {
       
       <div class="flex items-center space-x-6">
         <template v-if="authStore.isAuthenticated">
+          <span v-if="authStore.currentUser" class="mr-2 font-medium">
+            Olá, {{ authStore.currentUser.displayName }}
+          </span>
           <button @click="navigateTo('/')" class="hover:text-secondary transition-colors">
             Início
           </button>

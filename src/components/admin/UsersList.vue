@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted } from 'vue';
 import { useUserStore } from '../../stores/userStore';
 import { UserRole } from '../../types/user';
 import Card from '../ui/Card.vue';

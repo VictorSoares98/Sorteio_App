@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { Order } from '../../types/order';
+import type { Order } from '../../types/order';
 
-const props = defineProps<{
+defineProps<{
   show: boolean;
   order?: Order;
 }>();
