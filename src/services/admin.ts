@@ -2,10 +2,8 @@ import { collection, getDocs, doc, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import type { UserRole, SalesData } from '../types/user';
 import type { Order, OrderFormData, PaymentMethod } from '../types/order';
+import { updateOrderPayment } from './orders';
 
-/**
- * Recuperar dados de vendas para relatórios administrativos
- */
 export const fetchSalesReport = async () => {
   try {
     // Buscar pedidos
@@ -62,9 +60,6 @@ export const fetchSalesReport = async () => {
   }
 };
 
-/**
- * Recuperar usuários com dados de vendas
- */
 export const fetchUserSalesData = async (): Promise<Map<string, SalesData>> => {
   try {
     const ordersRef = collection(db, 'orders');
@@ -103,23 +98,15 @@ export const fetchUserSalesData = async (): Promise<Map<string, SalesData>> => {
   }
 };
 
-/**
- * Atualizar status de pagamento de um pedido
- */
 export const updateOrderPaymentStatus = async (orderId: string, isPaid: boolean): Promise<boolean> => {
   try {
-    const orderRef = doc(db, 'orders', orderId);
-    await updateDoc(orderRef, { isPaid });
-    return true;
+    return await updateOrderPayment(orderId, isPaid);
   } catch (error) {
     console.error('Erro ao atualizar status de pagamento:', error);
     return false;
   }
 };
 
-/**
- * Promover usuário para outro papel (função)
- */
 export const updateUserRole = async (userId: string, newRole: UserRole): Promise<boolean> => {
   try {
     const userRef = doc(db, 'users', userId);

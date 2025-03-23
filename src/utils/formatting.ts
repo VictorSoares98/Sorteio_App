@@ -17,12 +17,14 @@ export const formatCurrency = (value: number): string => {
   }).format(value);
 };
 
-export const formatDate = (date: Date): string => {
-  return new Intl.DateTimeFormat('pt-BR', {
+export const formatDate = (date: Date, options?: Intl.DateTimeFormatOptions): string => {
+  const defaultOptions: Intl.DateTimeFormatOptions = {
     day: '2-digit',
     month: '2-digit',
-    year: 'numeric',
-  }).format(date);
+    year: 'numeric'
+  };
+  
+  return new Intl.DateTimeFormat('pt-BR', options || defaultOptions).format(date);
 };
 
 export const formatRaffleNumber = (number: string): string => {

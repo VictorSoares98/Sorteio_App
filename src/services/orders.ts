@@ -1,12 +1,7 @@
 import { collection, query, where, getDocs, doc, getDoc, setDoc, serverTimestamp, orderBy, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase';
-import type { Order, OrderFormData } from '../types/order';
-// PaymentMethod é usado apenas como tipo, então usamos import type
-import type { PaymentMethod } from '../types/order';
+import type { Order, OrderFormData, PaymentMethod } from '../types/order';
 
-/**
- * Busca todos os pedidos feitos por um vendedor específico
- */
 export const fetchUserOrders = async (userId: string): Promise<Order[]> => {
   try {
     const ordersQuery = query(
@@ -36,9 +31,6 @@ export const fetchUserOrders = async (userId: string): Promise<Order[]> => {
   }
 };
 
-/**
- * Busca um pedido específico pelo ID
- */
 export const fetchOrderById = async (orderId: string): Promise<Order | null> => {
   try {
     const orderRef = doc(db, 'orders', orderId);
@@ -62,9 +54,6 @@ export const fetchOrderById = async (orderId: string): Promise<Order | null> => 
   }
 };
 
-/**
- * Cria um novo pedido
- */
 export const createOrder = async (
   orderData: OrderFormData,
   generatedNumbers: string[],
@@ -102,9 +91,6 @@ export const createOrder = async (
   }
 };
 
-/**
- * Busca todos os números vendidos
- */
 export const fetchAllSoldNumbers = async (): Promise<string[]> => {
   try {
     const ordersRef = collection(db, 'orders');

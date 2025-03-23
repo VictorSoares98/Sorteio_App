@@ -3,6 +3,7 @@ import { ref, computed } from 'vue';
 import { collection, getDocs, doc, updateDoc, getDoc, query, where } from 'firebase/firestore';
 import { db } from '../firebase';
 import type { User, UserRole } from '../types/user';
+import type { Order } from '../types/order';
 import { useAuthStore } from './authStore';
 
 export const useUserStore = defineStore('users', () => {
@@ -166,8 +167,50 @@ export const useUserStore = defineStore('users', () => {
       return [];
     }
     
-    // Implementação futura: buscar usuários com número de vendas
-    return [];
+    loading.value = true;
+    error.value = null;
+    
+    try {
+      const ordersRef = collection(db, 'orders');
+      const ordersSnapshot = await getDocs(ordersRef);
+      
+      const sellerActivityMap = new Map<string, { 
+        userId: string, 
+        sellerName: string, 
+        orderCount: number, 
+        totalNumbers: number 
+      }>();
+      
+      ordersSnapshot.forEach(doc => {
+        const orderData = doc.data() as Order;
+        const sellerId = orderData.sellerId;
+        const sellerName = orderData.sellerName;
+        const numbersCount = orderData.generatedNumbers?.length || 0;
+        
+        if (!sellerActivityMap.has(sellerId)) {
+          sellerActivityMap.set(sellerId, {
+            userId: sellerId,
+            sellerName,
+            orderCount: 0,
+            totalNumbers: 0
+          });
+        }
+        
+        const sellerData = sellerActivityMap.get(sellerId)!;
+        sellerData.orderCount++;
+        sellerData.totalNumbers += numbersCount;
+      });
+      
+      return Array.from(sellerActivityMap.values())
+        .sort((a, b) => b.orderCount - a.orderCount);
+        
+    } catch (err: any) {
+      console.error('Erro ao buscar atividade de usuários:', err);
+      error.value = 'Não foi possível buscar dados de atividade.';
+      return [];
+    } finally {
+      loading.value = false;
+    }
   };
   
   return {
