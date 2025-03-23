@@ -40,19 +40,20 @@ export const useOrderStore = defineStore('order', () => {
   const createOrder = async (orderData: OrderFormData, generatedNumbers: string[]) => {
     if (!authStore.currentUser) throw new Error('Usuário não autenticado');
     
-    // Remover o código que define PaymentMethod padrão
-    // A validação no formulário já garante que paymentMethod estará definido
-    
     loading.value = true;
     error.value = null;
     
     try {
-      // Usar o serviço ao invés de reimplementar lógica
+      // Verificar se o username está disponível
+      const username = authStore.currentUser.username || authStore.currentUser.displayName.toLowerCase().replace(/\s+/g, "_");
+      
+      // Passar o username para o serviço
       const newOrderId = await orderService.createOrder(
         orderData,
         generatedNumbers,
         authStore.currentUser.id,
-        authStore.currentUser.displayName
+        authStore.currentUser.displayName,
+        username
       );
       
       // Atualizar a store após criar o pedido

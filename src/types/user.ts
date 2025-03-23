@@ -9,6 +9,7 @@ export interface User {
   id: string;
   email: string;
   displayName: string;
+  username: string;
   role: UserRole;
   phone?: string;
   congregation?: string;

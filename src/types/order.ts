@@ -13,6 +13,7 @@ export interface Order {
   generatedNumbers: string[];
   sellerName: string;
   sellerId: string;
+  sellerUsername: string; // Campo adicionado para guardar o username do vendedor
   createdAt: Date;
   numTickets?: number;
 }

@@ -1,6 +1,7 @@
 import { collection, query, where, getDocs, serverTimestamp, setDoc, doc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { type Order, type OrderFormData } from '../types/order';
+import { generateDocumentId } from '../utils/formatters';
 
 /**
  * Busca todos os pedidos de um usuário específico
@@ -43,10 +44,12 @@ export const createOrder = async (
   orderData: OrderFormData, 
   generatedNumbers: string[], 
   sellerId: string, 
-  sellerName: string
+  sellerName: string,
+  sellerUsername: string
 ): Promise<string> => {
   try {
-    const newOrderId = `order_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    // Gera um ID amigável baseado no username do vendedor
+    const newOrderId = generateDocumentId('order', sellerUsername);
     
     // Verificar se paymentMethod está definido
     if (orderData.paymentMethod === undefined) {
@@ -57,22 +60,24 @@ export const createOrder = async (
     const newOrder: Order = {
       id: newOrderId,
       buyerName: orderData.buyerName,
-      paymentMethod: orderData.paymentMethod, // Agora sabemos que está definido
+      paymentMethod: orderData.paymentMethod,
       contactNumber: orderData.contactNumber,
       addressOrCongregation: orderData.addressOrCongregation,
       observations: orderData.observations,
       generatedNumbers: generatedNumbers,
       sellerName: sellerName,
       sellerId: sellerId,
+      sellerUsername: sellerUsername, // Incluir o username do vendedor
       createdAt: new Date()
     };
     
-    // Salvar pedido no Firestore
+    // Salvar pedido no Firestore com o ID padronizado
     await setDoc(doc(db, 'orders', newOrderId), {
       ...newOrder,
       createdAt: serverTimestamp() 
     });
     
+    console.log(`Pedido criado com ID padronizado: ${newOrderId}`);
     return newOrderId;
     
   } catch (err) {

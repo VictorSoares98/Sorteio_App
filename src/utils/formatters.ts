@@ -90,3 +90,34 @@ export const formatRaffleNumber = (number: string): string => {
   // Formata para ter 5 dígitos com zeros à esquerda
   return cleaned.padStart(5, '0').substring(0, 5);
 };
+
+/**
+ * Normaliza um username para uso em IDs:
+ * - Remove caracteres especiais
+ * - Converte para minúsculas
+ * - Substitui espaços por hífens
+ */
+export const normalizeUsername = (username: string): string => {
+  if (!username) return '';
+  
+  // Remove acentos e caracteres especiais
+  const normalized = username
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, "")
+    .replace(/\s+/g, "-");
+    
+  return normalized;
+};
+
+/**
+ * Gera um ID para documento baseado no username
+ */
+export const generateDocumentId = (prefix: string, username: string): string => {
+  const normalizedUsername = normalizeUsername(username);
+  const timestamp = Date.now();
+  const uniqueSuffix = Math.random().toString(36).substring(2, 5);
+  
+  return `${prefix}_${normalizedUsername}_${timestamp}_${uniqueSuffix}`;
+};

@@ -110,7 +110,12 @@ const submitForm = async () => {
     
     if (!createdOrder.value) {
       console.warn('Pedido criado não encontrado na lista, buscando dados do ID');
-      // Tentar uma abordagem alternativa - em um sistema real, poderíamos buscar o pedido da API
+      
+      // Obter o username do usuário atual
+      const username = authStore.currentUser.username || 
+                      authStore.currentUser.displayName.toLowerCase().replace(/\s+/g, "_");
+      
+      // Tentar uma abordagem alternativa
       createdOrder.value = {
         id: newOrderId,
         buyerName: formData.value.buyerName,
@@ -121,6 +126,7 @@ const submitForm = async () => {
         generatedNumbers: generatedNumbers.value,
         sellerId: authStore.currentUser.id,
         sellerName: authStore.currentUser.displayName,
+        sellerUsername: username,
         createdAt: new Date()
       };
     }

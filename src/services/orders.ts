@@ -1,6 +1,7 @@
 import { collection, query, where, getDocs, doc, getDoc, setDoc, serverTimestamp, orderBy, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { PaymentMethod, type Order, type OrderFormData } from '../types/order';
+import { generateDocumentId } from '../utils/formatters';
 
 export const fetchUserOrders = async (userId: string): Promise<Order[]> => {
   try {
@@ -61,10 +62,13 @@ export const createOrder = async (
   orderData: OrderFormData, 
   generatedNumbers: string[], 
   sellerId: string, 
-  sellerName: string
+  sellerName: string,
+  sellerUsername?: string
 ): Promise<string> => {
   try {
-    const newOrderId = `order_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    // Usar o username para o ID ou fallback para um formato tradicional
+    const usernameToUse = sellerUsername || sellerName.toLowerCase().replace(/\s+/g, "_");
+    const newOrderId = generateDocumentId('order', usernameToUse);
     
     // Verificar se paymentMethod está definido
     if (orderData.paymentMethod === undefined) {
@@ -75,17 +79,18 @@ export const createOrder = async (
     const newOrder: Order = {
       id: newOrderId,
       buyerName: orderData.buyerName,
-      paymentMethod: orderData.paymentMethod, // Agora sabemos que está definido
+      paymentMethod: orderData.paymentMethod,
       contactNumber: orderData.contactNumber,
       addressOrCongregation: orderData.addressOrCongregation,
       observations: orderData.observations,
       generatedNumbers: generatedNumbers,
       sellerName: sellerName,
       sellerId: sellerId,
+      sellerUsername: sellerUsername || usernameToUse, // Usar o fornecido ou gerar um
       createdAt: new Date()
     };
     
-    // Salvar no Firestore
+    // Salvar no Firestore com o ID padronizado
     await setDoc(doc(db, 'orders', newOrderId), {
       ...newOrder,
       createdAt: serverTimestamp()
