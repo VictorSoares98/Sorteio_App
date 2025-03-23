@@ -19,6 +19,7 @@ const login = async () => {
   
   try {
     await authStore.login(email.value, password.value, redirectPath.value);
+    // Não precisamos redirecionar manualmente aqui - o store já faz isso
   } catch (error: any) {
     errorMessage.value = authStore.error || 'Email ou senha incorretos. Tente novamente.';
     console.error('Erro no login:', error);
@@ -66,7 +67,7 @@ const login = async () => {
       <button
         type="submit"
         :disabled="loading"
-        class="bg-primary hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline w-full"
+        class="bg-primary hover:bg-primary-dark text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline w-full transition-colors"
       >
         <span v-if="loading">Carregando...</span>
         <span v-else>Entrar</span>

@@ -19,7 +19,7 @@ defineProps({
   <div class="bg-white rounded-lg shadow-md overflow-hidden">
     <!-- Card Header (se tiver título) -->
     <div v-if="title" class="border-b px-6 py-4">
-      <h3 class="text-lg font-medium text-gray-900">{{ title }}</h3>
+      <h3 class="text-lg font-medium text-primary">{{ title }}</h3>
       <p v-if="subtitle" class="mt-1 text-sm text-gray-600">{{ subtitle }}</p>
     </div>
     

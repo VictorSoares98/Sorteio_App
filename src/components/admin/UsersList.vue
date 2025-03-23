@@ -97,7 +97,7 @@ const updateUserRole = async () => {
       <h2 class="text-2xl font-bold">Gerenciamento de Usuários</h2>
       <button 
         @click="fetchUsers"
-        class="bg-primary text-white px-4 py-2 rounded"
+        class="bg-primary hover:bg-primary-dark text-white px-4 py-2 rounded transition-colors"
       >
         Atualizar
       </button>
@@ -143,7 +143,7 @@ const updateUserRole = async () => {
     </div>
     
     <!-- Users List -->
-    <Card>
+    <Card class="overflow-hidden">
       <div v-if="userStore.loading" class="text-center py-8">
         <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
         <p class="mt-2">Carregando usuários...</p>
@@ -257,7 +257,7 @@ const updateUserRole = async () => {
           </button>
           <button 
             @click="updateUserRole"
-            class="px-4 py-2 bg-primary text-white rounded-md hover:bg-blue-700"
+            class="px-4 py-2 bg-primary text-white rounded-md hover:bg-primary-dark transition-colors"
             :disabled="!selectedRole"
           >
             Confirmar

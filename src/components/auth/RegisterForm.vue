@@ -138,7 +138,7 @@ const register = async () => {
       <button
         type="submit"
         :disabled="loading"
-        class="bg-primary hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline w-full"
+        class="bg-primary hover:bg-primary-dark text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline w-full transition-colors"
       >
         <span v-if="loading">Processando...</span>
         <span v-else>Cadastrar</span>
@@ -146,7 +146,7 @@ const register = async () => {
     </div>
     
     <div class="mt-4 text-center text-sm">
-      <router-link to="/login" class="text-primary hover:underline">
+      <router-link to="/login" class="text-primary hover:text-primary-dark transition-colors">
         Já tem uma conta? Faça login
       </router-link>
     </div>

@@ -5,6 +5,7 @@ import { computed } from 'vue';
 type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'outline' | 'ghost';
 type ButtonSize = 'sm' | 'md' | 'lg';
 type ButtonType = 'button' | 'submit' | 'reset';
+
 const props = defineProps({
   type: {
     type: String as () => ButtonType,
@@ -31,9 +32,10 @@ const props = defineProps({
   }
 });
 
+// Definindo classes para cada variante, com classes CSS diretas
 const variantClasses: Record<ButtonVariant, string> = {
-  primary: 'bg-primary hover:bg-blue-700 text-white',
-  secondary: 'bg-secondary hover:bg-yellow-400 text-gray-900',
+  primary: 'bg-primary text-white btn-primary',
+  secondary: 'bg-secondary text-gray-900 btn-secondary',
   danger: 'bg-danger hover:bg-red-600 text-white',
   outline: 'bg-transparent border border-primary text-primary hover:bg-primary hover:text-white',
   ghost: 'bg-transparent text-primary hover:bg-gray-100'

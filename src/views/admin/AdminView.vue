@@ -39,7 +39,7 @@ onMounted(async () => {
         <p class="text-gray-600 mb-4">Gerencie os usuários da plataforma e suas permissões.</p>
         
         <button 
-          class="bg-primary hover:bg-blue-700 text-white py-2 px-4 rounded"
+          class="bg-primary hover:bg-primary-dark text-white py-2 px-4 rounded transition-colors"
         >
           Ver Usuários
         </button>
@@ -51,7 +51,7 @@ onMounted(async () => {
         <p class="text-gray-600 mb-4">Visualize estatísticas de vendas e números sorteados.</p>
         
         <button 
-          class="bg-primary hover:bg-blue-700 text-white py-2 px-4 rounded"
+          class="bg-primary hover:bg-primary-dark text-white py-2 px-4 rounded transition-colors"
         >
           Ver Relatórios
         </button>
@@ -63,7 +63,7 @@ onMounted(async () => {
         <p class="text-gray-600 mb-4">Configure datas e parâmetros dos sorteios ativos.</p>
         
         <button 
-          class="bg-primary hover:bg-blue-700 text-white py-2 px-4 rounded"
+          class="bg-primary hover:bg-primary-dark text-white py-2 px-4 rounded transition-colors"
         >
           Configurar Sorteio
         </button>
@@ -75,7 +75,7 @@ onMounted(async () => {
         <p class="text-gray-600 mb-4">Configurações gerais do sistema e da plataforma.</p>
         
         <button 
-          class="bg-primary hover:bg-blue-700 text-white py-2 px-4 rounded"
+          class="bg-primary hover:bg-primary-dark text-white py-2 px-4 rounded transition-colors"
         >
           Acessar Configurações
         </button>

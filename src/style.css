@@ -7,10 +7,111 @@
   .max-w-lg {
     max-width: 32rem;
   }
+  
+  /* Classes auxiliares para responsividade */
+  .responsive-container {
+    @apply px-4 w-full mx-auto;
+  }
+  
+  .text-responsive {
+    @apply text-sm md:text-base;
+  }
+  
+  .heading-responsive {
+    @apply text-lg md:text-xl lg:text-2xl;
+  }
+  
+  /* Classes de cores personalizadas com suas variantes */
+  .bg-primary-dark {
+    background-color: #E67E00;
+  }
+  .hover\:bg-primary-dark:hover {
+    background-color: #E67E00;
+  }
+  
+  .bg-primary-light {
+    background-color: #FFA333;
+  }
+  .hover\:bg-primary-light:hover {
+    background-color: #FFA333;
+  }
+  
+  .bg-secondary-dark {
+    background-color: #E6AE22;
+  }
+  .hover\:bg-secondary-dark:hover {
+    background-color: #E6AE22;
+  }
+  
+  .bg-secondary-light {
+    background-color: #FFD24D;
+  }
+  .hover\:bg-secondary-light:hover {
+    background-color: #FFD24D;
+  }
+  
+  .border-primary-light {
+    border-color: #FFA333;
+  }
+  
+  .border-primary-dark {
+    border-color: #E67E00;
+  }
+  
+  /* Reforço de estilos para as cores atualizadas */
+  .bg-primary {
+    background-color: #FF8C00 !important;
+  }
+
+  .hover\:bg-primary:hover {
+    background-color: #FF8C00 !important;
+  }
+
+  .hover\:bg-primary-dark:hover {
+    background-color: #E67E00 !important;
+  }
+
+  .text-primary {
+    color: #FF8C00 !important;
+  }
+
+  .hover\:text-primary-dark:hover {
+    color: #E67E00 !important;
+  }
+
+  .bg-secondary {
+    background-color: #FFC125 !important;
+  }
+
+  .hover\:bg-secondary:hover {
+    background-color: #FFC125 !important;
+  }
+
+  .text-secondary {
+    color: #FFC125 !important;
+  }
+
+  .hover\:text-secondary:hover {
+    color: #FFC125 !important;
+  }
+
+  /* Corrigir referências específicas a cores antigas */
+  [class*="hover:bg-blue-700"] {
+    @apply hover:bg-primary-dark;
+  }
 }
 
 /* Estilos personalizados abaixo do Tailwind */
 :root {
+  /* Definição explícita das variáveis CSS para as cores principais */
+  --color-primary: #FF8C00;
+  --color-secondary: #FFC125;
+  --color-primary-dark: #E67E00;
+  --color-primary-light: #FFA333;
+  --color-secondary-dark: #E6AE22;
+  --color-secondary-light: #FFD24D;
+  --color-danger: #e3342f;
+  
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -19,21 +120,49 @@
 
 body {
   min-height: 100vh;
+  /* Ajustes para melhor experiência em dispositivos móveis */
+  @apply text-sm md:text-base;
 }
 
 #app {
-  max-width: 1280px;
-  margin: 0 auto;
+  /* Removida a restrição de largura máxima */
+  width: 100%;
+  min-height: 100vh;
 }
 
-/* Classes personalizadas para formulários - organizar apenas as realmente utilizadas */
+/* Melhorias nas transições para componentes responsivos */
+.nav-transition,
+.menu-transition {
+  transition: all 0.3s ease;
+}
+
+/* Estilos específicos para o menu mobile */
+@media (max-width: 767px) {
+  .mobile-menu-button {
+    display: block !important; /* Garantir que o botão seja visível em mobile */
+    z-index: 30;
+  }
+}
+
+/* Melhorias para navegação mobile */
+@media (max-width: 767px) {
+  .mobile-menu-open {
+    display: block !important;
+  }
+  
+  .mobile-menu-closed {
+    display: none !important;
+  }
+}
+
+/* Classes personalizadas para formulários */
 @layer components {
   .form-container {
-    @apply max-w-lg mx-auto bg-white p-6 rounded-lg shadow-md;
+    @apply max-w-lg mx-auto bg-white p-4 md:p-6 rounded-lg shadow-md;
   }
   
   .form-title {
-    @apply text-xl font-semibold mb-6 text-center text-primary;
+    @apply text-lg md:text-xl font-semibold mb-4 md:mb-6 text-center text-primary;
   }
   
   .form-input {
@@ -47,9 +176,38 @@ body {
   .form-error-container {
     @apply mb-4 p-3 bg-red-100 text-danger rounded-md text-sm border border-danger;
   }
-  
-  /* Remover classes não utilizadas
-  .form-input-error, .form-error-text, .form-submit-btn, .card-container,
-  .card-header, .card-body, .btn-primary
-  */
+}
+
+/* Botões com as novas cores */
+.btn {
+  @apply py-2 px-4 rounded font-medium transition-colors;
+}
+
+.btn-primary {
+  @apply bg-primary text-white;
+}
+.btn-primary:hover {
+  background-color: #E67E00;
+}
+
+.btn-secondary {
+  @apply bg-secondary text-gray-800;
+}
+.btn-secondary:hover {
+  background-color: #E6AE22;
+}
+
+/* Links com cores atualizadas */
+a.link-primary {
+  @apply text-primary;
+}
+a.link-primary:hover {
+  color: #E67E00;
+}
+
+a.link-secondary {
+  @apply text-secondary;
+}
+a.link-secondary:hover {
+  color: #E6AE22;
 }

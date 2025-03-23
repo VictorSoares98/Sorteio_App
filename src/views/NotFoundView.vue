@@ -15,13 +15,13 @@ const goBack = () => router.go(-1);
     <div class="flex gap-4">
       <button 
         @click="goBack" 
-        class="bg-gray-200 hover:bg-gray-300 text-gray-800 py-2 px-4 rounded"
+        class="bg-gray-200 hover:bg-gray-300 text-gray-800 py-2 px-4 rounded transition-colors"
       >
         Voltar
       </button>
       <router-link 
         to="/" 
-        class="bg-primary hover:bg-blue-700 text-white py-2 px-4 rounded"
+        class="bg-primary hover:bg-primary-dark text-white py-2 px-4 rounded transition-colors"
       >
         Ir para Página Inicial
       </router-link>
