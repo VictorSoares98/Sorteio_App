@@ -36,6 +36,12 @@ const submitForm = async () => {
     isValid = false;
   }
 
+  // Validação do username
+  if (!profileFormData.value.username || profileFormData.value.username.length < 3) {
+    validationErrors.value.username = 'O nome de usuário deve ter pelo menos 3 caracteres';
+    isValid = false;
+  }
+
   if (profileFormData.value.phone && !validatePhone(profileFormData.value.phone)) {
     validationErrors.value.phone = 'Formato de telefone inválido';
     isValid = false;
@@ -142,6 +148,14 @@ const cancelEdit = () => {
           label="Nome Completo"
           required
           :error="validationErrors.displayName"
+        />
+        
+        <!-- Campo de username adicionado -->
+        <Input
+          v-model="profileFormData.username"
+          label="Nome de Usuário"
+          required
+          :error="validationErrors.username"
         />
         
         <Input

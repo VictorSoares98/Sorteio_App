@@ -37,7 +37,7 @@ const variantClasses: Record<ButtonVariant, string> = {
   primary: 'bg-primary text-white btn-primary',
   secondary: 'bg-secondary text-gray-900 btn-secondary',
   danger: 'bg-danger hover:bg-red-600 text-white',
-  outline: 'bg-transparent border border-primary text-primary hover:bg-primary hover:text-white',
+  outline: 'bg-transparent border border-primary text-primary hover:bg-primary outline-btn', // Adicionando classe personalizada
   ghost: 'bg-transparent text-primary hover:bg-gray-100'
 };
 

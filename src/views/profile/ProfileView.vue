@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue';
 import { useAuthStore } from '../../stores/authStore';
 import { useOrderStore } from '../../stores/orderStore';
+import { formatUserRole } from '../../utils/formatters';
 import ProfileEdit from '../../components/profile/ProfileEdit.vue';
 import AffiliateLink from '../../components/profile/AffiliateLink.vue';
 import SalesAccordion from '../../components/profile/SalesAccordion.vue';
@@ -9,7 +10,7 @@ import SalesAccordion from '../../components/profile/SalesAccordion.vue';
 const authStore = useAuthStore();
 const orderStore = useOrderStore();
 const isLoading = ref(true);
-const activeTab = ref('profile'); // 'profile', 'sales', 'affiliate'
+const activeTab = ref('sales'); // Alterado para iniciar em 'sales' em vez de 'profile'
 
 // Carregar pedidos do usuário quando o componente for montado
 onMounted(async () => {
@@ -41,31 +42,19 @@ onMounted(async () => {
           <div class="mb-6 pb-4 border-b border-gray-200">
             <h2 class="text-xl font-semibold text-primary mb-1">{{ authStore.currentUser.displayName }}</h2>
             <p class="text-sm text-gray-500">{{ authStore.currentUser.email }}</p>
+            <!-- Adicionada exibição do tipo de conta -->
+            <p class="text-xs text-gray-400 mt-1">{{ formatUserRole(authStore.currentUser.role) }}</p>
           </div>
           
-          <!-- Tabs para navegar entre as diferentes seções -->
+          <!-- Tabs para navegar entre as diferentes seções (ordem alterada) -->
           <div class="flex flex-col space-y-2">
-            <button 
-              @click="activeTab = 'profile'" 
-              class="py-2 px-4 rounded-md text-left transition-colors"
-              :class="activeTab === 'profile' 
-                ? 'bg-primary bg-opacity-10 text-primary font-medium' 
-                : 'hover:bg-gray-100'"
-            >
-              <span class="flex items-center">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                </svg>
-                Informações do Perfil
-              </span>
-            </button>
-            
+            <!-- 1. Minhas Vendas (primeiro) -->
             <button 
               @click="activeTab = 'sales'" 
               class="py-2 px-4 rounded-md text-left transition-colors"
               :class="activeTab === 'sales' 
-                ? 'bg-primary bg-opacity-10 text-primary font-medium' 
-                : 'hover:bg-gray-100'"
+                ? 'bg-primary bg-opacity-10 text-white font-medium' 
+                : 'hover:bg-gray-100 text-gray-700'"
             >
               <span class="flex items-center">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -75,18 +64,35 @@ onMounted(async () => {
               </span>
             </button>
             
+            <!-- 2. Programa de Afiliados (segundo) -->
             <button 
               @click="activeTab = 'affiliate'" 
               class="py-2 px-4 rounded-md text-left transition-colors"
               :class="activeTab === 'affiliate' 
-                ? 'bg-primary bg-opacity-10 text-primary font-medium' 
-                : 'hover:bg-gray-100'"
+                ? 'bg-primary bg-opacity-10 text-white font-medium' 
+                : 'hover:bg-gray-100 text-gray-700'"
             >
               <span class="flex items-center">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
                 </svg>
                 Programa de Afiliados
+              </span>
+            </button>
+            
+            <!-- 3. Informações do Perfil (terceiro) -->
+            <button 
+              @click="activeTab = 'profile'" 
+              class="py-2 px-4 rounded-md text-left transition-colors"
+              :class="activeTab === 'profile' 
+                ? 'bg-primary bg-opacity-10 text-white font-medium' 
+                : 'hover:bg-gray-100 text-gray-700'"
+            >
+              <span class="flex items-center">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+                Informações do Perfil
               </span>
             </button>
           </div>

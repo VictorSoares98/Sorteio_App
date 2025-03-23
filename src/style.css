@@ -100,6 +100,22 @@
   [class*="hover:bg-blue-700"] {
     @apply hover:bg-primary-dark;
   }
+
+  /* Classes específicas para melhorar o contraste */
+  .hover\:text-white:hover {
+    color: #FFFFFF !important;
+  }
+
+  /* Classes para botões outline */
+  .btn-outline:hover {
+    @apply bg-primary text-white;
+  }
+
+  /* Fixar botão outline hover */
+  .outline-btn:hover {
+    background-color: var(--color-primary);
+    color: white !important;
+  }
 }
 
 /* Estilos personalizados abaixo do Tailwind */

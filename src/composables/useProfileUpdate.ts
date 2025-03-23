@@ -13,13 +13,15 @@ export function useProfileUpdate() {
   
   const currentUser = computed<User | null>(() => authStore.currentUser);
   
-  // Form data para edição de perfil
+  // Form data para edição de perfil (incluindo username)
   const profileFormData = ref<{
     displayName: string;
+    username: string;
     congregation: string;
     phone: string;
   }>({
     displayName: currentUser.value?.displayName || '',
+    username: currentUser.value?.username || '',
     congregation: currentUser.value?.congregation || '',
     phone: currentUser.value?.phone || ''
   });
@@ -29,6 +31,7 @@ export function useProfileUpdate() {
     if (currentUser.value) {
       profileFormData.value = {
         displayName: currentUser.value.displayName || '',
+        username: currentUser.value.username || '',
         congregation: currentUser.value.congregation || '',
         phone: currentUser.value.phone || ''
       };
@@ -52,10 +55,11 @@ export function useProfileUpdate() {
         displayName: profileFormData.value.displayName
       });
       
-      // Atualizar dados no Firestore
+      // Atualizar dados no Firestore (incluindo username)
       const userRef = doc(db, 'users', currentUser.value.id);
       await updateDoc(userRef, {
         displayName: profileFormData.value.displayName,
+        username: profileFormData.value.username,
         congregation: profileFormData.value.congregation,
         phone: profileFormData.value.phone
       });
