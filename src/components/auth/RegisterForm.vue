@@ -10,10 +10,10 @@ import { useFormValidation } from '../../composables/useFormValidation';
 import Input from '../ui/Input.vue';
 
 const displayName = ref('');
+const username = ref(''); // Novo campo para nome de usuário
 const email = ref('');
 const password = ref('');
 const confirmPassword = ref('');
-const congregation = ref('');
 const errorMessage = ref('');
 const loading = ref(false);
 const router = useRouter();
@@ -24,6 +24,10 @@ const { errors, validateFormField, isFormValid } = useFormValidation();
 const validateFields = () => {
   validateFormField('displayName', displayName.value, {
     'O nome deve ter pelo menos 3 caracteres': value => validateName(value)
+  });
+  
+  validateFormField('username', username.value, {
+    'O nome de usuário deve ter pelo menos 5 caracteres': value => Boolean(value && value.length >= 5)
   });
   
   validateFormField('email', email.value, {
@@ -64,9 +68,9 @@ const register = async () => {
     await setDoc(doc(db, 'users', user.uid), {
       id: user.uid,
       displayName: displayName.value,
+      username: username.value, // Salvar nome de usuário em vez de congregação
       email: email.value,
-      role: UserRole.USER, // Padrão para novos usuários
-      congregation: congregation.value,
+      role: UserRole.USER,
       createdAt: serverTimestamp(),
     });
     
@@ -98,18 +102,20 @@ const register = async () => {
     />
     
     <Input
+      id="username"
+      v-model="username"
+      label="Nome de Usuário"
+      required
+      :error="errors.username || ''"
+    />
+    
+    <Input
       id="email"
       v-model="email"
       label="Email"
       type="email"
       required
       :error="errors.email || ''"
-    />
-    
-    <Input
-      id="congregation"
-      v-model="congregation"
-      label="Congregação"
     />
     
     <Input
