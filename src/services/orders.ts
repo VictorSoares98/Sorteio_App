@@ -1,6 +1,6 @@
 import { collection, query, where, getDocs, doc, getDoc, setDoc, serverTimestamp, orderBy, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase';
-import type { Order, OrderFormData, PaymentMethod } from '../types/order';
+import { PaymentMethod, type Order, type OrderFormData } from '../types/order';
 
 export const fetchUserOrders = async (userId: string): Promise<Order[]> => {
   try {
@@ -54,37 +54,44 @@ export const fetchOrderById = async (orderId: string): Promise<Order | null> => 
   }
 };
 
+/**
+ * Cria um novo pedido
+ */
 export const createOrder = async (
-  orderData: OrderFormData,
-  generatedNumbers: string[],
-  sellerId: string,
+  orderData: OrderFormData, 
+  generatedNumbers: string[], 
+  sellerId: string, 
   sellerName: string
 ): Promise<string> => {
   try {
-    // Gerar ID único para o pedido
-    const orderId = `order_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const newOrderId = `order_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     
-    // Criar objeto do pedido
+    // Verificar se paymentMethod está definido
+    if (orderData.paymentMethod === undefined) {
+      throw new Error('É necessário selecionar uma forma de pagamento');
+    }
+    
+    // Preparar dados do pedido
     const newOrder: Order = {
-      id: orderId,
+      id: newOrderId,
       buyerName: orderData.buyerName,
-      paymentMethod: orderData.paymentMethod,
+      paymentMethod: orderData.paymentMethod, // Agora sabemos que está definido
       contactNumber: orderData.contactNumber,
       addressOrCongregation: orderData.addressOrCongregation,
       observations: orderData.observations,
       generatedNumbers: generatedNumbers,
-      sellerId: sellerId,
       sellerName: sellerName,
+      sellerId: sellerId,
       createdAt: new Date()
     };
     
     // Salvar no Firestore
-    await setDoc(doc(db, 'orders', orderId), {
+    await setDoc(doc(db, 'orders', newOrderId), {
       ...newOrder,
       createdAt: serverTimestamp()
     });
     
-    return orderId;
+    return newOrderId;
   } catch (error) {
     console.error('Erro ao criar pedido:', error);
     throw new Error('Não foi possível criar o pedido.');

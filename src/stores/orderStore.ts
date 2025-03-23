@@ -3,8 +3,7 @@ import { ref, computed } from 'vue';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useAuthStore } from './authStore';
-import type { Order, OrderFormData } from '../types/order';
-// Importar corretamente o serviço de pedidos
+import { PaymentMethod, type Order, type OrderFormData } from '../types/order';
 import * as orderService from '../services/orders';
 
 export const useOrderStore = defineStore('order', () => {
@@ -42,6 +41,9 @@ export const useOrderStore = defineStore('order', () => {
   // Criar novo pedido
   const createOrder = async (orderData: OrderFormData, generatedNumbers: string[]) => {
     if (!authStore.currentUser) throw new Error('Usuário não autenticado');
+    
+    // Remover o código que define PaymentMethod padrão
+    // A validação no formulário já garante que paymentMethod estará definido
     
     loading.value = true;
     error.value = null;

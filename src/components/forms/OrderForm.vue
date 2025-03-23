@@ -15,10 +15,11 @@ import OrderFormFields from './OrderFormFields.vue';
 // Form data
 const formData = ref<OrderFormData>({
   buyerName: '',
-  paymentMethod: PaymentMethod.PIX,
+  paymentMethod: undefined, // Inicialmente nenhum método selecionado
   contactNumber: '',
   addressOrCongregation: '',
-  observations: ''
+  observations: '',
+  numTickets: 0 // Iniciar com zero para não mostrar valor no input
 });
 
 // Estados do formulário
@@ -28,7 +29,7 @@ const orderId = ref<string | null>(null);
 
 // Composables
 const { errors, validateFormField, isFormValid } = useFormValidation();
-const { generatedNumbers, isGenerating, error: raffleError, generateUniqueNumbers } = useRaffleNumbers();
+const { generatedNumbers, isGenerating, error: raffleError, generateUniqueNumbers, numbersPerOrder } = useRaffleNumbers();
 const authStore = useAuthStore();
 const orderStore = useOrderStore();
 
@@ -41,12 +42,21 @@ const validateForm = () => {
     'Nome deve ter pelo menos 3 caracteres': value => validateName(value)
   });
   
+  validateFormField('paymentMethod', formData.value.paymentMethod, {
+    'Selecione uma forma de pagamento': value => value !== undefined
+  });
+  
   validateFormField('contactNumber', formData.value.contactNumber, {
     'Formato inválido. Use: (00) 00000-0000': value => validatePhone(value)
   });
   
   validateFormField('addressOrCongregation', formData.value.addressOrCongregation, {
     'Este campo é obrigatório': value => !!value
+  });
+  
+  // Validação para o campo numTickets
+  validateFormField('numTickets', formData.value.numTickets?.toString() || '', {
+    'Selecione ou insira a quantidade de números': value => !!value && parseInt(value) > 0
   });
   
   return isFormValid();
@@ -69,6 +79,17 @@ const submitForm = async () => {
   
   try {
     isSubmitting.value = true;
+    
+    // Atualizar a quantidade de números a gerar com base no valor selecionado
+    // Se não houver seleção, usar 5 como valor padrão
+    if (formData.value.numTickets && formData.value.numTickets > 0) {
+      // Setar a quantidade de números a gerar
+      numbersPerOrder.value = formData.value.numTickets;
+    } else {
+      // Valor padrão se nenhum número for selecionado
+      numbersPerOrder.value = 5;
+      formData.value.numTickets = 5;
+    }
     
     // 1. Gerar números únicos para o sorteio
     await generateUniqueNumbers();
@@ -122,10 +143,11 @@ const submitForm = async () => {
 const resetForm = () => {
   formData.value = {
     buyerName: '',
-    paymentMethod: PaymentMethod.PIX,
+    paymentMethod: undefined, // Redefinir para nenhum método selecionado
     contactNumber: '',
     addressOrCongregation: '',
-    observations: ''
+    observations: '',
+    numTickets: 0 // Resetar para 0 para que o campo fique vazio
   };
 };
 

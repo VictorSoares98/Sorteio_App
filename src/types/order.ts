@@ -14,12 +14,14 @@ export interface Order {
   sellerName: string;
   sellerId: string;
   createdAt: Date;
+  numTickets?: number;
 }
 
 export interface OrderFormData {
   buyerName: string;
-  paymentMethod: PaymentMethod;
+  paymentMethod?: PaymentMethod; // Torna opcional para permitir estado desmarcado
   contactNumber: string;
   addressOrCongregation: string;
   observations?: string;
+  numTickets?: number; // Novo campo para número de tickets
 }

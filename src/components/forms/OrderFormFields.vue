@@ -3,6 +3,7 @@ import { PaymentMethod } from '../../types/order';
 import type { OrderFormData } from '../../types/order';
 import { formatPhone } from '../../utils/formatting';
 import Input from '../ui/Input.vue';
+import NumberSelector from './NumberSelector.vue';
 
 const props = defineProps<{
   formData: OrderFormData;
@@ -21,10 +22,51 @@ const updateFormData = (field: keyof OrderFormData, value: any) => {
   });
 };
 
+const updateNumTickets = (value: number) => {
+  emit('update:formData', {
+    ...props.formData,
+    numTickets: value
+  });
+};
+
 const formatContactNumber = (event: Event) => {
   const input = event.target as HTMLInputElement;
-  input.value = formatPhone(input.value);
+  // Obtém o valor atual e a posição do cursor antes da formatação
+  const currentValue = input.value;
+  const cursorPosition = input.selectionStart;
+  
+  // Remove caracteres não numéricos para contar quantos dígitos temos
+  const cleanedValue = currentValue.replace(/\D/g, '');
+  
+  // Formata o valor
+  input.value = formatPhone(cleanedValue);
+  
+  // Calcula a nova posição do cursor
+  const newCursorPosition = calculateCursorPosition(currentValue, input.value, cursorPosition || 0);
+  
+  // Restaura a posição do cursor
+  input.setSelectionRange(newCursorPosition, newCursorPosition);
+  
+  // Emite o evento para o componente pai
   emit('input-phone', event);
+};
+
+// Função auxiliar para calcular a nova posição do cursor
+const calculateCursorPosition = (oldValue: string, newValue: string, oldPosition: number): number => {
+  // Se estamos no final do campo, manter no final
+  if (oldPosition === oldValue.length) {
+    return newValue.length;
+  }
+  
+  // Se a formatação adicionou caracteres, ajustar a posição
+  if (newValue.length > oldValue.length) {
+    // Verifica se temos parênteses ou traço na posição atual
+    if (newValue[oldPosition] === ')' || newValue[oldPosition] === '-' || newValue[oldPosition] === ' ') {
+      return oldPosition + 1;
+    }
+  }
+  
+  return oldPosition;
 };
 </script>
 
@@ -44,26 +86,31 @@ const formatContactNumber = (event: Event) => {
     <label class="form-label">
       Forma de Pagamento <span class="text-danger">*</span>
     </label>
-    <div class="flex space-x-4">
-      <label class="inline-flex items-center">
-        <input 
-          type="radio" 
-          :checked="formData.paymentMethod === PaymentMethod.PIX"
-          @change="updateFormData('paymentMethod', PaymentMethod.PIX)" 
-          class="form-radio text-primary"
-        />
-        <span class="ml-2">Pix</span>
-      </label>
-      <label class="inline-flex items-center">
-        <input 
-          type="radio" 
-          :checked="formData.paymentMethod === PaymentMethod.DINHEIRO"
-          @change="updateFormData('paymentMethod', PaymentMethod.DINHEIRO)" 
-          class="form-radio text-primary"
-        />
-        <span class="ml-2">Dinheiro</span>
-      </label>
+    <div class="flex w-full gap-2">
+      <button 
+        type="button" 
+        @click="updateFormData('paymentMethod', PaymentMethod.PIX)"
+        class="w-1/2 py-2 px-4 text-center rounded transition-colors"
+        :class="formData.paymentMethod === PaymentMethod.PIX 
+          ? 'bg-primary text-white' 
+          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
+      >
+        Pix
+      </button>
+      <button 
+        type="button" 
+        @click="updateFormData('paymentMethod', PaymentMethod.DINHEIRO)"
+        class="w-1/2 py-2 px-4 text-center rounded transition-colors"
+        :class="formData.paymentMethod === PaymentMethod.DINHEIRO 
+          ? 'bg-primary text-white' 
+          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
+      >
+        Dinheiro
+      </button>
     </div>
+    <p v-if="errors.paymentMethod" class="mt-1 text-sm text-danger">
+      {{ errors.paymentMethod }}
+    </p>
   </div>
   
   <!-- Contact Number -->
@@ -102,4 +149,11 @@ const formatContactNumber = (event: Event) => {
       rows="3"
     ></textarea>
   </div>
+  
+  <!-- Number Selector -->
+  <NumberSelector 
+    :modelValue="formData.numTickets || 0"
+    @update:modelValue="updateNumTickets"
+    :error="errors.numTickets || ''"
+  />
 </template>

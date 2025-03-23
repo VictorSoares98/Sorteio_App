@@ -2,12 +2,33 @@ export const formatPhone = (phone: string): string => {
   // Remove todos os caracteres não numéricos
   const cleaned = phone.replace(/\D/g, '');
   
-  // Formata como (XX) XXXXX-XXXX
-  if (cleaned.length === 11) {
-    return `(${cleaned.substring(0, 2)}) ${cleaned.substring(2, 7)}-${cleaned.substring(7)}`;
+  // Limita a 11 dígitos
+  const limited = cleaned.substring(0, 11);
+  
+  // Formatar como (XX) XXXXX-XXXX se tiver 11 dígitos
+  if (limited.length === 11) {
+    return `(${limited.substring(0, 2)}) ${limited.substring(2, 7)}-${limited.substring(7)}`;
+  }
+  // Formatar como (XX) XXXX-XXXX se tiver 10 dígitos
+  else if (limited.length === 10) {
+    return `(${limited.substring(0, 2)}) ${limited.substring(2, 6)}-${limited.substring(6)}`;
+  }
+  // Formatar parcialmente o número conforme for sendo digitado
+  else if (limited.length > 2) {
+    // Se tiver pelo menos o DDD completo
+    if (limited.length <= 7) {
+      // Até completar o meio do número
+      return `(${limited.substring(0, 2)}) ${limited.substring(2)}`;
+    } else {
+      // Após começar a digitar a parte final
+      return `(${limited.substring(0, 2)}) ${limited.substring(2, 7)}-${limited.substring(7)}`;
+    }
+  } else if (limited.length > 0) {
+    // Se começou a digitar apenas o DDD
+    return `(${limited}`;
   }
   
-  return phone;
+  return limited;
 };
 
 export const formatCurrency = (value: number): string => {
