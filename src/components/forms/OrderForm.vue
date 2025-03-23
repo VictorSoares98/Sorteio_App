@@ -4,7 +4,7 @@ import { PaymentMethod, type OrderFormData } from '../../types/order';
 import { useRaffleNumbers } from '../../composables/useRaffleNumbers';
 import { validateName, validatePhone } from '../../utils/validation';
 import { useAuthStore } from '../../stores/authStore';
-import { formatPhone } from '../../utils/formatting';
+import { formatPhone } from '../../utils/formatters';
 import { useFormValidation } from '../../composables/useFormValidation';
 import Button from '../ui/Button.vue';
 import ConfirmationModal from '../modals/ConfirmationModal.vue';

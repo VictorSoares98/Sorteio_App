@@ -5,7 +5,7 @@ import { UserRole } from '../../types/user';
 import Card from '../ui/Card.vue';
 import Alert from '../ui/Alert.vue';
 import RoleEditModal from '../modals/RoleEditModal.vue';
-import { formatDate } from '../../utils/formatting';
+import { formatDate } from '../../utils/formatters';
 
 // Store
 const userStore = useUserStore();

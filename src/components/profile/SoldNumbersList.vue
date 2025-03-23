@@ -2,7 +2,7 @@
 import { ref, onMounted, computed } from 'vue';
 import { useOrderStore } from '../../stores/orderStore';
 import Card from '../ui/Card.vue';
-import { formatDate } from '../../utils/formatting';
+import { formatDate } from '../../utils/formatters';
 
 const orderStore = useOrderStore();
 const isLoading = ref(true);

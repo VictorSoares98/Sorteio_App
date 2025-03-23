@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { fetchSalesReport } from '../../services/admin';
-import { formatDate } from '../../utils/formatting';
+import { formatDate } from '../../utils/formatters';
 import Card from '../ui/Card.vue';
 
 const loading = ref(true);
