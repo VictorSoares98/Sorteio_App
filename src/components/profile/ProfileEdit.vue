@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
-import { useProfile } from '../../composables/useProfile';
+import { useProfileUpdate } from '../../composables/useProfileUpdate';
 import Input from '../ui/Input.vue';
 import Button from '../ui/Button.vue';
 import Alert from '../ui/Alert.vue';
@@ -14,7 +14,7 @@ const {
   updateSuccess, 
   updateUserProfile, 
   initProfileForm 
-} = useProfile();
+} = useProfileUpdate();
 
 const validationErrors = ref<Record<string, string>>({});
 

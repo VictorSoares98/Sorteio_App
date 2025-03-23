@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
-import { useProfile } from '../../composables/useProfile';
+import { useAffiliateCode } from '../../composables/useAffiliateCode';
 import Card from '../ui/Card.vue';
 import Alert from '../ui/Alert.vue';
 
@@ -10,7 +10,7 @@ const {
   loading, 
   error, 
   generateAffiliateCode 
-} = useProfile();
+} = useAffiliateCode();
 
 // Estados
 const copied = ref(false);
