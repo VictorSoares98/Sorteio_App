@@ -82,7 +82,7 @@ const router = createRouter({
 // Navegação com proteção de rotas
 router.beforeEach(async (
   to: RouteLocationNormalized,
-  from: RouteLocationNormalized,
+  _from: RouteLocationNormalized,
   next: NavigationGuardNext
 ) => {
   // Atualizar o título da página dinamicamente
