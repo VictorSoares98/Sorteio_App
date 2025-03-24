@@ -4,7 +4,6 @@ import { useAffiliateCode } from '../../composables/useAffiliateCode';
 import Card from '../ui/Card.vue';
 import Alert from '../ui/Alert.vue';
 import Button from '../ui/Button.vue';
-import Input from '../ui/Input.vue';
 
 // Hooks
 const { 
@@ -172,24 +171,29 @@ onMounted(async () => {
         </p>
         
         <div class="mb-3">
-          <div class="flex items-center mb-2">
-            <Input
+          <!-- Campo de afiliação reformulado para seguir o mesmo padrão visual -->
+          <label class="block text-sm text-gray-600 mb-1">
+            {{ isEmail ? 'Email para afiliação:' : 'Código de afiliação:' }}
+          </label>
+          <div class="flex">
+            <input
               v-model="affiliateTarget"
               :placeholder="isEmail ? 'Email do usuário' : 'Código de afiliado'"
-              class="flex-grow"
+              type="text"
+              class="flex-grow px-3 py-2 border border-gray-300 rounded-l-md focus:outline-none focus:ring-primary focus:border-primary"
             />
-            <Button
+            <button
               @click="processAffiliation"
-              variant="primary"
               :disabled="!affiliateTarget || affiliating"
-              class="ml-2"
+              class="bg-primary hover:bg-primary-dark text-white px-4 py-2 rounded-r-md transition-colors"
+              :class="{ 'opacity-50 cursor-not-allowed': !affiliateTarget || affiliating }"
             >
               <span v-if="affiliating">Processando...</span>
               <span v-else>Afiliar</span>
-            </Button>
+            </button>
           </div>
           
-          <div class="flex items-center">
+          <div class="flex items-center mt-2">
             <label class="flex items-center text-sm text-gray-600">
               <input 
                 v-model="isEmail" 
@@ -303,3 +307,9 @@ onMounted(async () => {
     </div>
   </Card>
 </template>
+
+<style scoped>
+.form-checkbox {
+  @apply h-4 w-4 text-primary border-gray-300 rounded focus:ring-primary;
+}
+</style>
