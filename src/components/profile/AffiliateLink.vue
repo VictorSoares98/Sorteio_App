@@ -307,9 +307,3 @@ onMounted(async () => {
     </div>
   </Card>
 </template>
-
-<style scoped>
-.form-checkbox {
-  @apply h-4 w-4 text-primary border-gray-300 rounded focus:ring-primary;
-}
-</style>

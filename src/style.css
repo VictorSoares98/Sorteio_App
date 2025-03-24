@@ -193,6 +193,11 @@ body {
   .form-error-container {
     @apply mb-4 p-3 bg-red-100 text-danger rounded-md text-sm border border-danger;
   }
+  
+  /* Adicionar a classe form-checkbox aqui */
+  .form-checkbox {
+    @apply h-4 w-4 text-primary border-gray-300 rounded focus:ring-primary;
+  }
 }
 
 /* Botões com as novas cores */
