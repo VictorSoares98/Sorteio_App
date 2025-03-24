@@ -28,7 +28,14 @@ const orderId = ref<string | null>(null);
 
 // Composables
 const { errors, validateFormField, isFormValid } = useFormValidation();
-const { generatedNumbers, isGenerating, error: raffleError, generateUniqueNumbers, numbersPerOrder } = useRaffleNumbers();
+const { 
+  generatedNumbers, 
+  isGenerating, 
+  error: raffleError, 
+  generateUniqueNumbers, 
+  numbersPerOrder,
+  confirmNumbersUsed // Adicionado este item que estava faltando
+} = useRaffleNumbers();
 const authStore = useAuthStore();
 const orderStore = useOrderStore();
 
@@ -105,7 +112,10 @@ const submitForm = async () => {
     // 3. Criar pedido usando a orderStore para melhor organização do código
     const newOrderId = await orderStore.createOrder(formData.value, generatedNumbers.value);
     
-    // 4. Buscar o pedido criado para o modal
+    // 4. Confirmar uso dos números após sucesso na criação do pedido
+    await confirmNumbersUsed();
+    
+    // 5. Buscar o pedido criado para o modal
     createdOrder.value = orderStore.orders.find(order => order.id === newOrderId);
     
     if (!createdOrder.value) {
@@ -131,7 +141,7 @@ const submitForm = async () => {
       };
     }
     
-    // 5. Mostrar confirmação e resetar formulário
+    // 6. Mostrar confirmação e resetar formulário
     orderId.value = newOrderId;
     showConfirmation.value = true;
     resetForm();

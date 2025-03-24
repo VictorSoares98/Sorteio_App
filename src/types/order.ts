@@ -27,3 +27,24 @@ export interface OrderFormData {
   observations?: string;
   numTickets?: number; 
 }
+
+/**
+ * Interface para reservas temporárias de números
+ */
+export interface NumberReservation {
+  number: string;
+  reservedAt: Date;
+  expiresAt: Date;
+  sessionId: string;
+  userId?: string; // Opcional: ID do usuário que fez a reserva
+}
+
+/**
+ * Interface para configurações de sorteio
+ */
+export interface LotterySettings {
+  maxNumber: number;
+  minNumber: number;
+  digitCount: number;
+  reservationExpiryTimeMs: number;
+}

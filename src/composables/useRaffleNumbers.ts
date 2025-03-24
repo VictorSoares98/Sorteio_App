@@ -16,15 +16,27 @@ export function useRaffleNumbers() {
     generatedNumbers.value = [];
     
     try {
-      // Usando o serviço consolidado para gerar números
+      // Usando o serviço atualizado para gerar números com reserva
       const numbers = await raffleService.generateUniqueNumbers(numbersPerOrder.value);
       generatedNumbers.value = numbers;
       
     } catch (err: any) {
       console.error('Erro ao gerar números:', err);
       error.value = err.message || 'Erro ao gerar números para o sorteio.';
+      generatedNumbers.value = []; // Limpar números gerados em caso de erro
     } finally {
       isGenerating.value = false;
+    }
+  };
+  
+  // Confirma o uso dos números após criar o pedido com sucesso
+  const confirmNumbersUsed = async () => {
+    if (generatedNumbers.value.length === 0) return;
+    
+    try {
+      await raffleService.confirmNumbersUsed(generatedNumbers.value);
+    } catch (err) {
+      console.error('Erro ao confirmar uso dos números:', err);
     }
   };
   
@@ -34,5 +46,6 @@ export function useRaffleNumbers() {
     error,
     numbersPerOrder,
     generateUniqueNumbers,
+    confirmNumbersUsed, // Nova função para confirmar uso dos números
   };
 }
