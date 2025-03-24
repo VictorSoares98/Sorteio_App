@@ -6,16 +6,31 @@ import { generateDocumentId } from '../utils/formatters';
 export const fetchUserOrders = async (userId: string): Promise<Order[]> => {
   try {
     console.log(`[OrderService] Buscando pedidos para usuário ${userId}`);
-    const ordersQuery = query(
+    
+    // Buscar primeiro os pedidos com originalSellerId
+    const ordersQuery1 = query(
       collection(db, 'orders'),
-      where('sellerId', '==', userId),
-      orderBy('createdAt', 'desc')
+      where('originalSellerId', '==', userId)
     );
     
-    const querySnapshot = await getDocs(ordersQuery);
+    // Buscar também os pedidos com sellerId antigo (compatibilidade)
+    const ordersQuery2 = query(
+      collection(db, 'orders'),
+      where('sellerId', '==', userId)
+    );
+    
+    // Executar ambas as consultas
+    const [snapshot1, snapshot2] = await Promise.all([
+      getDocs(ordersQuery1),
+      getDocs(ordersQuery2)
+    ]);
+    
+    // Combinar os resultados, usando um Set para evitar duplicidades
+    const orderDocs = new Set([...snapshot1.docs, ...snapshot2.docs]);
     const orders: Order[] = [];
     
-    querySnapshot.forEach((doc) => {
+    // Processar todos os documentos
+    orderDocs.forEach((doc) => {
       const data = doc.data();
       
       // Verificação mais detalhada da conversão de timestamp
@@ -38,16 +53,24 @@ export const fetchUserOrders = async (userId: string): Promise<Order[]> => {
       const generatedNumbers = Array.isArray(data.generatedNumbers) ? 
         data.generatedNumbers : [];
       
-      orders.push({
+      // Para orders antigas, garantir que originalSellerId esteja definido
+      const orderData = {
         ...data,
-        id: doc.id, // Garantir que o ID está definido
+        id: doc.id,
         createdAt,
-        generatedNumbers
-      } as Order);
+        generatedNumbers,
+        // Adicionar originalSellerId se não existir nas vendas antigas
+        originalSellerId: data.originalSellerId || data.sellerId
+      };
+      
+      orders.push(orderData as Order);
     });
     
-    console.log(`[OrderService] ${orders.length} pedidos encontrados`);
-    return orders;
+    // Ordenar por data (mais recentes primeiro)
+    const sortedOrders = orders.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    
+    console.log(`[OrderService] ${sortedOrders.length} pedidos encontrados`);
+    return sortedOrders;
   } catch (error) {
     console.error('[OrderService] Erro ao buscar pedidos do usuário:', error);
     throw new Error('Não foi possível buscar os pedidos.');

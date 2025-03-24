@@ -63,10 +63,6 @@ onMounted(async () => {
 <template>
   <Card title="Suas Vendas" :subtitle="`Total: ${totalNumbersSold} números vendidos`">
     <div class="p-4">
-      <!-- Debug Info - Remover após testes -->
-      <!-- <pre class="text-xs mb-4 p-2 bg-gray-100 rounded overflow-auto">
-        {{ JSON.stringify(orders, null, 2) }}
-      </pre> -->
       
       <!-- Loading -->
       <div v-if="isLoading || orderStore.loading" class="text-center py-4">

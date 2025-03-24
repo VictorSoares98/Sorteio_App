@@ -14,12 +14,13 @@ export const useOrderStore = defineStore('order', () => {
   const userOrders = computed(() => {
     if (!authStore.currentUser) return [];
     
-    // Retorna pedidos usando originalSellerId se disponível, caso contrário usa sellerId
+    const userId = authStore.currentUser.id;
+    
+    // Incluir todos os pedidos onde o usuário é o vendedor (usando ambos os IDs)
     return orders.value
       .filter(order => {
-        const userId = authStore.currentUser?.id;
-        return (order.originalSellerId && order.originalSellerId === userId) || 
-               (order.sellerId === userId);
+        // Verifica se é o vendedor usando originalSellerId OU sellerId
+        return (order.originalSellerId === userId) || (order.sellerId === userId);
       })
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
   });
@@ -33,25 +34,36 @@ export const useOrderStore = defineStore('order', () => {
     
     try {
       const userId = authStore.currentUser.id;
+      console.log(`[OrderStore] Buscando pedidos para usuário: ${userId}`);
+      
       // Garantir que estamos usando o serviço correto para buscar pedidos
       const fetchedOrders = await orderService.fetchUserOrders(userId);
+      console.log(`[OrderStore] ${fetchedOrders.length} pedidos encontrados no Firebase`);
       
       // Validar que todos os pedidos têm o formato correto antes de armazenar
       orders.value = fetchedOrders.map(order => {
         // Garantir que createdAt é um objeto Date válido
         if (!(order.createdAt instanceof Date) || isNaN(order.createdAt.getTime())) {
-          console.warn('Data inválida detectada em pedido, corrigindo:', order.id);
+          console.warn('[OrderStore] Data inválida detectada em pedido, corrigindo:', order.id);
           order.createdAt = new Date();
         }
+        
         // Garantir que generatedNumbers é sempre um array
         if (!Array.isArray(order.generatedNumbers)) {
-          console.warn('Array de números inválido detectado, corrigindo:', order.id);
+          console.warn('[OrderStore] Array de números inválido detectado, corrigindo:', order.id);
           order.generatedNumbers = [];
         }
+        
+        // Garantir que originalSellerId está definido para compatibilidade
+        if (!order.originalSellerId) {
+          order.originalSellerId = order.sellerId;
+        }
+        
         return order;
       });
       
       console.log(`[OrderStore] ${orders.value.length} pedidos carregados para o usuário ${userId}`);
+      console.log(`[OrderStore] ${userOrders.value.length} pedidos filtrados para o usuário atual`);
     } catch (err: any) {
       console.error('[OrderStore] Erro ao buscar pedidos:', err);
       error.value = 'Não foi possível carregar seus pedidos.';

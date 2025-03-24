@@ -6,20 +6,35 @@ import { formatDate } from '../../utils/formatters';
 
 const orderStore = useOrderStore();
 const isLoading = ref(true);
+const debugMode = ref(false);
 
 // Lista de números ordenados por data de venda (mais recentes primeiro)
 const soldNumbers = computed(() => {
   const allNumbers: { number: string, buyerName: string, date: Date }[] = [];
   
+  console.log(`[SoldNumbersList] Processando ${orderStore.userOrders.length} pedidos`);
+  
   orderStore.userOrders.forEach(order => {
-    order.generatedNumbers.forEach(number => {
-      allNumbers.push({
-        number,
-        buyerName: order.buyerName,
-        date: order.createdAt
+    if (!order.generatedNumbers) {
+      console.warn(`[SoldNumbersList] Pedido sem números gerados: ${order.id}`);
+      return;
+    }
+    
+    // Validar que generatedNumbers é um array antes de iterar
+    if (Array.isArray(order.generatedNumbers)) {
+      order.generatedNumbers.forEach(number => {
+        allNumbers.push({
+          number,
+          buyerName: order.buyerName,
+          date: order.createdAt
+        });
       });
-    });
+    } else {
+      console.warn(`[SoldNumbersList] generatedNumbers não é array no pedido: ${order.id}`);
+    }
   });
+  
+  console.log(`[SoldNumbersList] Total de números processados: ${allNumbers.length}`);
   
   // Ordenar por data mais recente primeiro
   return allNumbers.sort((a, b) => b.date.getTime() - a.date.getTime());
@@ -40,9 +55,31 @@ const filteredNumbers = computed(() => {
   );
 });
 
-onMounted(async () => {
-  if (orderStore.orders.length === 0) {
+// Toggle modo de depuração
+const toggleDebugMode = () => {
+  debugMode.value = !debugMode.value;
+};
+
+// Forçar recarga dos pedidos
+const reloadOrders = async () => {
+  isLoading.value = true;
+  try {
     await orderStore.fetchUserOrders();
+    console.log(`[SoldNumbersList] Recarregados ${orderStore.userOrders.length} pedidos`);
+  } catch (error) {
+    console.error('[SoldNumbersList] Erro ao recarregar pedidos:', error);
+  } finally {
+    isLoading.value = false;
+  }
+};
+
+onMounted(async () => {
+  console.log('[SoldNumbersList] Componente montado');
+  if (orderStore.orders.length === 0) {
+    console.log('[SoldNumbersList] Nenhum pedido encontrado, carregando...');
+    await orderStore.fetchUserOrders();
+  } else {
+    console.log(`[SoldNumbersList] ${orderStore.orders.length} pedidos já carregados`);
   }
   isLoading.value = false;
 });
@@ -51,6 +88,33 @@ onMounted(async () => {
 <template>
   <Card title="Números Vendidos" :subtitle="`Total: ${totalSold}`" class="mb-6">
     <div class="p-4">
+      <!-- Debug Toggle -->
+      <div class="flex justify-between mb-2">
+        <button 
+          @click="reloadOrders" 
+          class="text-xs bg-gray-100 hover:bg-gray-200 py-1 px-2 rounded text-gray-600"
+        >
+          Recarregar
+        </button>
+        
+        <button @click="toggleDebugMode" class="text-xs text-gray-400 hover:text-primary">
+          {{ debugMode ? 'Ocultar Debug' : 'Debug' }}
+        </button>
+      </div>
+      
+      <!-- Debug Info -->
+      <pre v-if="debugMode" class="text-xs mb-4 p-2 bg-gray-100 rounded overflow-auto text-left">
+        <span class="font-bold">Pedidos: {{ orderStore.userOrders.length }}</span>
+        <span class="font-bold">Números vendidos: {{ totalSold }}</span>
+        {{ JSON.stringify(orderStore.userOrders.map(o => ({
+          id: o.id,
+          buyerName: o.buyerName,
+          sellerId: o.sellerId,
+          originalSellerId: o.originalSellerId,
+          numbersCount: o.generatedNumbers?.length
+        })), null, 2) }}
+      </pre>
+
       <!-- Loading -->
       <div v-if="isLoading || orderStore.loading" class="text-center py-4">
         <div class="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
