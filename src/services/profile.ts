@@ -144,6 +144,14 @@ export const affiliateToUser = async (
       };
     }
     
+    // NOVA VERIFICAÇÃO: Se já tem afiliados, não pode se afiliar a outra pessoa
+    if (userData.affiliates && userData.affiliates.length > 0) {
+      return {
+        success: false,
+        message: 'Usuários que já possuem afiliados não podem se afiliar a outras contas.'
+      };
+    }
+    
     // Encontrar o usuário alvo (por email ou código de afiliado)
     let targetUserQuery;
     if (isEmail) {

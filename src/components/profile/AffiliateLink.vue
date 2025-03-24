@@ -5,7 +5,6 @@ import Card from '../ui/Card.vue';
 import Alert from '../ui/Alert.vue';
 import Button from '../ui/Button.vue';
 import Input from '../ui/Input.vue';
-// Removida a importação não utilizada de authStore
 
 // Hooks
 const { 
@@ -21,6 +20,7 @@ const {
 
 // Estados
 const copied = ref(false);
+const codeCopied = ref(false); // Novo estado para acompanhar cópia do código
 const generating = ref(false);
 const affiliateTarget = ref('');
 const isEmail = ref(false);
@@ -36,7 +36,6 @@ const affiliateLink = computed(() => {
 const codeExpiry = computed(() => {
   if (!currentUser.value?.affiliateCodeExpiry) return null;
   
-  // Verificar se temos um Timestamp do Firebase ou uma Date normal
   const expiry = currentUser.value.affiliateCodeExpiry;
   return 'toDate' in expiry && typeof expiry.toDate === 'function'
     ? expiry.toDate() 
@@ -51,9 +50,7 @@ const isCodeValid = computed(() => {
 const timeRemaining = computed(() => {
   if (!codeExpiry.value) return '';
   
-  // Calcular tempo restante em minutos
   const now = new Date();
-  // Garantir que temos um objeto Date para chamar getTime()
   const expiryDate = codeExpiry.value instanceof Date ? 
     codeExpiry.value : 
     new Date(codeExpiry.value.seconds * 1000);
@@ -102,6 +99,22 @@ const copyToClipboard = () => {
     })
     .catch(err => {
       console.error('Falha ao copiar texto:', err);
+    });
+};
+
+// Nova função para copiar apenas o código
+const copyCodeToClipboard = () => {
+  if (!affiliateCode.value) return;
+  
+  navigator.clipboard.writeText(affiliateCode.value)
+    .then(() => {
+      codeCopied.value = true;
+      setTimeout(() => {
+        codeCopied.value = false;
+      }, 2000);
+    })
+    .catch(err => {
+      console.error('Falha ao copiar código:', err);
     });
 };
 
@@ -174,16 +187,33 @@ onMounted(async () => {
         <h3 class="text-lg font-medium text-primary mb-2">Meu Código de Afiliado</h3>
         
         <div v-if="affiliateCode && isCodeValid" class="mb-4">
-          <div class="flex items-center justify-between mb-1">
-            <div>
-              <p class="text-sm text-gray-600">Seu código temporário:</p>
+          <!-- Código Temporário com botão de cópia -->
+          <div class="mb-4 p-3 bg-gray-50 rounded-md border border-gray-200">
+            <p class="text-sm text-gray-600 mb-1">Seu código temporário:</p>
+            <div class="flex items-center justify-between">
               <p class="font-mono text-lg font-bold text-primary">{{ affiliateCode }}</p>
+              <button
+                @click="copyCodeToClipboard"
+                class="ml-2 text-gray-500 hover:text-primary transition-colors p-1 rounded-md hover:bg-gray-100"
+                title="Copiar código"
+              >
+                <span v-if="codeCopied" class="text-green-600 flex items-center">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                  </svg>
+                  Copiado!
+                </span>
+                <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+              </button>
             </div>
-            <div class="text-xs text-gray-500">
+            <div class="text-xs text-gray-500 mt-1">
               {{ timeRemaining }}
             </div>
           </div>
           
+          <!-- Link para compartilhar -->
           <div class="mb-4">
             <label class="block text-sm text-gray-600 mb-1">Link para compartilhar:</label>
             <div class="flex">
@@ -205,7 +235,7 @@ onMounted(async () => {
           </div>
           
           <p class="text-sm text-gray-600">
-            Compartilhe este link com seus amigos para vinculá-los à sua conta.
+            Compartilhe este link ou código com seus amigos para vinculá-los à sua conta.
           </p>
         </div>
         
