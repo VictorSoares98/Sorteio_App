@@ -2,6 +2,7 @@ import { collection, query, where, getDocs, doc, getDoc, setDoc, serverTimestamp
 import { db } from '../firebase';
 import { PaymentMethod, type Order, type OrderFormData } from '../types/order';
 import { generateDocumentId } from '../utils/formatters';
+import * as raffleService from './raffleNumbers';
 
 export const fetchUserOrders = async (userId: string): Promise<Order[]> => {
   try {
@@ -101,21 +102,21 @@ export const fetchOrderById = async (orderId: string): Promise<Order | null> => 
 };
 
 /**
- * Cria um novo pedido
+ * Cria um novo pedido com confirmação opcional em lote
  */
 export const createOrder = async (
   orderData: OrderFormData, 
   generatedNumbers: string[], 
   sellerId: string, 
   sellerName: string,
-  sellerUsername?: string
+  sellerUsername?: string,
+  confirmInBatch = false
 ): Promise<string> => {
   try {
     // Usar o username para o ID ou fallback para um formato tradicional
     const usernameToUse = sellerUsername || sellerName.toLowerCase().replace(/\s+/g, "_");
     
     // Gerar um sellerId mais descritivo baseado no nome do vendedor
-    // Formato: seller_nome-normalizado_timestamp
     const sellerNameId = `seller_${usernameToUse}_${Date.now()}`;
     
     const newOrderId = generateDocumentId('order', usernameToUse);
@@ -146,6 +147,13 @@ export const createOrder = async (
       ...newOrder,
       createdAt: serverTimestamp()
     });
+    
+    // Se solicitado, confirmar números em lote logo após salvar o pedido
+    if (confirmInBatch) {
+      // Executar em background sem esperar resultado
+      raffleService.confirmNumbersUsed(generatedNumbers)
+        .catch(err => console.error('Erro ao confirmar números após criar pedido:', err));
+    }
     
     return newOrderId;
   } catch (error) {

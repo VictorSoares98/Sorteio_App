@@ -79,7 +79,7 @@ const updateFormData = (newFormData: OrderFormData) => {
   formData.value = newFormData;
 };
 
-// Processa o envio do formulário
+// Processa o envio do formulário otimizado
 const submitForm = async () => {
   if (!validateForm()) return;
   
@@ -87,12 +87,9 @@ const submitForm = async () => {
     isSubmitting.value = true;
     
     // Atualizar a quantidade de números a gerar com base no valor selecionado
-    // Se não houver seleção, usar 5 como valor padrão
     if (formData.value.numTickets && formData.value.numTickets > 0) {
-      // Setar a quantidade de números a gerar
       numbersPerOrder.value = formData.value.numTickets;
     } else {
-      // Valor padrão se nenhum número for selecionado
       numbersPerOrder.value = 5;
       formData.value.numTickets = 5;
     }
@@ -104,47 +101,44 @@ const submitForm = async () => {
       throw new Error(raffleError.value);
     }
     
-    // 2. Certificar que o usuário está logado
     if (!authStore.currentUser) {
       throw new Error('Você precisa estar logado para criar um pedido');
     }
     
-    // 3. Criar pedido usando a orderStore para melhor organização do código
-    const newOrderId = await orderStore.createOrder(formData.value, generatedNumbers.value);
+    // 2. Criar pedido e confirmar números em uma única operação
+    // Passamos os números gerados e uma flag para processamento em lote
+    const newOrderId = await orderStore.createOrder(
+      formData.value, 
+      generatedNumbers.value, 
+      true // Flag para confirmação em lote
+    );
     
-    // 4. Confirmar uso dos números após sucesso na criação do pedido
-    await confirmNumbersUsed();
+    // 3. Construir objeto do pedido localmente sem busca adicional
+    const username = authStore.currentUser.username || 
+                    authStore.currentUser.displayName.toLowerCase().replace(/\s+/g, "_");
     
-    // 5. Buscar o pedido criado para o modal
-    createdOrder.value = orderStore.orders.find(order => order.id === newOrderId);
+    // Usar dados que já temos em memória para o modal
+    createdOrder.value = {
+      id: newOrderId,
+      buyerName: formData.value.buyerName,
+      paymentMethod: formData.value.paymentMethod,
+      contactNumber: formData.value.contactNumber,
+      addressOrCongregation: formData.value.addressOrCongregation,
+      observations: formData.value.observations,
+      generatedNumbers: generatedNumbers.value,
+      sellerId: authStore.currentUser.id,
+      sellerName: authStore.currentUser.displayName,
+      sellerUsername: username,
+      createdAt: new Date()
+    };
     
-    if (!createdOrder.value) {
-      console.warn('Pedido criado não encontrado na lista, buscando dados do ID');
-      
-      // Obter o username do usuário atual
-      const username = authStore.currentUser.username || 
-                      authStore.currentUser.displayName.toLowerCase().replace(/\s+/g, "_");
-      
-      // Tentar uma abordagem alternativa
-      createdOrder.value = {
-        id: newOrderId,
-        buyerName: formData.value.buyerName,
-        paymentMethod: formData.value.paymentMethod,
-        contactNumber: formData.value.contactNumber,
-        addressOrCongregation: formData.value.addressOrCongregation,
-        observations: formData.value.observations,
-        generatedNumbers: generatedNumbers.value,
-        sellerId: authStore.currentUser.id,
-        sellerName: authStore.currentUser.displayName,
-        sellerUsername: username,
-        createdAt: new Date()
-      };
-    }
-    
-    // 6. Mostrar confirmação e resetar formulário
+    // 4. Mostrar confirmação e resetar formulário
     orderId.value = newOrderId;
     showConfirmation.value = true;
     resetForm();
+    
+    // 5. Confirmar números em background para não bloquear a UI
+    setTimeout(() => confirmNumbersUsed(), 100);
     
   } catch (err: any) {
     console.error('Erro ao criar pedido:', err);

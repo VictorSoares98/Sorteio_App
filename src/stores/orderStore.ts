@@ -72,8 +72,8 @@ export const useOrderStore = defineStore('order', () => {
     }
   };
 
-  // Criar novo pedido
-  const createOrder = async (orderData: OrderFormData, generatedNumbers: string[]) => {
+  // Criar novo pedido com suporte para confirmação em lote
+  const createOrder = async (orderData: OrderFormData, generatedNumbers: string[], confirmInBatch = false) => {
     if (!authStore.currentUser) throw new Error('Usuário não autenticado');
     
     loading.value = true;
@@ -83,13 +83,14 @@ export const useOrderStore = defineStore('order', () => {
       // Verificar se o username está disponível
       const username = authStore.currentUser.username || authStore.currentUser.displayName.toLowerCase().replace(/\s+/g, "_");
       
-      // Passar o username para o serviço
+      // Criar pedido no Firebase
       const newOrderId = await orderService.createOrder(
         orderData,
         generatedNumbers,
         authStore.currentUser.id,
         authStore.currentUser.displayName,
-        username
+        username,
+        confirmInBatch // Passar flag para confirmação em lote
       );
       
       // Atualizar a store após criar o pedido

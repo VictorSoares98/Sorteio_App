@@ -17,9 +17,24 @@ const generateSessionId = (): string => {
 };
 
 /**
- * Busca todos os números já vendidos no Firestore
+ * Cache local para melhorar performance de busca de números
  */
-export const fetchSoldNumbers = async (): Promise<string[]> => {
+let soldNumbersCache: string[] = [];
+let soldNumbersCacheTimestamp = 0;
+const CACHE_VALIDITY_MS = 60000; // 1 minuto de validade para o cache
+
+/**
+ * Busca todos os números já vendidos no Firestore com suporte a cache
+ */
+export const fetchSoldNumbers = async (ignoreCache = false): Promise<string[]> => {
+  const now = Date.now();
+  
+  // Se o cache ainda é válido e não estamos forçando refresh, retornar do cache
+  if (!ignoreCache && soldNumbersCache.length > 0 && now - soldNumbersCacheTimestamp < CACHE_VALIDITY_MS) {
+    console.log(`[PERF] Usando cache de números vendidos (${soldNumbersCache.length} números)`);
+    return soldNumbersCache;
+  }
+  
   try {
     const ordersRef = collection(db, 'orders');
     const ordersSnapshot = await getDocs(ordersRef);
@@ -33,9 +48,17 @@ export const fetchSoldNumbers = async (): Promise<string[]> => {
       }
     });
     
+    // Atualizar cache
+    soldNumbersCache = soldNumbers;
+    soldNumbersCacheTimestamp = now;
+    
     return soldNumbers;
   } catch (err) {
     console.error('Erro ao buscar números vendidos:', err);
+    // Em caso de erro, retorna o cache se existir, mesmo que expirado
+    if (soldNumbersCache.length > 0) {
+      return soldNumbersCache;
+    }
     throw new Error('Não foi possível verificar os números já vendidos.');
   }
 };
@@ -67,16 +90,30 @@ export const fetchReservedNumbers = async (): Promise<string[]> => {
   }
 };
 
+// Implementar um sistema de limpeza periódica para evitar execuções frequentes
+let lastCleanupTime = 0;
+const CLEANUP_INTERVAL_MS = 30000; // Executar limpeza no máximo a cada 30 segundos
+
 /**
- * Limpa reservas de números expiradas
+ * Limpa reservas de números expiradas com intervalo mínimo
  */
-export const cleanupExpiredReservations = async (): Promise<void> => {
+export const cleanupExpiredReservations = async (force = false): Promise<void> => {
+  const now = Date.now();
+  
+  // Verificar se já não executamos uma limpeza recentemente
+  if (!force && now - lastCleanupTime < CLEANUP_INTERVAL_MS) {
+    console.log('[PERF] Ignorando limpeza de reservas, executada recentemente');
+    return;
+  }
+  
   try {
-    const now = new Date();
+    lastCleanupTime = now;
+    const nowDate = new Date();
     const reservationsRef = collection(db, 'number_reservations');
     const expiredQuery = query(
       reservationsRef,
-      where('expiresAt', '<', now)
+      where('expiresAt', '<', nowDate),
+      limit(100) // Limitar para não sobrecarregar o banco em caso de muitas reservas
     );
     
     const expiredSnapshot = await getDocs(expiredQuery);
@@ -92,6 +129,12 @@ export const cleanupExpiredReservations = async (): Promise<void> => {
     
     await batch.commit();
     console.log(`Limpeza: ${expiredSnapshot.size} reservas expiradas removidas`);
+    
+    // Se temos mais de 100 registros, podemos ter mais para limpar
+    if (expiredSnapshot.size === 100) {
+      // Programar próxima execução sem bloquear o fluxo atual
+      setTimeout(() => cleanupExpiredReservations(true), 100);
+    }
   } catch (err) {
     console.error('Erro ao limpar reservas expiradas:', err);
   }
@@ -202,7 +245,7 @@ export const isNumberAvailable = async (number: string): Promise<boolean> => {
 };
 
 /**
- * Gera múltiplos números únicos com reserva atômica
+ * Gera múltiplos números únicos com reserva atômica com performance melhorada
  * @param count Quantidade de números a gerar
  */
 export const generateUniqueNumbers = async (count: number): Promise<string[]> => {
@@ -214,13 +257,11 @@ export const generateUniqueNumbers = async (count: number): Promise<string[]> =>
   // Log para auditoria
   console.log(`[AUDIT] Iniciando geração de ${count} números. Timestamp: ${new Date().toISOString()}`);
   
-  // Limpar reservas expiradas para não bloquear números desnecessariamente
-  await cleanupExpiredReservations();
-  
-  // Buscar números já vendidos e reservados
+  // Executar limpeza enquanto já buscamos os números vendidos e reservados em paralelo
   const [soldNumbers, reservedNumbers] = await Promise.all([
-    fetchSoldNumbers(),
-    fetchReservedNumbers()
+    fetchSoldNumbers(), // Usar cache se disponível
+    fetchReservedNumbers(),
+    cleanupExpiredReservations() // Executa em paralelo sem esperar resultado
   ]);
   
   // Combinar números indisponíveis
@@ -367,13 +408,34 @@ export const checkNumbersAvailabilityBatch = async (numbers: string[]): Promise<
 };
 
 /**
- * Confirma os números reservados após criar um pedido com sucesso
- * (Libera as reservas para que os números não apareçam como reservados e vendidos)
+ * Confirma os números reservados após criar um pedido com sucesso em lote
  */
 export const confirmNumbersUsed = async (numbers: string[]): Promise<void> => {
+  if (!numbers.length) return;
+  
   try {
-    // Remove as reservas dos números que foram efetivamente usados
-    await Promise.all(numbers.map(num => removeReservation(num)));
+    // Para poucos números, usar Promise.all é eficiente
+    if (numbers.length <= 10) {
+      await Promise.all(numbers.map(num => removeReservation(num)));
+      return;
+    }
+    
+    // Para muitos números, usar um batch para melhor performance
+    const chunks = [];
+    for (let i = 0; i < numbers.length; i += 500) {
+      chunks.push(numbers.slice(i, i + 500));
+    }
+    
+    // Processar cada chunk em sequência para não sobrecarregar o Firestore
+    for (const chunk of chunks) {
+      const batch = writeBatch(db);
+      for (const num of chunk) {
+        const reservationRef = doc(db, 'number_reservations', num);
+        batch.delete(reservationRef);
+      }
+      await batch.commit();
+      console.log(`[PERF] Confirmados ${chunk.length} números em lote`);
+    }
   } catch (error) {
     console.error('Erro ao confirmar uso de números:', error);
   }
