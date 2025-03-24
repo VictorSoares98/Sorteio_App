@@ -1,5 +1,7 @@
 {
   "projects": {
     "default": "app-sorteio-2401e"
-  }
+  },
+  "targets": {},
+  "etags": {}
 }
