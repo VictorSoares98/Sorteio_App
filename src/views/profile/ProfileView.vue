@@ -1,16 +1,31 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, computed } from 'vue';
 import { useAuthStore } from '../../stores/authStore';
 import { useOrderStore } from '../../stores/orderStore';
 import { formatUserRole } from '../../utils/formatters';
+import { UserRole } from '../../types/user';
 import ProfileEdit from '../../components/profile/ProfileEdit.vue';
 import AffiliateLink from '../../components/profile/AffiliateLink.vue';
 import SalesAccordion from '../../components/profile/SalesAccordion.vue';
+import DashboardPlaceholder from '../../components/profile/DashboardPlaceholder.vue';
+import RankingPlaceholder from '../../components/profile/RankingPlaceholder.vue';
 
 const authStore = useAuthStore();
 const orderStore = useOrderStore();
 const isLoading = ref(true);
 const activeTab = ref('sales'); // Inicia com a tab de vendas ativa
+
+// Verificar se o usuário tem permissão para ver o Painel de Controle
+const showDashboard = computed(() => {
+  if (!authStore.currentUser) return false;
+  return [UserRole.ADMIN, UserRole.TESOUREIRO, UserRole.SECRETARIA].includes(authStore.currentUser.role);
+});
+
+// Verificar se o usuário é afiliado a alguém para mostrar Ranking
+const showRanking = computed(() => {
+  if (!authStore.currentUser) return false;
+  return !!authStore.currentUser.affiliatedTo;
+});
 
 // Garantir que os dados do usuário e pedidos estejam carregados
 onMounted(async () => {
@@ -55,7 +70,7 @@ onMounted(async () => {
           
           <!-- Tabs para navegar entre as diferentes seções (ordem alterada) -->
           <div class="flex flex-col space-y-2">
-            <!-- 1. Minhas Vendas (primeiro) -->
+            <!-- 1. Minhas Vendas -->
             <button 
               @click="activeTab = 'sales'" 
               class="py-2 px-4 rounded-md text-left transition-colors"
@@ -71,7 +86,41 @@ onMounted(async () => {
               </span>
             </button>
             
-            <!-- 2. Programa de Afiliados (segundo) -->
+            <!-- 2. Painel de Controle (novo - apenas para admin/secretária/tesoureiro) -->
+            <button 
+              v-if="showDashboard"
+              @click="activeTab = 'dashboard'" 
+              class="py-2 px-4 rounded-md text-left transition-colors"
+              :class="activeTab === 'dashboard' 
+                ? 'bg-primary bg-opacity-10 text-white font-medium' 
+                : 'hover:bg-gray-100 text-gray-700'"
+            >
+              <span class="flex items-center">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+                Painel de Controle
+              </span>
+            </button>
+            
+            <!-- 3. Ranking (novo - apenas para afiliados) -->
+            <button 
+              v-if="showRanking"
+              @click="activeTab = 'ranking'" 
+              class="py-2 px-4 rounded-md text-left transition-colors"
+              :class="activeTab === 'ranking' 
+                ? 'bg-primary bg-opacity-10 text-white font-medium' 
+                : 'hover:bg-gray-100 text-gray-700'"
+            >
+              <span class="flex items-center">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                </svg>
+                Ranking
+              </span>
+            </button>
+            
+            <!-- 4. Programa de Afiliados -->
             <button 
               @click="activeTab = 'affiliate'" 
               class="py-2 px-4 rounded-md text-left transition-colors"
@@ -87,7 +136,7 @@ onMounted(async () => {
               </span>
             </button>
             
-            <!-- 3. Informações do Perfil (terceiro) -->
+            <!-- 5. Informações do Perfil -->
             <button 
               @click="activeTab = 'profile'" 
               class="py-2 px-4 rounded-md text-left transition-colors"
@@ -121,6 +170,16 @@ onMounted(async () => {
         <!-- Link de Afiliado -->
         <div v-else-if="activeTab === 'affiliate'">
           <AffiliateLink />
+        </div>
+        
+        <!-- Painel de Controle (novo) -->
+        <div v-else-if="activeTab === 'dashboard' && showDashboard">
+          <DashboardPlaceholder />
+        </div>
+        
+        <!-- Ranking (novo) -->
+        <div v-else-if="activeTab === 'ranking' && showRanking">
+          <RankingPlaceholder />
         </div>
       </div>
     </div>
