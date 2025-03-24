@@ -17,26 +17,26 @@ type AppRouteRecordRaw = RouteRecordRaw & {
   meta?: RouteMeta;
 };
 
-// Define as rotas da aplicação
+// Define as rotas da aplicação com importações dinâmicas para melhor code splitting
 const routes: AppRouteRecordRaw[] = [
   {
     path: '/',
     name: 'home',
-    component: () => import('../views/HomeView.vue'),
+    component: () => import(/* webpackChunkName: "home" */ '../views/HomeView.vue'),
     meta: { requiresAuth: true, title: 'Página Inicial' }
   },
   
-  // Rotas de Autenticação
+  // Rotas de Autenticação - agrupadas em um chunk
   {
     path: '/login',
     name: 'login',
-    component: () => import('../views/auth/LoginView.vue'),
+    component: () => import(/* webpackChunkName: "auth" */ '../views/auth/LoginView.vue'),
     meta: { title: 'Login' }
   },
   {
     path: '/register',
     name: 'register',
-    component: () => import('../views/auth/RegisterView.vue'),
+    component: () => import(/* webpackChunkName: "auth" */ '../views/auth/RegisterView.vue'),
     meta: { title: 'Cadastro' }
   },
   
@@ -44,7 +44,7 @@ const routes: AppRouteRecordRaw[] = [
   {
     path: '/profile',
     name: 'profile',
-    component: () => import('../views/profile/ProfileView.vue'),
+    component: () => import(/* webpackChunkName: "profile" */ '../views/profile/ProfileView.vue'),
     meta: { requiresAuth: true, title: 'Perfil' }
   },
   
@@ -52,7 +52,7 @@ const routes: AppRouteRecordRaw[] = [
   {
     path: '/admin',
     name: 'admin',
-    component: () => import('../views/admin/AdminView.vue'),
+    component: () => import(/* webpackChunkName: "admin" */ '../views/admin/AdminView.vue'),
     meta: { requiresAuth: true, requiresAdmin: true, title: 'Administração' }
   },
   
@@ -60,7 +60,7 @@ const routes: AppRouteRecordRaw[] = [
   {
     path: '/:pathMatch(.*)*',
     name: 'not-found',
-    component: () => import('../views/NotFoundView.vue'),
+    component: () => import(/* webpackChunkName: "error" */ '../views/NotFoundView.vue'),
     meta: { title: 'Página não encontrada' }
   }
 ];
