@@ -1,5 +1,21 @@
 <script setup lang="ts">
+import { useRouter } from 'vue-router';
+import { useAuthStore } from '../../stores/authStore';
+
 const currentYear = new Date().getFullYear();
+const authStore = useAuthStore();
+const router = useRouter();
+
+// Função para realizar logout
+const logout = async () => {
+  try {
+    await authStore.logout();
+    // Redirecionamento explícito para a página inicial após o logout
+    router.push('/');
+  } catch (error) {
+    console.error('Erro ao fazer logout:', error);
+  }
+};
 </script>
 
 <template>
@@ -37,9 +53,24 @@ const currentYear = new Date().getFullYear();
                 </router-link>
               </li>
               <li>
+                <router-link to="/profile" class="text-gray-400 hover:text-primary text-xs md:text-sm transition-colors">
+                  Perfil
+                </router-link>
+              </li>
+              <!-- Link Login - apenas para usuários não autenticados -->
+              <li v-if="!authStore.isAuthenticated">
                 <router-link to="/login" class="text-gray-400 hover:text-primary text-xs md:text-sm transition-colors">
                   Entrar
                 </router-link>
+              </li>
+              <!-- Link Logout - apenas para usuários autenticados -->
+              <li v-else>
+                <button 
+                  @click="logout" 
+                  class="text-gray-400 hover:text-primary text-xs md:text-sm transition-colors text-left"
+                >
+                  Sair
+                </button>
               </li>
             </ul>
           </div>
