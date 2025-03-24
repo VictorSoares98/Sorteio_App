@@ -10,16 +10,23 @@ import SalesAccordion from '../../components/profile/SalesAccordion.vue';
 const authStore = useAuthStore();
 const orderStore = useOrderStore();
 const isLoading = ref(true);
-const activeTab = ref('sales'); // Alterado para iniciar em 'sales' em vez de 'profile'
+const activeTab = ref('sales'); // Inicia com a tab de vendas ativa
 
-// Garantir que os dados do usuário estejam carregados com conversões de data corretas
+// Garantir que os dados do usuário e pedidos estejam carregados
 onMounted(async () => {
+  console.log('[ProfileView] Montando componente');
   try {
     if (!authStore.currentUser) {
+      console.log('[ProfileView] Usuário não encontrado, buscando dados');
       await authStore.fetchUserData();
     }
     
+    // Carregar os pedidos do usuário
+    console.log('[ProfileView] Buscando pedidos do usuário');
     await orderStore.fetchUserOrders();
+    console.log(`[ProfileView] ${orderStore.userOrders.length} pedidos carregados`);
+  } catch (error) {
+    console.error('[ProfileView] Erro ao carregar dados:', error);
   } finally {
     isLoading.value = false;
   }

@@ -10,11 +10,14 @@ export const useOrderStore = defineStore('order', () => {
   const error = ref<string | null>(null);
   const authStore = useAuthStore();
 
+  // Computar os pedidos do usuário atual
   const userOrders = computed(() => {
     if (!authStore.currentUser) return [];
     
-    // Retorna apenas pedidos do usuário atual
-    return orders.value.filter(order => order.sellerId === authStore.currentUser?.id);
+    // Retorna apenas pedidos do usuário atual, já ordenados por data
+    return orders.value
+      .filter(order => order.sellerId === authStore.currentUser?.id)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
   });
 
   // Buscar todos os pedidos do usuário
@@ -26,10 +29,27 @@ export const useOrderStore = defineStore('order', () => {
     
     try {
       const userId = authStore.currentUser.id;
+      // Garantir que estamos usando o serviço correto para buscar pedidos
       const fetchedOrders = await orderService.fetchUserOrders(userId);
-      orders.value = fetchedOrders;
+      
+      // Validar que todos os pedidos têm o formato correto antes de armazenar
+      orders.value = fetchedOrders.map(order => {
+        // Garantir que createdAt é um objeto Date válido
+        if (!(order.createdAt instanceof Date) || isNaN(order.createdAt.getTime())) {
+          console.warn('Data inválida detectada em pedido, corrigindo:', order.id);
+          order.createdAt = new Date();
+        }
+        // Garantir que generatedNumbers é sempre um array
+        if (!Array.isArray(order.generatedNumbers)) {
+          console.warn('Array de números inválido detectado, corrigindo:', order.id);
+          order.generatedNumbers = [];
+        }
+        return order;
+      });
+      
+      console.log(`[OrderStore] ${orders.value.length} pedidos carregados para o usuário ${userId}`);
     } catch (err: any) {
-      console.error('Erro ao buscar pedidos:', err);
+      console.error('[OrderStore] Erro ao buscar pedidos:', err);
       error.value = 'Não foi possível carregar seus pedidos.';
     } finally {
       loading.value = false;

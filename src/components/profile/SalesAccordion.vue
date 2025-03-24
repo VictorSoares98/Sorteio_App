@@ -9,18 +9,18 @@ const orderStore = useOrderStore();
 const isLoading = ref(true);
 const expandedOrderIds = ref<Set<string>>(new Set());
 
-// Organizar pedidos por data (mais recentes primeiro)
-const orders = computed<Order[]>(() => {
-  return [...orderStore.userOrders].sort((a, b) => 
-    b.createdAt.getTime() - a.createdAt.getTime()
-  );
-});
+// Usar diretamente os pedidos ordenados da store
+const orders = computed<Order[]>(() => orderStore.userOrders);
 
 // Calcular o total de números vendidos
 const totalNumbersSold = computed(() => {
-  return orders.value.reduce((total, order) => 
-    total + order.generatedNumbers.length, 0
-  );
+  return orders.value.reduce((total, order) => {
+    // Verificar se generatedNumbers existe e é um array
+    if (Array.isArray(order.generatedNumbers)) {
+      return total + order.generatedNumbers.length;
+    }
+    return total;
+  }, 0);
 });
 
 // Pesquisa
@@ -31,7 +31,7 @@ const filteredOrders = computed<Order[]>(() => {
   const query = searchQuery.value.toLowerCase();
   return orders.value.filter(order => 
     order.buyerName.toLowerCase().includes(query) || 
-    order.generatedNumbers.some(num => num.includes(query)) ||
+    (Array.isArray(order.generatedNumbers) && order.generatedNumbers.some(num => num.includes(query))) ||
     formatDate(order.createdAt).includes(query)
   );
 });
@@ -46,16 +46,28 @@ const toggleExpand = (orderId: string) => {
 };
 
 onMounted(async () => {
-  if (orderStore.userOrders.length === 0) {
+  console.log('[SalesAccordion] Montando componente, verificando pedidos');
+  isLoading.value = true;
+  try {
+    // Sempre buscar os pedidos ao montar o componente para ter dados atualizados
     await orderStore.fetchUserOrders();
+    console.log(`[SalesAccordion] ${orderStore.userOrders.length} pedidos carregados`);
+  } catch (error) {
+    console.error('[SalesAccordion] Erro ao carregar pedidos:', error);
+  } finally {
+    isLoading.value = false;
   }
-  isLoading.value = false;
 });
 </script>
 
 <template>
   <Card title="Suas Vendas" :subtitle="`Total: ${totalNumbersSold} números vendidos`">
     <div class="p-4">
+      <!-- Debug Info - Remover após testes -->
+      <!-- <pre class="text-xs mb-4 p-2 bg-gray-100 rounded overflow-auto">
+        {{ JSON.stringify(orders, null, 2) }}
+      </pre> -->
+      
       <!-- Loading -->
       <div v-if="isLoading || orderStore.loading" class="text-center py-4">
         <div class="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
@@ -100,7 +112,7 @@ onMounted(async () => {
               </div>
               <div class="flex items-center">
                 <span class="bg-primary text-white px-2 py-1 rounded-full text-xs mr-3">
-                  {{ order.generatedNumbers.length }} números
+                  {{ Array.isArray(order.generatedNumbers) ? order.generatedNumbers.length : 0 }} números
                 </span>
                 <svg 
                   class="w-5 h-5 text-gray-500 transition-transform"
@@ -140,7 +152,8 @@ onMounted(async () => {
               
               <div>
                 <p class="text-xs text-gray-500 mb-2">Números</p>
-                <div class="flex flex-wrap gap-1">
+                <div v-if="Array.isArray(order.generatedNumbers) && order.generatedNumbers.length > 0" 
+                     class="flex flex-wrap gap-1">
                   <span 
                     v-for="number in order.generatedNumbers" 
                     :key="number"
@@ -149,6 +162,9 @@ onMounted(async () => {
                     {{ number }}
                   </span>
                 </div>
+                <p v-else class="text-sm text-gray-500 italic">
+                  Nenhum número encontrado para este pedido.
+                </p>
               </div>
             </div>
           </div>

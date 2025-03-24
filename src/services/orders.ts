@@ -1,10 +1,11 @@
-import { collection, query, where, getDocs, doc, getDoc, setDoc, serverTimestamp, orderBy, updateDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, getDoc, setDoc, serverTimestamp, orderBy, updateDoc, Timestamp } from 'firebase/firestore';
 import { db } from '../firebase';
 import { PaymentMethod, type Order, type OrderFormData } from '../types/order';
 import { generateDocumentId } from '../utils/formatters';
 
 export const fetchUserOrders = async (userId: string): Promise<Order[]> => {
   try {
+    console.log(`[OrderService] Buscando pedidos para usuário ${userId}`);
     const ordersQuery = query(
       collection(db, 'orders'),
       where('sellerId', '==', userId),
@@ -16,18 +17,39 @@ export const fetchUserOrders = async (userId: string): Promise<Order[]> => {
     
     querySnapshot.forEach((doc) => {
       const data = doc.data();
-      // Converter timestamp para Date
-      const createdAt = data.createdAt?.toDate ? data.createdAt.toDate() : new Date();
+      
+      // Verificação mais detalhada da conversão de timestamp
+      let createdAt: Date;
+      if (data.createdAt) {
+        if (data.createdAt instanceof Timestamp) {
+          createdAt = data.createdAt.toDate();
+        } else if (data.createdAt.toDate && typeof data.createdAt.toDate === 'function') {
+          createdAt = data.createdAt.toDate();
+        } else if (data.createdAt.seconds) {
+          createdAt = new Date(data.createdAt.seconds * 1000);
+        } else {
+          createdAt = new Date();
+        }
+      } else {
+        createdAt = new Date();
+      }
+      
+      // Garantir que generatedNumbers é sempre um array
+      const generatedNumbers = Array.isArray(data.generatedNumbers) ? 
+        data.generatedNumbers : [];
       
       orders.push({
         ...data,
-        createdAt
+        id: doc.id, // Garantir que o ID está definido
+        createdAt,
+        generatedNumbers
       } as Order);
     });
     
+    console.log(`[OrderService] ${orders.length} pedidos encontrados`);
     return orders;
   } catch (error) {
-    console.error('Erro ao buscar pedidos do usuário:', error);
+    console.error('[OrderService] Erro ao buscar pedidos do usuário:', error);
     throw new Error('Não foi possível buscar os pedidos.');
   }
 };
