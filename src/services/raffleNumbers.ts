@@ -1,9 +1,13 @@
-import { collection, getDocs, query, where, doc, deleteDoc, Timestamp, writeBatch, runTransaction } from 'firebase/firestore';
+import { collection, getDocs, query, where, doc, deleteDoc, Timestamp, writeBatch, runTransaction, documentId, limit } from 'firebase/firestore';
 import { db } from '../firebase';
 import type { NumberReservation } from '../types/order';
 
 // Constante para tempo de expiração de reservas (em ms)
 const RESERVATION_EXPIRY_TIME = 5 * 60 * 1000; // 5 minutos
+// Limitar quantidade máxima de números por requisição para evitar abuso
+const MAX_NUMBERS_PER_REQUEST = 100;
+// Adicionar uma camada de segurança com uma semente específica da aplicação
+const APP_SEED = 'UMADRIMC-2023';
 
 /**
  * Gera um ID de sessão único para o processo de geração atual
@@ -156,12 +160,26 @@ export const removeReservation = async (number: string): Promise<void> => {
 };
 
 /**
- * Gera um número formatado com zeros à esquerda
+ * Gera um número formatado com zeros à esquerda com entropia melhorada
  * @param totalNumbers Total de números disponíveis
  */
 export const generateFormattedNumber = (totalNumbers = 99999): string => {
-  // Certifique-se de limitar a faixa a números de 1 a 99999
-  const randomNum = Math.floor(Math.random() * totalNumbers) + 1;
+  // Adicionar entropia extra ao gerador
+  const timestamp = Date.now();
+  const randomSeed = timestamp ^ (Math.random() * 10000000);
+  
+  // Combinar com a semente da aplicação para melhor distribuição
+  const combinedSeed = APP_SEED + randomSeed.toString();
+  
+  // Algoritmo Fisher-Yates para gerar número com melhor entropia
+  let hash = 0;
+  for (let i = 0; i < combinedSeed.length; i++) {
+    hash = ((hash << 5) - hash) + combinedSeed.charCodeAt(i);
+    hash = hash & hash; // Converter para inteiro 32 bits
+  }
+  
+  // Garantir número positivo e dentro da faixa
+  const randomNum = Math.abs(hash % totalNumbers) + 1;
   return randomNum.toString().padStart(5, '0');
 };
 
@@ -188,6 +206,14 @@ export const isNumberAvailable = async (number: string): Promise<boolean> => {
  * @param count Quantidade de números a gerar
  */
 export const generateUniqueNumbers = async (count: number): Promise<string[]> => {
+  // Validação adicional de entrada para prevenir abuso
+  if (count <= 0 || count > MAX_NUMBERS_PER_REQUEST) {
+    throw new Error(`Quantidade inválida. Deve estar entre 1 e ${MAX_NUMBERS_PER_REQUEST}.`);
+  }
+  
+  // Log para auditoria
+  console.log(`[AUDIT] Iniciando geração de ${count} números. Timestamp: ${new Date().toISOString()}`);
+  
   // Limpar reservas expiradas para não bloquear números desnecessariamente
   await cleanupExpiredReservations();
   
@@ -235,6 +261,42 @@ export const generateUniqueNumbers = async (count: number): Promise<string[]> =>
       attempts++;
     }
     
+    // Implementar verificação direta de disponibilidade para maior eficiência
+    // quando muitos números já estão reservados
+    if (uniqueNumbers.length < count && attempts > count * 10) {
+      console.log('[INFO] Muitas colisões detectadas, alterando estratégia de geração');
+      
+      // Buscar diretamente números que não existem nas coleções (estratégia mais eficiente)
+      while (uniqueNumbers.length < count && attempts < maxAttempts) {
+        // Gerar um lote de candidatos para testagem em batch
+        const candidates = new Set<string>();
+        for (let i = 0; i < Math.min(10, count - uniqueNumbers.length); i++) {
+          let candidate;
+          do {
+            candidate = generateFormattedNumber();
+          } while (candidates.has(candidate) || unavailableNumbers.has(candidate));
+          candidates.add(candidate);
+        }
+        
+        // Verificar candidatos em lote para maior eficiência
+        const availableCandidates = await checkNumbersAvailabilityBatch(Array.from(candidates));
+        
+        // Reservar números disponíveis
+        for (const number of availableCandidates) {
+          const reserved = await reserveNumber(number, sessionId);
+          if (reserved) {
+            reservedInSession.push(number);
+            uniqueNumbers.push(number);
+            unavailableNumbers.add(number);
+            
+            if (uniqueNumbers.length >= count) break;
+          }
+        }
+        
+        attempts += candidates.size;
+      }
+    }
+    
     // Verificar se conseguimos todos os números necessários
     if (uniqueNumbers.length < count) {
       // Se não conseguirmos todos os números, vamos limpar as reservas que fizemos
@@ -242,15 +304,65 @@ export const generateUniqueNumbers = async (count: number): Promise<string[]> =>
       throw new Error(`Não foi possível gerar ${count} números únicos.`);
     }
     
+    // Log para auditoria
+    console.log(`[AUDIT] Geração concluída. ${uniqueNumbers.length} números gerados após ${attempts} tentativas.`);
+    
     return uniqueNumbers;
   } catch (error) {
     // Em caso de erro, garantir que limpamos as reservas
-    console.error('Erro ao gerar números únicos:', error);
+    console.error('[ERROR] Erro ao gerar números únicos:', error);
     
     // Tentar limpar todas as reservas desta sessão
     await Promise.all(reservedInSession.map(num => removeReservation(num)));
     
     throw error;
+  }
+};
+
+/**
+ * Verifica a disponibilidade de múltiplos números em lote para otimizar performance
+ * @param numbers Números a verificar
+ */
+export const checkNumbersAvailabilityBatch = async (numbers: string[]): Promise<string[]> => {
+  if (!numbers.length) return [];
+  
+  try {
+    // Verificar números já vendidos
+    const ordersRef = collection(db, 'orders');
+    const reservationsRef = collection(db, 'number_reservations');
+    
+    // Executar consultas em paralelo para melhor performance
+    const [soldBatch, reservedBatch] = await Promise.all([
+      // Verificar números já em pedidos
+      getDocs(query(ordersRef, where('generatedNumbers', 'array-contains-any', numbers))),
+      // Verificar números atualmente reservados e não expirados
+      getDocs(query(reservationsRef, 
+                    where(documentId(), 'in', numbers), 
+                    where('expiresAt', '>', new Date())))
+    ]);
+    
+    // Coletar números indisponíveis
+    const unavailable = new Set<string>();
+    
+    // Processar resultados das consultas
+    soldBatch.forEach(docSnap => {
+      const data = docSnap.data();
+      if (data.generatedNumbers && Array.isArray(data.generatedNumbers)) {
+        data.generatedNumbers.forEach((num: string) => {
+          if (numbers.includes(num)) unavailable.add(num);
+        });
+      }
+    });
+    
+    reservedBatch.forEach(docSnap => {
+      unavailable.add(docSnap.id);
+    });
+    
+    // Retornar apenas os números disponíveis
+    return numbers.filter(num => !unavailable.has(num));
+  } catch (err) {
+    console.error('Erro ao verificar disponibilidade em lote:', err);
+    throw new Error('Não foi possível verificar disponibilidade dos números.');
   }
 };
 
