@@ -103,8 +103,15 @@ const loginWithGoogle = async () => {
   googleLoading.value = true;
   
   try {
-    await authStore.loginWithGoogle(redirectPath.value);
+    const success = await authStore.loginWithGoogle(redirectPath.value);
+    
+    // Se o login não teve sucesso devido ao popup fechado, pegue a mensagem do store
+    if (success === false) {
+      errorMessage.value = authStore.error || 'Login cancelado. Tente novamente quando estiver pronto.';
+    }
+    // Se foi bem-sucedido, não precisa fazer nada - o authStore já redireciona
   } catch (error: any) {
+    // Outros erros não tratados
     errorMessage.value = authStore.error || 'Erro ao fazer login com Google. Tente novamente.';
     console.error('Erro no login com Google:', error);
   } finally {
@@ -160,6 +167,11 @@ const loginWithGoogle = async () => {
     
     <div v-if="errorMessage" class="mb-4 text-danger text-sm">
       {{ errorMessage }}
+      
+      <!-- Dica adicional quando o erro for relacionado a popup -->
+      <p v-if="errorMessage.includes('janela') || errorMessage.includes('popup')" class="mt-1 text-xs text-gray-500">
+        Verifique se seu navegador não está bloqueando popups para este site.
+      </p>
     </div>
     
     <div class="flex items-center justify-between">

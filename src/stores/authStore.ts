@@ -115,10 +115,23 @@ export const useAuthStore = defineStore('auth', () => {
       if (router) {
         router.push(redirectPath);
       }
+
+      return true; // Indicar sucesso
+      
     } catch (err: any) {
       console.error('Erro ao fazer login com Google:', err);
-      error.value = err.message || 'Ocorreu um erro ao fazer login com o Google.';
-      throw err;
+      
+      // Tratamento específico para erro de popup fechado
+      if (err.code === 'auth/popup-closed-by-user') {
+        error.value = 'Login cancelado. A janela de autenticação foi fechada antes de concluir.';
+        return false; // Retornar false para indicar que o usuário cancelou
+      } else if (err.code === 'auth/popup-blocked') {
+        error.value = 'O popup foi bloqueado pelo navegador. Verifique suas configurações de popup ou tente novamente.';
+        return false;
+      } else {
+        error.value = err.message || 'Ocorreu um erro ao fazer login com o Google.';
+        throw err; // Propagar outros erros para tratamento adicional
+      }
     } finally {
       loading.value = false;
     }
