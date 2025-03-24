@@ -7,7 +7,9 @@ import {
   signOut, 
   onAuthStateChanged,
   createUserWithEmailAndPassword,
-  updateProfile
+  updateProfile,
+  GoogleAuthProvider,
+  signInWithPopup
 } from 'firebase/auth';
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '../firebase';
@@ -66,6 +68,56 @@ export const useAuthStore = defineStore('auth', () => {
         error.value = 'Erro ao fazer login. Tente novamente.';
       }
       
+      throw err;
+    } finally {
+      loading.value = false;
+    }
+  };
+
+  // Login com Google
+  const loginWithGoogle = async (redirectPath = '/') => {
+    try {
+      error.value = null;
+      loading.value = true;
+      
+      // Criar provedor do Google
+      const provider = new GoogleAuthProvider();
+      // Adicionar escopos de acesso, se necessário
+      provider.addScope('email');
+      provider.addScope('profile');
+      
+      // Fazer login com popup
+      const result = await signInWithPopup(auth, provider);
+      const googleUser = result.user;
+      
+      // Verificar se o usuário já existe no Firestore
+      const userRef = doc(db, 'users', googleUser.uid);
+      const userDoc = await getDoc(userRef);
+      
+      if (!userDoc.exists()) {
+        // Se não existe, criar perfil básico para o usuário
+        await setDoc(userRef, {
+          id: googleUser.uid,
+          displayName: googleUser.displayName || 'Usuário Google',
+          username: googleUser.displayName?.toLowerCase().replace(/\s+/g, '_') || `user_${Date.now()}`,
+          email: googleUser.email || '',
+          role: UserRole.USER,
+          createdAt: serverTimestamp(),
+          photoURL: googleUser.photoURL || '',
+          authProvider: 'google'
+        });
+      }
+      
+      // Buscar dados do usuário do Firestore
+      await fetchUserData();
+      
+      // Redirecionar após login
+      if (router) {
+        router.push(redirectPath);
+      }
+    } catch (err: any) {
+      console.error('Erro ao fazer login com Google:', err);
+      error.value = err.message || 'Ocorreu um erro ao fazer login com o Google.';
       throw err;
     } finally {
       loading.value = false;
@@ -216,6 +268,7 @@ export const useAuthStore = defineStore('auth', () => {
     fetchUserData,
     initAuthListener,
     init,
-    cleanup
+    cleanup,
+    loginWithGoogle // Exportando novo método
   };
 });
