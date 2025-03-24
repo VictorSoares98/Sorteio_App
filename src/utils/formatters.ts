@@ -77,8 +77,13 @@ export const formatDate = (date: Date, options?: Intl.DateTimeFormatOptions): st
 
 /**
  * Formata número do sorteio com zeros à esquerda
+ * Garante que o número tenha exatamente 5 dígitos
  */
 export const formatRaffleNumber = (number: string): string => {
+  // Constantes do sistema de números
+  const MAX_NUMBER = 10000; // Limite máximo de números (10.000)
+  const DIGIT_COUNT = 5;    // Sempre 5 dígitos
+  
   // Se o número já tem o formato correto (5 dígitos), apenas retorne
   if (/^\d{5}$/.test(number)) {
     return number;
@@ -87,8 +92,15 @@ export const formatRaffleNumber = (number: string): string => {
   // Limpa caracteres não numéricos
   const cleaned = number.replace(/\D/g, '');
   
+  // Converter para número e garantir que está no intervalo válido
+  const numValue = parseInt(cleaned, 10) || 0;
+  if (numValue < 1 || numValue > MAX_NUMBER) {
+    console.warn(`Número fora do intervalo permitido (1-${MAX_NUMBER}): ${numValue}`);
+    // Mesmo para números inválidos, formatamos para manter a consistência da UI
+  }
+  
   // Formata para ter 5 dígitos com zeros à esquerda
-  return cleaned.padStart(5, '0').substring(0, 5);
+  return cleaned.padStart(DIGIT_COUNT, '0').substring(0, DIGIT_COUNT);
 };
 
 /**

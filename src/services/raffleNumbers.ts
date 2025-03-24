@@ -9,6 +9,11 @@ const MAX_NUMBERS_PER_REQUEST = 100;
 // Adicionar uma camada de segurança com uma semente específica da aplicação
 const APP_SEED = 'UMADRIMC-2023';
 
+// Constante para definir o limite máximo de números disponíveis no sistema
+const MAX_AVAILABLE_NUMBERS = 10000; // Novo limite de 10.000 números
+// Constante para definir o número de dígitos para formatação
+const NUMBER_DIGIT_COUNT = 5; // Sempre 5 dígitos
+
 /**
  * Gera um ID de sessão único para o processo de geração atual
  */
@@ -206,7 +211,7 @@ export const removeReservation = async (number: string): Promise<void> => {
  * Gera um número formatado com zeros à esquerda com entropia melhorada
  * @param totalNumbers Total de números disponíveis
  */
-export const generateFormattedNumber = (totalNumbers = 99999): string => {
+export const generateFormattedNumber = (totalNumbers = MAX_AVAILABLE_NUMBERS): string => {
   // Adicionar entropia extra ao gerador
   const timestamp = Date.now();
   const randomSeed = timestamp ^ (Math.random() * 10000000);
@@ -221,9 +226,11 @@ export const generateFormattedNumber = (totalNumbers = 99999): string => {
     hash = hash & hash; // Converter para inteiro 32 bits
   }
   
-  // Garantir número positivo e dentro da faixa
+  // Garantir número positivo e dentro da faixa (1 a 10000)
   const randomNum = Math.abs(hash % totalNumbers) + 1;
-  return randomNum.toString().padStart(5, '0');
+  
+  // Formatar para ter exatamente 5 dígitos com zeros à esquerda
+  return randomNum.toString().padStart(NUMBER_DIGIT_COUNT, '0');
 };
 
 /**
@@ -245,6 +252,46 @@ export const isNumberAvailable = async (number: string): Promise<boolean> => {
 };
 
 /**
+ * Verifica se um formato de número é válido de acordo com os padrões do sistema
+ * @param number Número a ser validado
+ * @returns Verdadeiro se o número está no formato correto
+ */
+export const isValidNumberFormat = (number: string): boolean => {
+  // Verificar se é uma string de exatamente 5 dígitos numéricos
+  const validFormatRegex = /^\d{5}$/;
+  
+  // Verificar se está dentro do intervalo permitido (00001 a 10000)
+  const numericValue = parseInt(number, 10);
+  
+  return (
+    validFormatRegex.test(number) && 
+    numericValue >= 1 && 
+    numericValue <= MAX_AVAILABLE_NUMBERS
+  );
+};
+
+/**
+ * Formata um número para o padrão do sorteio (5 dígitos)
+ * @param number Número a ser formatado
+ * @returns Número formatado com 5 dígitos
+ */
+export const formatRaffleNumber = (number: string | number): string => {
+  const numStr = typeof number === 'number' ? number.toString() : number;
+  
+  // Limpar caracteres não numéricos
+  const cleaned = numStr.replace(/\D/g, '');
+  
+  // Converter para número e garantir que está no intervalo válido
+  const numericValue = parseInt(cleaned, 10) || 0;
+  if (numericValue < 1 || numericValue > MAX_AVAILABLE_NUMBERS) {
+    throw new Error(`Número fora do intervalo permitido (1-${MAX_AVAILABLE_NUMBERS}): ${numericValue}`);
+  }
+  
+  // Formatar para ter exatamente 5 dígitos com zeros à esquerda
+  return numericValue.toString().padStart(NUMBER_DIGIT_COUNT, '0');
+};
+
+/**
  * Gera múltiplos números únicos com reserva atômica com performance melhorada
  * @param count Quantidade de números a gerar
  */
@@ -254,18 +301,28 @@ export const generateUniqueNumbers = async (count: number): Promise<string[]> =>
     throw new Error(`Quantidade inválida. Deve estar entre 1 e ${MAX_NUMBERS_PER_REQUEST}.`);
   }
   
+  // Verificar se temos números suficientes disponíveis no sistema
+  const soldNumbers = await fetchSoldNumbers();
+  if (soldNumbers.length >= MAX_AVAILABLE_NUMBERS) {
+    throw new Error(`Todos os ${MAX_AVAILABLE_NUMBERS} números já foram vendidos!`);
+  }
+  
+  if (soldNumbers.length + count > MAX_AVAILABLE_NUMBERS) {
+    throw new Error(`Não há números suficientes disponíveis. Restam apenas ${MAX_AVAILABLE_NUMBERS - soldNumbers.length} números.`);
+  }
+  
   // Log para auditoria
   console.log(`[AUDIT] Iniciando geração de ${count} números. Timestamp: ${new Date().toISOString()}`);
   
   // Executar limpeza enquanto já buscamos os números vendidos e reservados em paralelo
-  const [soldNumbers, reservedNumbers] = await Promise.all([
+  const [soldNumbersList, reservedNumbers] = await Promise.all([
     fetchSoldNumbers(), // Usar cache se disponível
     fetchReservedNumbers(),
     cleanupExpiredReservations() // Executa em paralelo sem esperar resultado
   ]);
   
   // Combinar números indisponíveis
-  const unavailableNumbers = new Set([...soldNumbers, ...reservedNumbers]);
+  const unavailableNumbers = new Set([...soldNumbersList, ...reservedNumbers]);
   
   // Criar ID de sessão único para este processo de geração
   const sessionId = generateSessionId();
