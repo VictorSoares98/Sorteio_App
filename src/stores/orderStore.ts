@@ -14,9 +14,13 @@ export const useOrderStore = defineStore('order', () => {
   const userOrders = computed(() => {
     if (!authStore.currentUser) return [];
     
-    // Retorna apenas pedidos do usuário atual, já ordenados por data
+    // Retorna pedidos usando originalSellerId se disponível, caso contrário usa sellerId
     return orders.value
-      .filter(order => order.sellerId === authStore.currentUser?.id)
+      .filter(order => {
+        const userId = authStore.currentUser?.id;
+        return (order.originalSellerId && order.originalSellerId === userId) || 
+               (order.sellerId === userId);
+      })
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
   });
 

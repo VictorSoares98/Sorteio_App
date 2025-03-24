@@ -12,17 +12,18 @@ export interface Order {
   observations?: string;
   generatedNumbers: string[];
   sellerName: string;
-  sellerId: string;
-  sellerUsername: string; // Campo adicionado para guardar o username do vendedor
+  sellerId: string; // Agora será um ID baseado no nome do vendedor
+  originalSellerId?: string; // ID original do Firebase para compatibilidade
+  sellerUsername: string; 
   createdAt: Date;
   numTickets?: number;
 }
 
 export interface OrderFormData {
   buyerName: string;
-  paymentMethod?: PaymentMethod; // Torna opcional para permitir estado desmarcado
+  paymentMethod?: PaymentMethod; 
   contactNumber: string;
   addressOrCongregation: string;
   observations?: string;
-  numTickets?: number; // Novo campo para número de tickets
+  numTickets?: number; 
 }

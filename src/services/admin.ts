@@ -31,8 +31,8 @@ export const fetchSalesReport = async () => {
         soldNumbers.push(...order.generatedNumbers);
       }
       
-      // Contar vendas por vendedor
-      const sellerId = order.sellerId;
+      // Extrair o ID do vendedor para contagem, preferindo originalSellerId se disponível
+      const sellerId = order.originalSellerId || order.sellerId;
       sellerMap.set(sellerId, (sellerMap.get(sellerId) || 0) + 1);
       
       // Adicionar comprador à lista
@@ -70,7 +70,8 @@ export const fetchUserSalesData = async (): Promise<Map<string, SalesData>> => {
     // Processar cada pedido
     ordersSnapshot.forEach(doc => {
       const data = doc.data() as Order;
-      const sellerId = data.sellerId;
+      // Usar originalSellerId se disponível, caso contrário usa sellerId
+      const sellerId = data.originalSellerId || data.sellerId;
       
       if (!userSalesMap.has(sellerId)) {
         userSalesMap.set(sellerId, {

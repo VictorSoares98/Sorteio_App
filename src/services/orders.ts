@@ -90,6 +90,11 @@ export const createOrder = async (
   try {
     // Usar o username para o ID ou fallback para um formato tradicional
     const usernameToUse = sellerUsername || sellerName.toLowerCase().replace(/\s+/g, "_");
+    
+    // Gerar um sellerId mais descritivo baseado no nome do vendedor
+    // Formato: seller_nome-normalizado_timestamp
+    const sellerNameId = `seller_${usernameToUse}_${Date.now()}`;
+    
     const newOrderId = generateDocumentId('order', usernameToUse);
     
     // Verificar se paymentMethod está definido
@@ -107,8 +112,9 @@ export const createOrder = async (
       observations: orderData.observations,
       generatedNumbers: generatedNumbers,
       sellerName: sellerName,
-      sellerId: sellerId,
-      sellerUsername: sellerUsername || usernameToUse, // Usar o fornecido ou gerar um
+      sellerId: sellerNameId, // Usar o novo formato de sellerId
+      originalSellerId: sellerId, // Manter o ID original para referência
+      sellerUsername: sellerUsername || usernameToUse,
       createdAt: new Date()
     };
     
