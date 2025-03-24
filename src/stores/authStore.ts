@@ -205,6 +205,7 @@ export const useAuthStore = defineStore('auth', () => {
     if (!firebaseUser.value) return;
     
     try {
+      console.log('[AuthStore] Buscando dados do usuário:', firebaseUser.value.uid);
       const userId = firebaseUser.value.uid;
       const userDocRef = doc(db, 'users', userId);
       const userDoc = await getDoc(userDocRef);
@@ -222,20 +223,38 @@ export const useAuthStore = defineStore('auth', () => {
              : userData.affiliateCodeExpiry)
           : undefined;
         
+        // IMPORTANTE: Preservar referência a firebaseUser antes de atualizar currentUser
+        const currentFirebaseUser = firebaseUser.value;
+        
         // Atualizar o usuário com todos os dados, incluindo datas convertidas corretamente
         currentUser.value = {
           ...userData,
-          id: firebaseUser.value.uid,
+          id: currentFirebaseUser.uid,
           createdAt,
           affiliateCodeExpiry
         } as User;
+        
+        console.log('[AuthStore] Dados do usuário atualizados com sucesso');
       } else {
-        error.value = 'Dados do usuário não encontrados.';
-        currentUser.value = null;
+        console.warn('[AuthStore] Documento do usuário não encontrado no Firestore');
+        // CORREÇÃO: Não definir currentUser como null, isso evita logout indesejado
+        // Mantém os dados básicos do Firebase Auth
+        if (currentUser.value === null && firebaseUser.value) {
+          currentUser.value = {
+            id: firebaseUser.value.uid,
+            email: firebaseUser.value.email || '',
+            displayName: firebaseUser.value.displayName || 'Usuário',
+            username: '',
+            role: UserRole.USER,
+            createdAt: new Date()
+          } as User;
+        }
+        error.value = 'Dados completos do usuário não encontrados.';
       }
     } catch (err) {
-      console.error('Erro ao buscar dados do usuário:', err);
+      console.error('[AuthStore] Erro ao buscar dados do usuário:', err);
       error.value = 'Erro ao carregar dados do usuário.';
+      // CORREÇÃO: Não modificar o currentUser em caso de erro
     }
   };
 

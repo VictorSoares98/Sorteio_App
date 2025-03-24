@@ -66,7 +66,11 @@ const timeRemaining = computed(() => {
 const generateCode = async () => {
   generating.value = true;
   try {
+    console.log('[AffiliateLink] Gerando código temporário');
     await generateTemporaryAffiliateCode();
+    console.log('[AffiliateLink] Código temporário gerado');
+  } catch (err) {
+    console.error('[AffiliateLink] Erro ao gerar código:', err);
   } finally {
     generating.value = false;
   }
@@ -78,9 +82,19 @@ const processAffiliation = async () => {
   
   affiliating.value = true;
   try {
-    await affiliateToUser(affiliateTarget.value, isEmail.value);
+    console.log('[AffiliateLink] Iniciando processo de afiliação');
+    const response = await affiliateToUser(affiliateTarget.value, isEmail.value);
+    
+    if (response && response.success) {
+      console.log('[AffiliateLink] Afiliação bem-sucedida');
+    } else {
+      console.warn('[AffiliateLink] Afiliação falhou:', response?.message);
+    }
+    
     // Limpar campo após tentativa
     affiliateTarget.value = '';
+  } catch (err) {
+    console.error('[AffiliateLink] Erro ao processar afiliação:', err);
   } finally {
     affiliating.value = false;
   }
@@ -120,7 +134,13 @@ const copyCodeToClipboard = () => {
 
 // Carregar afiliados quando o componente é montado
 onMounted(async () => {
-  await fetchAffiliatedUsers();
+  console.log('[AffiliateLink] Componente montado, buscando afiliados');
+  try {
+    await fetchAffiliatedUsers();
+    console.log('[AffiliateLink] Afiliados carregados:', affiliatedUsers.value.length);
+  } catch (err) {
+    console.error('[AffiliateLink] Erro ao carregar afiliados:', err);
+  }
 });
 </script>
 

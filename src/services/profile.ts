@@ -1,4 +1,4 @@
-import { doc, updateDoc, getDoc, query, where, collection, getDocs, arrayUnion, Timestamp } from 'firebase/firestore';
+import { doc, updateDoc, getDoc, query, where, collection, getDocs, arrayUnion, Timestamp, runTransaction } from 'firebase/firestore';
 import { db } from '../firebase';
 import { UserRole, type User, type AffiliationResponse } from '../types/user';
 
@@ -123,11 +123,13 @@ export const affiliateToUser = async (
   isEmail: boolean = false
 ): Promise<AffiliationResponse> => {
   try {
+    console.log('[ProfileService] Iniciando processo de afiliação', { userId, targetType: isEmail ? 'email' : 'código' });
     // Referência ao usuário que vai ser afiliado
     const userRef = doc(db, 'users', userId);
     const userSnap = await getDoc(userRef);
     
     if (!userSnap.exists()) {
+      console.warn('[ProfileService] Usuário não encontrado');
       return {
         success: false,
         message: 'Seu usuário não foi encontrado.'
@@ -138,6 +140,7 @@ export const affiliateToUser = async (
     
     // Se já está afiliado a alguém
     if (userData.affiliatedTo) {
+      console.warn('[ProfileService] Usuário já afiliado a outro usuário');
       return {
         success: false,
         message: 'Você já está afiliado a outro usuário.'
@@ -146,6 +149,7 @@ export const affiliateToUser = async (
     
     // NOVA VERIFICAÇÃO: Se já tem afiliados, não pode se afiliar a outra pessoa
     if (userData.affiliates && userData.affiliates.length > 0) {
+      console.warn('[ProfileService] Usuário com afiliados tentando se afiliar a outro');
       return {
         success: false,
         message: 'Usuários que já possuem afiliados não podem se afiliar a outras contas.'
@@ -155,14 +159,17 @@ export const affiliateToUser = async (
     // Encontrar o usuário alvo (por email ou código de afiliado)
     let targetUserQuery;
     if (isEmail) {
+      console.log('[ProfileService] Buscando usuário por email');
       targetUserQuery = query(collection(db, 'users'), where('email', '==', targetIdentifier));
     } else {
+      console.log('[ProfileService] Buscando usuário por código');
       targetUserQuery = query(collection(db, 'users'), where('affiliateCode', '==', targetIdentifier));
     }
     
     const querySnapshot = await getDocs(targetUserQuery);
     
     if (querySnapshot.empty) {
+      console.warn('[ProfileService] Usuário alvo não encontrado');
       return {
         success: false,
         message: isEmail ? 'Email não encontrado.' : 'Código de afiliado inválido.'
@@ -176,6 +183,7 @@ export const affiliateToUser = async (
     
     // Verificar se não está tentando se afiliar a si mesmo
     if (targetUserId === userId) {
+      console.warn('[ProfileService] Tentativa de auto-afiliação');
       return {
         success: false,
         message: 'Você não pode se afiliar a si mesmo.'
@@ -184,12 +192,14 @@ export const affiliateToUser = async (
     
     // Se está usando código, verificar se ele não expirou
     if (!isEmail && targetUserData.affiliateCodeExpiry) {
-      // Verificar se temos um Timestamp do Firebase ou uma Date normal
+      console.log('[ProfileService] Verificando validade do código');
+      // Verificar se temos um Timestamp do Firebase ou uma Date
       const expiryDate = 'toDate' in targetUserData.affiliateCodeExpiry
         ? targetUserData.affiliateCodeExpiry.toDate()
         : targetUserData.affiliateCodeExpiry;
         
       if (expiryDate < new Date()) {
+        console.warn('[ProfileService] Código expirado');
         return {
           success: false,
           message: 'Este código de afiliado expirou.'
@@ -197,24 +207,38 @@ export const affiliateToUser = async (
       }
     }
     
-    // Fazer a afiliação
-    await updateDoc(userRef, {
-      affiliatedTo: targetUserId
-    });
-    
-    // Adicionar o usuário à lista de afiliados do alvo
-    const targetRef = doc(db, 'users', targetUserId);
-    await updateDoc(targetRef, {
-      affiliates: arrayUnion(userId)
-    });
-    
-    // Se o usuário alvo não é ADMIN, promovê-lo
-    if (targetUserData.role === UserRole.USER) {
-      await updateDoc(targetRef, {
-        role: UserRole.ADMIN
+    console.log('[ProfileService] Executando transação de afiliação');
+    // MELHORIA: Usar uma transação para garantir atomicidade
+    await runTransaction(db, async (transaction) => {
+      // 1. Atualizar o usuário com o link de afiliação
+      transaction.update(userRef, {
+        affiliatedTo: targetUserId
       });
-    }
+      
+      // 2. Adicionar o usuário à lista de afiliados do alvo
+      const targetRef = doc(db, 'users', targetUserId);
+      
+      // Primeiro ler o documento para garantir dados atualizados
+      const targetDocSnap = await transaction.get(targetRef);
+      const currentAffiliates = targetDocSnap.exists() 
+        ? targetDocSnap.data().affiliates || [] 
+        : [];
+      
+      if (!currentAffiliates.includes(userId)) {
+        transaction.update(targetRef, {
+          affiliates: arrayUnion(userId)
+        });
+      }
+      
+      // 3. Se o usuário alvo não é ADMIN, promovê-lo
+      if (targetDocSnap.exists() && targetDocSnap.data().role === UserRole.USER) {
+        transaction.update(targetRef, {
+          role: UserRole.ADMIN
+        });
+      }
+    });
     
+    console.log('[ProfileService] Afiliação concluída com sucesso');
     return {
       success: true,
       message: 'Afiliação realizada com sucesso!',
@@ -224,7 +248,7 @@ export const affiliateToUser = async (
       }
     };
   } catch (error) {
-    console.error('Erro ao afiliar usuário:', error);
+    console.error('[ProfileService] Erro ao afiliar usuário:', error);
     return {
       success: false,
       message: 'Ocorreu um erro ao processar a afiliação.'

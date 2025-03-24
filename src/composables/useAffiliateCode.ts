@@ -35,16 +35,32 @@ export function useAffiliateCode() {
     success.value = null;
     
     try {
+      console.log('[useAffiliateCode] Gerando código temporário');
       const code = await profileService.generateTemporaryAffiliateCode(currentUser.value.id);
+      
       if (!code) {
         throw new Error('Não foi possível gerar o código temporário.');
       }
-      // Atualizar store para refletir novo código
-      await authStore.fetchUserData();
+      
+      // MELHORIA: Atualização segura de dados com timeout
+      console.log('[useAffiliateCode] Código gerado, atualizando dados do usuário');
+      try {
+        setTimeout(async () => {
+          try {
+            await authStore.fetchUserData();
+            console.log('[useAffiliateCode] Dados atualizados após geração do código');
+          } catch (refreshError) {
+            console.error('[useAffiliateCode] Erro ao atualizar dados após gerar código:', refreshError);
+          }
+        }, 500);
+      } catch (updateError) {
+        console.warn('[useAffiliateCode] Erro ao atualizar dados do usuário, mas código foi gerado:', updateError);
+      }
+      
       success.value = 'Código temporário gerado com sucesso! Este código expira em 30 minutos.';
       return code;
     } catch (err: any) {
-      console.error('Erro ao gerar código temporário:', err);
+      console.error('[useAffiliateCode] Erro ao gerar código temporário:', err);
       error.value = err.message || 'Erro ao gerar código temporário.';
       return null;
     } finally {
@@ -64,6 +80,7 @@ export function useAffiliateCode() {
     success.value = null;
     
     try {
+      console.log('[useAffiliateCode] Iniciando processo de afiliação');
       const response = await profileService.affiliateToUser(
         currentUser.value.id,
         targetIdentifier,
@@ -71,16 +88,34 @@ export function useAffiliateCode() {
       );
       
       if (response.success) {
-        // Atualizar store para refletir mudanças
-        await authStore.fetchUserData();
-        success.value = response.message;
+        console.log('[useAffiliateCode] Afiliação bem-sucedida, atualizando dados do usuário');
+        
+        try {
+          // MELHORIA: Usar um timeout para permitir que o Firestore conclua sua sincronização
+          // antes de buscar os dados atualizados
+          setTimeout(async () => {
+            try {
+              await authStore.fetchUserData();
+              console.log('[useAffiliateCode] Dados do usuário atualizados após afiliação');
+            } catch (refreshError) {
+              console.error('[useAffiliateCode] Erro ao atualizar dados após afiliação:', refreshError);
+            }
+          }, 500);
+          
+          success.value = response.message;
+        } catch (updateError) {
+          console.warn('[useAffiliateCode] Erro ao atualizar dados do usuário, mas afiliação foi bem-sucedida:', updateError);
+          // Mesmo com erro na atualização, consideramos a afiliação bem-sucedida
+          success.value = response.message + ' (Recarregue a página para ver as atualizações.)';
+        }
       } else {
+        console.warn('[useAffiliateCode] Afiliação falhou:', response.message);
         error.value = response.message;
       }
       
       return response;
     } catch (err: any) {
-      console.error('Erro ao afiliar-se:', err);
+      console.error('[useAffiliateCode] Erro ao afiliar-se:', err);
       error.value = err.message || 'Erro ao processar a afiliação.';
       return null;
     } finally {
