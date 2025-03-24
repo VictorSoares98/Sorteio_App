@@ -8,7 +8,7 @@ export const formatUserRole = (role?: UserRole): string => {
   
   const roleMap = {
     [UserRole.USER]: 'Membro',
-    [UserRole.CONTADOR]: 'Contador',
+    [UserRole.TESOUREIRO]: 'Tesoureiro',
     [UserRole.SECRETARIA]: 'Secretaria',
     [UserRole.ADMIN]: 'Administrador'
   };

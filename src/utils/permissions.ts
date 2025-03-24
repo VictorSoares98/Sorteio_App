@@ -10,8 +10,8 @@ export const isAdmin = (userRole?: UserRole): boolean => {
 /**
  * Verifica se o usuário tem permissão para acessar funções de contabilidade
  */
-export const isContador = (userRole?: UserRole): boolean => {
-  return userRole === UserRole.CONTADOR || userRole === UserRole.ADMIN;
+export const isTesoureiro = (userRole?: UserRole): boolean => {
+  return userRole === UserRole.TESOUREIRO || userRole === UserRole.ADMIN;
 };
 
 /**
@@ -26,7 +26,7 @@ export const isSecretaria = (userRole?: UserRole): boolean => {
  */
 export const canViewSalesReports = (userRole?: UserRole): boolean => {
   return userRole === UserRole.ADMIN || 
-         userRole === UserRole.CONTADOR || 
+         userRole === UserRole.TESOUREIRO || 
          userRole === UserRole.SECRETARIA;
 };
 

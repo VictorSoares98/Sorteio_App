@@ -20,7 +20,7 @@ const actionError = ref<string | null>(null);
 // Mapear nomes das funções para exibição
 const roleNames = {
   [UserRole.USER]: 'Membro',
-  [UserRole.CONTADOR]: 'Contador',
+  [UserRole.TESOUREIRO]: 'Tesoureiro',
   [UserRole.SECRETARIA]: 'Secretaria',
   [UserRole.ADMIN]: 'Administrador'
 };
@@ -29,7 +29,7 @@ const roleNames = {
 const roleOptions = [
   { value: '', label: 'Todos' },
   { value: UserRole.USER, label: 'Membro' },
-  { value: UserRole.CONTADOR, label: 'Contadores' },
+  { value: UserRole.TESOUREIRO, label: 'Tesoureiros' },
   { value: UserRole.SECRETARIA, label: 'Secretaria' },
   { value: UserRole.ADMIN, label: 'Administradores' }
 ];
@@ -37,7 +37,7 @@ const roleOptions = [
 // Cores para os badges de função
 const roleBadgeColors = {
   [UserRole.USER]: 'bg-gray-200 text-gray-800',
-  [UserRole.CONTADOR]: 'bg-blue-200 text-blue-800',
+  [UserRole.TESOUREIRO]: 'bg-blue-200 text-blue-800',
   [UserRole.SECRETARIA]: 'bg-green-200 text-green-800',
   [UserRole.ADMIN]: 'bg-purple-200 text-purple-800'
 };
