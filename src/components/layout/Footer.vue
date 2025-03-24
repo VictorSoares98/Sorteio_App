@@ -20,8 +20,8 @@ const currentYear = new Date().getFullYear();
             <h3 class="text-primary text-sm font-semibold mb-2">Contato</h3>
             <ul>
               <li>
-                <a href="mailto:contato@umadrimc.org.br" class="text-gray-400 hover:text-primary text-xs md:text-sm transition-colors">
-                  contato@umadrimc.org.br
+                <a href="mailto:mr.devprojects@gmail.com" class="text-gray-400 hover:text-primary text-xs md:text-sm transition-colors">
+                  mr.devprojects@gmail.com
                 </a>
               </li>
             </ul>
