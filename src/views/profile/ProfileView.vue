@@ -12,7 +12,7 @@ const orderStore = useOrderStore();
 const isLoading = ref(true);
 const activeTab = ref('sales'); // Alterado para iniciar em 'sales' em vez de 'profile'
 
-// Carregar pedidos do usuário quando o componente for montado
+// Garantir que os dados do usuário estejam carregados com conversões de data corretas
 onMounted(async () => {
   try {
     if (!authStore.currentUser) {

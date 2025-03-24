@@ -57,9 +57,18 @@ export const useUserStore = defineStore('users', () => {
         const userData = doc.data();
         // Converter timestamp para Date
         const createdAt = userData.createdAt?.toDate ? userData.createdAt.toDate() : new Date();
+        
+        // Verificar o campo affiliateCodeExpiry especificamente
+        const affiliateCodeExpiry = userData.affiliateCodeExpiry 
+          ? (typeof userData.affiliateCodeExpiry.toDate === 'function'
+             ? userData.affiliateCodeExpiry.toDate()
+             : userData.affiliateCodeExpiry)
+          : undefined;
+        
         users.value.push({
           ...userData,
-          createdAt
+          createdAt,
+          affiliateCodeExpiry
         } as User);
       });
       
@@ -82,9 +91,21 @@ export const useUserStore = defineStore('users', () => {
       
       if (userDoc.exists()) {
         const userData = userDoc.data();
+        
+        // Verificar e converter todos os possíveis campos de data
+        const createdAt = userData.createdAt?.toDate ? userData.createdAt.toDate() : new Date();
+        
+        // Verificar o campo affiliateCodeExpiry especificamente
+        const affiliateCodeExpiry = userData.affiliateCodeExpiry 
+          ? (typeof userData.affiliateCodeExpiry.toDate === 'function'
+             ? userData.affiliateCodeExpiry.toDate()
+             : userData.affiliateCodeExpiry)
+          : undefined;
+        
         return {
           ...userData,
-          createdAt: userData.createdAt?.toDate ? userData.createdAt.toDate() : new Date()
+          createdAt,
+          affiliateCodeExpiry
         } as User;
       } else {
         error.value = 'Usuário não encontrado.';

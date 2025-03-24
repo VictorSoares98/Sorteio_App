@@ -145,7 +145,25 @@ export const useAuthStore = defineStore('auth', () => {
       const userDoc = await getDoc(userDocRef);
       
       if (userDoc.exists()) {
-        currentUser.value = userDoc.data() as User;
+        const userData = userDoc.data();
+        
+        // Converter timestamp para Date
+        const createdAt = userData.createdAt?.toDate ? userData.createdAt.toDate() : new Date();
+        
+        // Verificar o campo affiliateCodeExpiry especificamente
+        const affiliateCodeExpiry = userData.affiliateCodeExpiry 
+          ? (typeof userData.affiliateCodeExpiry.toDate === 'function'
+             ? userData.affiliateCodeExpiry.toDate()
+             : userData.affiliateCodeExpiry)
+          : undefined;
+        
+        // Atualizar o usuário com todos os dados, incluindo datas convertidas corretamente
+        currentUser.value = {
+          ...userData,
+          id: firebaseUser.value.uid,
+          createdAt,
+          affiliateCodeExpiry
+        } as User;
       } else {
         error.value = 'Dados do usuário não encontrados.';
         currentUser.value = null;
