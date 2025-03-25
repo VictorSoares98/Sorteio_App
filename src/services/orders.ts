@@ -102,15 +102,14 @@ export const fetchOrderById = async (orderId: string): Promise<Order | null> => 
 };
 
 /**
- * Cria um novo pedido com confirmação opcional em lote
+ * Cria um novo pedido
  */
 export const createOrder = async (
   orderData: OrderFormData, 
   generatedNumbers: string[], 
   sellerId: string, 
   sellerName: string,
-  sellerUsername?: string,
-  confirmInBatch = false
+  sellerUsername?: string
 ): Promise<string> => {
   try {
     // Usar o username para o ID ou fallback para um formato tradicional
@@ -148,13 +147,6 @@ export const createOrder = async (
       createdAt: serverTimestamp()
     });
     
-    // Se solicitado, confirmar números em lote logo após salvar o pedido
-    if (confirmInBatch) {
-      // Executar em background sem esperar resultado
-      raffleService.confirmNumbersUsed(generatedNumbers)
-        .catch(err => console.error('Erro ao confirmar números após criar pedido:', err));
-    }
-    
     return newOrderId;
   } catch (error) {
     console.error('Erro ao criar pedido:', error);
@@ -164,22 +156,8 @@ export const createOrder = async (
 
 export const fetchAllSoldNumbers = async (): Promise<string[]> => {
   try {
-    // Buscar todos os documentos de pedidos
-    const soldNumbersQuery = query(
-      collection(db, 'orders')
-    );
-    const querySnapshot = await getDocs(soldNumbersQuery);
-    
-    const soldNumbers: string[] = [];
-    
-    querySnapshot.forEach((doc) => {
-      const data = doc.data();
-      if (data.generatedNumbers && Array.isArray(data.generatedNumbers)) {
-        soldNumbers.push(...data.generatedNumbers);
-      }
-    });
-    
-    return soldNumbers;
+    // Usar o serviço raffleService diretamente em vez de reimplementar a função
+    return await raffleService.fetchSoldNumbers();
   } catch (error) {
     console.error('Erro ao buscar números vendidos:', error);
     throw new Error('Não foi possível verificar os números já vendidos.');
@@ -191,8 +169,8 @@ export const fetchAllSoldNumbers = async (): Promise<string[]> => {
  */
 export const isNumberAvailable = async (number: string): Promise<boolean> => {
   try {
-    const soldNumbers = await fetchAllSoldNumbers();
-    return !soldNumbers.includes(number);
+    // Usar a implementação do raffleService em vez de duplicar código
+    return await raffleService.isNumberAvailable(number);
   } catch (error) {
     console.error('Erro ao verificar disponibilidade do número:', error);
     throw new Error('Não foi possível verificar se o número está disponível.');

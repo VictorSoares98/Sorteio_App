@@ -33,8 +33,7 @@ const {
   isGenerating, 
   error: raffleError, 
   generateUniqueNumbers, 
-  numbersPerOrder,
-  confirmNumbersUsed // Adicionado este item que estava faltando
+  numbersPerOrder
 } = useRaffleNumbers();
 const authStore = useAuthStore();
 const orderStore = useOrderStore();
@@ -105,17 +104,15 @@ const submitForm = async () => {
       throw new Error('Você precisa estar logado para criar um pedido');
     }
     
-    // 2. Criar pedido e confirmar números em uma única operação
-    // Passamos os números gerados e uma flag para processamento em lote
+    // 2. Criar pedido - não é mais necessário o flag para processamento em lote
     const newOrderId = await orderStore.createOrder(
       formData.value, 
-      generatedNumbers.value, 
-      true // Flag para confirmação em lote
+      generatedNumbers.value
     );
     
     // 3. Construir objeto do pedido localmente sem busca adicional
     const username = authStore.currentUser.username || 
-                    authStore.currentUser.displayName.toLowerCase().replace(/\s+/g, "_");
+                   authStore.currentUser.displayName.toLowerCase().replace(/\s+/g, "_");
     
     // Usar dados que já temos em memória para o modal
     createdOrder.value = {
@@ -136,9 +133,6 @@ const submitForm = async () => {
     orderId.value = newOrderId;
     showConfirmation.value = true;
     resetForm();
-    
-    // 5. Confirmar números em background para não bloquear a UI
-    setTimeout(() => confirmNumbersUsed(), 100);
     
   } catch (err: any) {
     console.error('Erro ao criar pedido:', err);
