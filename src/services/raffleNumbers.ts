@@ -1,4 +1,4 @@
-import { collection, getDocs, query, where } from 'firebase/firestore';
+import { collection, getDocs, query, where, writeBatch, doc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 
 // Constante para definir o limite máximo de números disponíveis no sistema
@@ -212,4 +212,142 @@ export const isNumberAvailable = async (number: string): Promise<boolean> => {
   // Verificar se o número já foi vendido
   const soldNumbers = await fetchSoldNumbers();
   return !soldNumbers.includes(number);
+};
+
+/**
+ * Retorna a contagem de números disponíveis
+ * Calcula a diferença entre o máximo e o número de vendidos
+ */
+export const getAvailableNumbersCount = async (): Promise<number> => {
+  try {
+    // Obter números vendidos
+    const soldNumbers = await fetchSoldNumbers();
+    
+    // Calcular disponíveis (máximo menos vendidos)
+    const availableCount = MAX_AVAILABLE_NUMBERS - soldNumbers.length;
+    
+    return Math.max(0, availableCount); // Garante que não retornamos número negativo
+  } catch (err) {
+    console.error('Erro ao obter contagem de números disponíveis:', err);
+    throw new Error('Não foi possível verificar quantos números estão disponíveis.');
+  }
+};
+
+/**
+ * Inicializa a coleção de números disponíveis
+ * Esta função cria uma referência de todos os números disponíveis no sistema
+ */
+export const initAvailableNumbersCollection = async (): Promise<void> => {
+  try {
+    // 1. Buscar números já vendidos
+    const soldNumbers = await fetchSoldNumbers();
+    const soldSet = new Set(soldNumbers);
+    
+    // 2. Criar uma coleção temporária no Firestore para rastrear disponíveis
+    const availableRef = collection(db, 'available_numbers');
+    
+    // 3. Adicionar todos os números disponíveis em batches (máximo 500 por batch)
+    let batchCount = 0;
+    let currentBatch = writeBatch(db);
+    
+    // Criar registro para cada número disponível
+    for (let i = 1; i <= MAX_AVAILABLE_NUMBERS; i++) {
+      const formattedNumber = i.toString().padStart(NUMBER_DIGIT_COUNT, '0');
+      
+      // Pular números já vendidos
+      if (soldSet.has(formattedNumber)) {
+        continue;
+      }
+      
+      // Adicionar ao batch atual
+      const numRef = doc(availableRef, formattedNumber);
+      currentBatch.set(numRef, {
+        number: formattedNumber,
+        available: true,
+        createdAt: serverTimestamp()
+      });
+      
+      batchCount++;
+      
+      // Se atingir o limite de batch, comitar e criar novo
+      if (batchCount >= 500) {
+        await currentBatch.commit();
+        currentBatch = writeBatch(db);
+        batchCount = 0;
+        
+        // Pequena pausa para evitar sobrecarregar o Firestore
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+    }
+    
+    // Comitar última batch se tiver algo
+    if (batchCount > 0) {
+      await currentBatch.commit();
+    }
+    
+    // 4. Criar um documento de metadata para rastrear última sincronização
+    await setDoc(doc(db, 'system', 'numbers_metadata'), {
+      lastSync: serverTimestamp(),
+      totalAvailable: MAX_AVAILABLE_NUMBERS - soldNumbers.length,
+      totalSold: soldNumbers.length
+    });
+    
+    console.log(`Coleção de números disponíveis inicializada com ${MAX_AVAILABLE_NUMBERS - soldNumbers.length} números`);
+  } catch (err) {
+    console.error('Erro ao inicializar coleção de números disponíveis:', err);
+    throw new Error('Não foi possível inicializar o sistema de números.');
+  }
+};
+
+/**
+ * Sincroniza a coleção de números disponíveis com os vendidos
+ * Remove os números vendidos da coleção de disponíveis
+ */
+export const syncAvailableNumbersWithSoldOnes = async (): Promise<void> => {
+  try {
+    // 1. Buscar números já vendidos
+    const soldNumbers = await fetchSoldNumbers();
+    
+    // 2. Referência à coleção de números disponíveis
+    const availableRef = collection(db, 'available_numbers');
+    
+    // 3. Processar em batches para não sobrecarregar o Firestore
+    let batchCount = 0;
+    let currentBatch = writeBatch(db);
+    
+    // Remover cada número vendido da coleção de disponíveis
+    for (const number of soldNumbers) {
+      const numRef = doc(availableRef, number);
+      currentBatch.delete(numRef);
+      
+      batchCount++;
+      
+      // Se atingir o limite de batch, comitar e criar novo
+      if (batchCount >= 500) {
+        await currentBatch.commit();
+        currentBatch = writeBatch(db);
+        batchCount = 0;
+        
+        // Pausa para evitar sobrecarregar
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+    }
+    
+    // Comitar última batch se tiver algo
+    if (batchCount > 0) {
+      await currentBatch.commit();
+    }
+    
+    // 4. Atualizar metadata
+    await updateDoc(doc(db, 'system', 'numbers_metadata'), {
+      lastSync: serverTimestamp(),
+      totalAvailable: MAX_AVAILABLE_NUMBERS - soldNumbers.length,
+      totalSold: soldNumbers.length
+    });
+    
+    console.log(`Sincronização concluída. Removidos ${soldNumbers.length} números vendidos da coleção de disponíveis`);
+  } catch (err) {
+    console.error('Erro ao sincronizar números vendidos:', err);
+    throw new Error('Não foi possível sincronizar os números vendidos.');
+  }
 };
