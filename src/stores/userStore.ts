@@ -5,6 +5,7 @@ import { db } from '../firebase';
 import type { User, UserRole } from '../types/user';
 import type { Order } from '../types/order';
 import { useAuthStore } from './authStore';
+import { processFirestoreDocument } from '../utils/firebaseUtils';
 
 export const useUserStore = defineStore('users', () => {
   const users = ref<User[]>([]);
@@ -54,22 +55,8 @@ export const useUserStore = defineStore('users', () => {
       users.value = [];
       
       usersSnapshot.forEach(doc => {
-        const userData = doc.data();
-        // Converter timestamp para Date
-        const createdAt = userData.createdAt?.toDate ? userData.createdAt.toDate() : new Date();
-        
-        // Verificar o campo affiliateCodeExpiry especificamente
-        const affiliateCodeExpiry = userData.affiliateCodeExpiry 
-          ? (typeof userData.affiliateCodeExpiry.toDate === 'function'
-             ? userData.affiliateCodeExpiry.toDate()
-             : userData.affiliateCodeExpiry)
-          : undefined;
-        
-        users.value.push({
-          ...userData,
-          createdAt,
-          affiliateCodeExpiry
-        } as User);
+        // Usar função utilitária para processar documentos
+        users.value.push(processFirestoreDocument<User>(doc));
       });
       
     } catch (err: any) {
@@ -90,23 +77,8 @@ export const useUserStore = defineStore('users', () => {
       const userDoc = await getDoc(userDocRef);
       
       if (userDoc.exists()) {
-        const userData = userDoc.data();
-        
-        // Verificar e converter todos os possíveis campos de data
-        const createdAt = userData.createdAt?.toDate ? userData.createdAt.toDate() : new Date();
-        
-        // Verificar o campo affiliateCodeExpiry especificamente
-        const affiliateCodeExpiry = userData.affiliateCodeExpiry 
-          ? (typeof userData.affiliateCodeExpiry.toDate === 'function'
-             ? userData.affiliateCodeExpiry.toDate()
-             : userData.affiliateCodeExpiry)
-          : undefined;
-        
-        return {
-          ...userData,
-          createdAt,
-          affiliateCodeExpiry
-        } as User;
+        // Usar função utilitária para processar o documento
+        return processFirestoreDocument<User>(userDoc);
       } else {
         error.value = 'Usuário não encontrado.';
         return null;
@@ -133,12 +105,8 @@ export const useUserStore = defineStore('users', () => {
       const filteredUsers: User[] = [];
       
       querySnapshot.forEach(doc => {
-        const userData = doc.data();
-        const createdAt = userData.createdAt?.toDate ? userData.createdAt.toDate() : new Date();
-        filteredUsers.push({
-          ...userData,
-          createdAt
-        } as User);
+        // Usar função utilitária para processar documentos
+        filteredUsers.push(processFirestoreDocument<User>(doc));
       });
       
       return filteredUsers;

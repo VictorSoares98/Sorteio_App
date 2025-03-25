@@ -14,6 +14,7 @@ import {
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 import { type User, UserRole } from '../types/user';
+import { convertTimestampsInObject } from '../utils/firebaseUtils';
 
 export const useAuthStore = defineStore('auth', () => {
   const currentUser = ref<User | null>(null);
@@ -213,25 +214,16 @@ export const useAuthStore = defineStore('auth', () => {
       if (userDoc.exists()) {
         const userData = userDoc.data();
         
-        // Converter timestamp para Date
-        const createdAt = userData.createdAt?.toDate ? userData.createdAt.toDate() : new Date();
-        
-        // Verificar o campo affiliateCodeExpiry especificamente
-        const affiliateCodeExpiry = userData.affiliateCodeExpiry 
-          ? (typeof userData.affiliateCodeExpiry.toDate === 'function'
-             ? userData.affiliateCodeExpiry.toDate()
-             : userData.affiliateCodeExpiry)
-          : undefined;
+        // Converter todos os timestamps no objeto usando a função utilitária
+        const processedData = convertTimestampsInObject(userData);
         
         // IMPORTANTE: Preservar referência a firebaseUser antes de atualizar currentUser
         const currentFirebaseUser = firebaseUser.value;
         
         // Atualizar o usuário com todos os dados, incluindo datas convertidas corretamente
         currentUser.value = {
-          ...userData,
+          ...processedData,
           id: currentFirebaseUser.uid,
-          createdAt,
-          affiliateCodeExpiry
         } as User;
         
         console.log('[AuthStore] Dados do usuário atualizados com sucesso');

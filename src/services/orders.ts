@@ -1,8 +1,9 @@
-import { collection, query, where, getDocs, doc, getDoc, setDoc, serverTimestamp, orderBy, updateDoc, Timestamp } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, getDoc, setDoc, serverTimestamp, orderBy, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { PaymentMethod, type Order, type OrderFormData } from '../types/order';
 import { generateDocumentId } from '../utils/formatters';
 import * as raffleService from './raffleNumbers';
+import { timestampToDate, processFirestoreDocument } from '../utils/firebaseUtils';
 
 export const fetchUserOrders = async (userId: string): Promise<Order[]> => {
   try {
@@ -30,25 +31,12 @@ export const fetchUserOrders = async (userId: string): Promise<Order[]> => {
     const orderDocs = new Set([...snapshot1.docs, ...snapshot2.docs]);
     const orders: Order[] = [];
     
-    // Processar todos os documentos
+    // Processar todos os documentos usando as funções utilitárias
     orderDocs.forEach((doc) => {
       const data = doc.data();
       
-      // Verificação mais detalhada da conversão de timestamp
-      let createdAt: Date;
-      if (data.createdAt) {
-        if (data.createdAt instanceof Timestamp) {
-          createdAt = data.createdAt.toDate();
-        } else if (data.createdAt.toDate && typeof data.createdAt.toDate === 'function') {
-          createdAt = data.createdAt.toDate();
-        } else if (data.createdAt.seconds) {
-          createdAt = new Date(data.createdAt.seconds * 1000);
-        } else {
-          createdAt = new Date();
-        }
-      } else {
-        createdAt = new Date();
-      }
+      // Substituir código redundante por chamada à função utilitária
+      const createdAt = timestampToDate(data.createdAt);
       
       // Garantir que generatedNumbers é sempre um array
       const generatedNumbers = Array.isArray(data.generatedNumbers) ? 
@@ -87,13 +75,8 @@ export const fetchOrderById = async (orderId: string): Promise<Order | null> => 
       return null;
     }
     
-    const data = orderDoc.data();
-    const createdAt = data.createdAt?.toDate ? data.createdAt.toDate() : new Date();
-    
-    return {
-      ...data,
-      createdAt
-    } as Order;
+    // Usar função utilitária para converter o documento com timestamps
+    return processFirestoreDocument<Order>(orderDoc);
     
   } catch (error) {
     console.error('Erro ao buscar pedido:', error);
@@ -238,13 +221,8 @@ export const syncOrdersWithServer = async (localOrders: Order[], userId: string)
     const newOrders: Order[] = [];
     
     querySnapshot.forEach((doc) => {
-      const data = doc.data();
-      const createdAt = data.createdAt?.toDate ? data.createdAt.toDate() : new Date();
-      
-      newOrders.push({
-        ...data,
-        createdAt
-      } as Order);
+      // Usar função utilitária para processar o documento
+      newOrders.push(processFirestoreDocument<Order>(doc));
     });
     
     // Combinar pedidos antigos com novos e ordenar
@@ -271,13 +249,8 @@ export const findOrdersByNumber = async (number: string): Promise<Order[]> => {
       if (data.generatedNumbers && Array.isArray(data.generatedNumbers) && 
           data.generatedNumbers.includes(number)) {
         
-        // Converter timestamp para Date
-        const createdAt = data.createdAt?.toDate ? data.createdAt.toDate() : new Date();
-        
-        orders.push({
-          ...data,
-          createdAt
-        } as Order);
+        // Usar função utilitária para processar o documento
+        orders.push(processFirestoreDocument<Order>(doc));
       }
     });
     

@@ -4,6 +4,7 @@ import { useAffiliateCode } from '../../composables/useAffiliateCode';
 import Card from '../ui/Card.vue';
 import Alert from '../ui/Alert.vue';
 import Button from '../ui/Button.vue';
+import { timestampToDate } from '../../utils/firebaseUtils';
 
 // Hooks
 const { 
@@ -35,10 +36,8 @@ const affiliateLink = computed(() => {
 const codeExpiry = computed(() => {
   if (!currentUser.value?.affiliateCodeExpiry) return null;
   
-  const expiry = currentUser.value.affiliateCodeExpiry;
-  return 'toDate' in expiry && typeof expiry.toDate === 'function'
-    ? expiry.toDate() 
-    : expiry;
+  // Substituir a implementação manual pela função utilitária
+  return timestampToDate(currentUser.value.affiliateCodeExpiry);
 });
 
 const isCodeValid = computed(() => {
@@ -50,11 +49,8 @@ const timeRemaining = computed(() => {
   if (!codeExpiry.value) return '';
   
   const now = new Date();
-  const expiryDate = codeExpiry.value instanceof Date ? 
-    codeExpiry.value : 
-    new Date(codeExpiry.value.seconds * 1000);
-  
-  const diffMs = expiryDate.getTime() - now.getTime();
+  // Não precisamos mais converter o timestamp pois codeExpiry já é um Date
+  const diffMs = codeExpiry.value.getTime() - now.getTime();
   const diffMinutes = Math.round(diffMs / 60000);
   
   if (diffMinutes <= 0) return 'Expirado';

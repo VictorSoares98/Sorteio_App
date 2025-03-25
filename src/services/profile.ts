@@ -1,6 +1,7 @@
 import { doc, updateDoc, getDoc, query, where, collection, getDocs, arrayUnion, Timestamp, runTransaction } from 'firebase/firestore';
 import { db } from '../firebase';
 import { UserRole, type User, type AffiliationResponse } from '../types/user';
+import { processFirestoreDocument } from '../utils/firebaseUtils';
 
 /**
  * Gera um código de afiliado aleatório
@@ -301,13 +302,9 @@ export const findUserByAffiliateCode = async (code: string): Promise<User | null
       return null;
     }
     
-    const userData = querySnapshot.docs[0].data();
-    const createdAt = userData.createdAt?.toDate ? userData.createdAt.toDate() : new Date();
+    // Usar a função utilitária processFirestoreDocument
+    return processFirestoreDocument<User>(querySnapshot.docs[0]);
     
-    return {
-      ...userData,
-      createdAt
-    } as User;
   } catch (error) {
     console.error('Erro ao buscar usuário por código de afiliado:', error);
     return null;
@@ -327,13 +324,9 @@ export const findUserByUsername = async (username: string): Promise<User | null>
       return null;
     }
     
-    const userData = querySnapshot.docs[0].data();
-    const createdAt = userData.createdAt?.toDate ? userData.createdAt.toDate() : new Date();
+    // Usar a função utilitária processFirestoreDocument
+    return processFirestoreDocument<User>(querySnapshot.docs[0]);
     
-    return {
-      ...userData,
-      createdAt
-    } as User;
   } catch (error) {
     console.error('Erro ao buscar usuário por username:', error);
     return null;
@@ -364,14 +357,8 @@ export const getAffiliatedUsers = async (userId: string): Promise<User[]> => {
     for (const id of affiliateIds) {
       const affiliateSnap = await getDoc(doc(db, 'users', id));
       if (affiliateSnap.exists()) {
-        const data = affiliateSnap.data();
-        const createdAt = data.createdAt?.toDate ? data.createdAt.toDate() : new Date();
-        
-        affiliates.push({
-          ...data,
-          id: affiliateSnap.id,
-          createdAt
-        } as User);
+        // Usar a função utilitária processFirestoreDocument
+        affiliates.push(processFirestoreDocument<User>(affiliateSnap));
       }
     }
     

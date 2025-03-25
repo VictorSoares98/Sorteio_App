@@ -2,6 +2,7 @@ import { ref, computed } from 'vue';
 import { useAuthStore } from '../stores/authStore';
 import type { User, AffiliationResponse } from '../types/user';
 import * as profileService from '../services/profile';
+import { timestampToDate } from '../utils/firebaseUtils';
 
 export function useAffiliateCode() {
   const authStore = useAuthStore();
@@ -16,11 +17,20 @@ export function useAffiliateCode() {
   const codeExpiry = computed(() => {
     if (!currentUser.value?.affiliateCodeExpiry) return null;
     
-    // Verificar se temos um Timestamp do Firebase ou uma Date normal
-    const expiry = currentUser.value.affiliateCodeExpiry;
-    return 'toDate' in expiry && typeof expiry.toDate === 'function'
-      ? expiry.toDate()
-      : expiry;
+    // Substituir a lógica condicional pela função utilitária
+    return timestampToDate(currentUser.value.affiliateCodeExpiry);
+  });
+  
+  const timeRemaining = computed(() => {
+    if (!codeExpiry.value) return '';
+    
+    const now = new Date();
+    // Não precisamos mais deste tratamento específico, já que codeExpiry já é um Date
+    const diffMs = codeExpiry.value.getTime() - now.getTime();
+    const diffMinutes = Math.round(diffMs / 60000);
+    
+    if (diffMinutes <= 0) return 'Expirado';
+    return `${diffMinutes} min restantes`;
   });
   
   // Gerar código temporário de afiliado
@@ -175,6 +185,7 @@ export function useAffiliateCode() {
     affiliateToUser: affiliateToUser, // Para evitar conflito de nome
     fetchAffiliatedUsers,
     checkAffiliateCode,
-    codeExpiry
+    codeExpiry,
+    timeRemaining
   };
 }
