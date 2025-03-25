@@ -266,6 +266,8 @@ export const useAuthStore = defineStore('auth', () => {
       } catch (err) {
         console.error('Erro no listener de autenticação:', err);
         error.value = 'Erro ao verificar autenticação.';
+        // CORREÇÃO: Não devemos definir currentUser como null em caso de erro
+        // Isso poderia causar logout indesejado
       } finally {
         loading.value = false;
       }

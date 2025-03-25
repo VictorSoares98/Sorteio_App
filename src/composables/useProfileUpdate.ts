@@ -1,9 +1,9 @@
 import { ref, computed } from 'vue';
 import { updateProfile } from 'firebase/auth';
-import { doc, updateDoc } from 'firebase/firestore';
-import { auth, db } from '../firebase';
+import { auth } from '../firebase';
 import { useAuthStore } from '../stores/authStore';
 import type { User } from '../types/user';
+import { safeUpdate } from '../utils/safeUpdate';
 
 export function useProfileUpdate() {
   const authStore = useAuthStore();
@@ -55,20 +55,33 @@ export function useProfileUpdate() {
         displayName: profileFormData.value.displayName
       });
       
-      // Atualizar dados no Firestore (incluindo username)
-      const userRef = doc(db, 'users', currentUser.value.id);
-      await updateDoc(userRef, {
-        displayName: profileFormData.value.displayName,
-        username: profileFormData.value.username,
-        congregation: profileFormData.value.congregation,
-        phone: profileFormData.value.phone
-      });
+      // MODIFICADO: Usar safeUpdate para maior resiliência ao atualizar dados
+      const success = await safeUpdate(
+        'users', 
+        currentUser.value.id,
+        {
+          displayName: profileFormData.value.displayName,
+          username: profileFormData.value.username,
+          congregation: profileFormData.value.congregation,
+          phone: profileFormData.value.phone
+        },
+        {
+          maxRetries: 3,
+          onError: (err) => {
+            console.error('Erro ao atualizar perfil após tentativas:', err);
+            error.value = 'Erro ao atualizar perfil após múltiplas tentativas. Tente novamente mais tarde.';
+          }
+        }
+      );
       
-      // Atualizar store local
-      await authStore.fetchUserData();
-      updateSuccess.value = true;
-      
-      return true;
+      if (success) {
+        // Atualizar store local
+        await authStore.fetchUserData();
+        updateSuccess.value = true;
+        return true;
+      } else {
+        return false;
+      }
     } catch (err: any) {
       console.error('Erro ao atualizar perfil:', err);
       error.value = err.message || 'Erro ao atualizar perfil. Tente novamente.';

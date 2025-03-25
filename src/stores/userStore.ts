@@ -67,22 +67,39 @@ export const useUserStore = defineStore('users', () => {
     }
   };
   
+  // Criar um utilitário genérico para buscar documentos por ID (que poderia ser movido para um arquivo de utilitários)
+  const fetchDocumentById = async <T extends Record<string, any>>(
+    collectionName: string,
+    docId: string
+  ): Promise<T | null> => {
+    try {
+      const docRef = doc(db, collectionName, docId);
+      const docSnap = await getDoc(docRef);
+      
+      if (docSnap.exists()) {
+        return processFirestoreDocument<T>(docSnap);
+      }
+      return null;
+    } catch (err) {
+      console.error(`Erro ao buscar documento ${collectionName}/${docId}:`, err);
+      return null;
+    }
+  };
+
   // Buscar usuário individual por ID
   const fetchUserById = async (userId: string) => {
     loading.value = true;
     error.value = null;
     
     try {
-      const userDocRef = doc(db, 'users', userId);
-      const userDoc = await getDoc(userDocRef);
+      const user = await fetchDocumentById<User>('users', userId);
       
-      if (userDoc.exists()) {
-        // Usar função utilitária para processar o documento
-        return processFirestoreDocument<User>(userDoc);
-      } else {
+      if (!user) {
         error.value = 'Usuário não encontrado.';
         return null;
       }
+      
+      return user;
     } catch (err: any) {
       console.error('Erro ao buscar usuário:', err);
       error.value = 'Erro ao carregar dados do usuário.';

@@ -32,6 +32,34 @@ const checkCodeExists = async (code: string): Promise<boolean> => {
 };
 
 /**
+ * Gera um código de afiliado único usando estratégia comum
+ * @param expiryMinutes Define se o código deve ter tempo de expiração, em minutos
+ */
+const generateUniqueAffiliateCode = async (expiryMinutes?: number): Promise<{ 
+  code: string, 
+  expiryDate?: Date 
+}> => {
+  // Gerar um novo código único
+  let code = generateRandomCode();
+  let codeExists = await checkCodeExists(code);
+  
+  // Tentar até encontrar um código único
+  while (codeExists) {
+    code = generateRandomCode();
+    codeExists = await checkCodeExists(code);
+  }
+  
+  // Se foi especificado um tempo de expiração, calcular data
+  let expiryDate: Date | undefined;
+  if (expiryMinutes && expiryMinutes > 0) {
+    expiryDate = new Date();
+    expiryDate.setMinutes(expiryDate.getMinutes() + expiryMinutes);
+  }
+  
+  return { code, expiryDate };
+};
+
+/**
  * Gera um código de afiliado único e o salva no perfil do usuário
  */
 export const generateAffiliateCode = async (userId: string): Promise<string> => {
@@ -51,15 +79,8 @@ export const generateAffiliateCode = async (userId: string): Promise<string> => 
       return userData.affiliateCode;
     }
     
-    // Gerar um novo código único
-    let code = generateRandomCode();
-    let codeExists = await checkCodeExists(code);
-    
-    // Tentar até encontrar um código único
-    while (codeExists) {
-      code = generateRandomCode();
-      codeExists = await checkCodeExists(code);
-    }
+    // Usar função auxiliar para gerar código único
+    const { code } = await generateUniqueAffiliateCode();
     
     // Salvar o código no perfil do usuário
     await updateDoc(userRef, {
@@ -88,24 +109,13 @@ export const generateTemporaryAffiliateCode = async (userId: string): Promise<st
       throw new Error('Usuário não encontrado.');
     }
     
-    // Gerar um novo código único
-    let code = generateRandomCode();
-    let codeExists = await checkCodeExists(code);
-    
-    // Tentar até encontrar um código único
-    while (codeExists) {
-      code = generateRandomCode();
-      codeExists = await checkCodeExists(code);
-    }
-    
-    // Calcular a data de expiração (30 minutos a partir de agora)
-    const expiryDate = new Date();
-    expiryDate.setMinutes(expiryDate.getMinutes() + 30);
+    // Usar função auxiliar para gerar código único com expiração de 30 minutos
+    const { code, expiryDate } = await generateUniqueAffiliateCode(30);
     
     // Salvar o código e sua expiração no perfil do usuário
     await updateDoc(userRef, {
       affiliateCode: code,
-      affiliateCodeExpiry: Timestamp.fromDate(expiryDate)
+      affiliateCodeExpiry: expiryDate ? Timestamp.fromDate(expiryDate) : null
     });
     
     return code;

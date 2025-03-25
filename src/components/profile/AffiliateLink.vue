@@ -4,9 +4,8 @@ import { useAffiliateCode } from '../../composables/useAffiliateCode';
 import Card from '../ui/Card.vue';
 import Alert from '../ui/Alert.vue';
 import Button from '../ui/Button.vue';
-import { timestampToDate } from '../../utils/firebaseUtils';
 
-// Hooks
+// Hooks - usar o composable que já tem toda a lógica necessária
 const { 
   currentUser, 
   loading, 
@@ -15,12 +14,14 @@ const {
   affiliatedUsers,
   generateTemporaryAffiliateCode,
   affiliateToUser,
-  fetchAffiliatedUsers
+  fetchAffiliatedUsers,
+  codeExpiry,       // Usar diretamente do composable
+  timeRemaining     // Usar diretamente do composable
 } = useAffiliateCode();
 
 // Estados
 const copied = ref(false);
-const codeCopied = ref(false); // Novo estado para acompanhar cópia do código
+const codeCopied = ref(false);
 const generating = ref(false);
 const affiliateTarget = ref('');
 const isEmail = ref(false);
@@ -33,28 +34,10 @@ const affiliateLink = computed(() => {
   return `${window.location.origin}?ref=${affiliateCode.value}`;
 });
 
-const codeExpiry = computed(() => {
-  if (!currentUser.value?.affiliateCodeExpiry) return null;
-  
-  // Substituir a implementação manual pela função utilitária
-  return timestampToDate(currentUser.value.affiliateCodeExpiry);
-});
-
+// Usar a propriedade computada do composable 
 const isCodeValid = computed(() => {
   if (!codeExpiry.value) return false;
   return codeExpiry.value > new Date();
-});
-
-const timeRemaining = computed(() => {
-  if (!codeExpiry.value) return '';
-  
-  const now = new Date();
-  // Não precisamos mais converter o timestamp pois codeExpiry já é um Date
-  const diffMs = codeExpiry.value.getTime() - now.getTime();
-  const diffMinutes = Math.round(diffMs / 60000);
-  
-  if (diffMinutes <= 0) return 'Expirado';
-  return `${diffMinutes} min restantes`;
 });
 
 // Gerar código temporário de afiliado

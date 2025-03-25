@@ -17,7 +17,7 @@ export function useAffiliateCode() {
   const codeExpiry = computed(() => {
     if (!currentUser.value?.affiliateCodeExpiry) return null;
     
-    // Substituir a lógica condicional pela função utilitária
+    // Usando a função utilitária para converter timestamp
     return timestampToDate(currentUser.value.affiliateCodeExpiry);
   });
   
@@ -25,7 +25,6 @@ export function useAffiliateCode() {
     if (!codeExpiry.value) return '';
     
     const now = new Date();
-    // Não precisamos mais deste tratamento específico, já que codeExpiry já é um Date
     const diffMs = codeExpiry.value.getTime() - now.getTime();
     const diffMinutes = Math.round(diffMs / 60000);
     
@@ -46,26 +45,22 @@ export function useAffiliateCode() {
     
     try {
       console.log('[useAffiliateCode] Gerando código temporário');
+      // Usar diretamente o serviço sem reimplementar a lógica
       const code = await profileService.generateTemporaryAffiliateCode(currentUser.value.id);
       
       if (!code) {
         throw new Error('Não foi possível gerar o código temporário.');
       }
       
-      // MELHORIA: Atualização segura de dados com timeout
-      console.log('[useAffiliateCode] Código gerado, atualizando dados do usuário');
-      try {
-        setTimeout(async () => {
-          try {
-            await authStore.fetchUserData();
-            console.log('[useAffiliateCode] Dados atualizados após geração do código');
-          } catch (refreshError) {
-            console.error('[useAffiliateCode] Erro ao atualizar dados após gerar código:', refreshError);
-          }
-        }, 500);
-      } catch (updateError) {
-        console.warn('[useAffiliateCode] Erro ao atualizar dados do usuário, mas código foi gerado:', updateError);
-      }
+      // Atualização segura com timeout
+      setTimeout(async () => {
+        try {
+          await authStore.fetchUserData();
+          console.log('[useAffiliateCode] Dados atualizados após geração do código');
+        } catch (refreshError) {
+          console.error('[useAffiliateCode] Erro ao atualizar dados após gerar código:', refreshError);
+        }
+      }, 500);
       
       success.value = 'Código temporário gerado com sucesso! Este código expira em 30 minutos.';
       return code;
@@ -78,8 +73,8 @@ export function useAffiliateCode() {
     }
   };
   
-  // Afiliar-se a outro usuário
-  const affiliateToUser = async (targetIdentifier: string, isEmail: boolean = false): Promise<AffiliationResponse | null> => {
+  // Afiliar-se a outro usuário - simplificado para usar diretamente o serviço
+  const affiliateToUserMethod = async (targetIdentifier: string, isEmail: boolean = false): Promise<AffiliationResponse | null> => {
     if (!currentUser.value) {
       error.value = 'Usuário não está autenticado.';
       return null;
@@ -91,6 +86,7 @@ export function useAffiliateCode() {
     
     try {
       console.log('[useAffiliateCode] Iniciando processo de afiliação');
+      // Usar diretamente o serviço sem reimplementar a lógica
       const response = await profileService.affiliateToUser(
         currentUser.value.id,
         targetIdentifier,
@@ -98,28 +94,14 @@ export function useAffiliateCode() {
       );
       
       if (response.success) {
-        console.log('[useAffiliateCode] Afiliação bem-sucedida, atualizando dados do usuário');
+        console.log('[useAffiliateCode] Afiliação bem-sucedida');
+        // Atualização segura com timeout
+        setTimeout(async () => {
+          await authStore.fetchUserData();
+        }, 500);
         
-        try {
-          // MELHORIA: Usar um timeout para permitir que o Firestore conclua sua sincronização
-          // antes de buscar os dados atualizados
-          setTimeout(async () => {
-            try {
-              await authStore.fetchUserData();
-              console.log('[useAffiliateCode] Dados do usuário atualizados após afiliação');
-            } catch (refreshError) {
-              console.error('[useAffiliateCode] Erro ao atualizar dados após afiliação:', refreshError);
-            }
-          }, 500);
-          
-          success.value = response.message;
-        } catch (updateError) {
-          console.warn('[useAffiliateCode] Erro ao atualizar dados do usuário, mas afiliação foi bem-sucedida:', updateError);
-          // Mesmo com erro na atualização, consideramos a afiliação bem-sucedida
-          success.value = response.message + ' (Recarregue a página para ver as atualizações.)';
-        }
+        success.value = response.message;
       } else {
-        console.warn('[useAffiliateCode] Afiliação falhou:', response.message);
         error.value = response.message;
       }
       
@@ -133,7 +115,7 @@ export function useAffiliateCode() {
     }
   };
   
-  // Buscar usuários afiliados a mim
+  // Função para buscar usuários afiliados
   const fetchAffiliatedUsers = async () => {
     if (!currentUser.value) {
       error.value = 'Usuário não está autenticado.';
@@ -144,10 +126,9 @@ export function useAffiliateCode() {
     error.value = null;
     
     try {
-      console.log('[useAffiliateCode] Buscando afiliados para:', currentUser.value.id);
-      const users = await profileService.getAffiliatedUsers(currentUser.value.id);
-      console.log('[useAffiliateCode] Afiliados encontrados:', users.length);
-      affiliatedUsers.value = users;
+      console.log('[useAffiliateCode] Buscando afiliados');
+      // Usar diretamente o serviço sem reimplementar a lógica
+      affiliatedUsers.value = await profileService.getAffiliatedUsers(currentUser.value.id);
     } catch (err: any) {
       console.error('[useAffiliateCode] Erro ao buscar afiliados:', err);
       error.value = err.message || 'Erro ao buscar usuários afiliados.';
@@ -164,9 +145,10 @@ export function useAffiliateCode() {
     error.value = null;
     
     try {
+      // Usar diretamente o serviço sem reimplementar a lógica
       return await profileService.findUserByAffiliateCode(code);
     } catch (err: any) {
-      console.error('Erro ao verificar código de afiliado:', err);
+      console.error('[useAffiliateCode] Erro ao verificar código:', err);
       error.value = err.message || 'Erro ao verificar código de afiliado.';
       return null;
     } finally {
@@ -182,7 +164,7 @@ export function useAffiliateCode() {
     affiliatedUsers,
     affiliatedToUser,
     generateTemporaryAffiliateCode,
-    affiliateToUser: affiliateToUser, // Para evitar conflito de nome
+    affiliateToUser: affiliateToUserMethod, // Renomeado para evitar conflito
     fetchAffiliatedUsers,
     checkAffiliateCode,
     codeExpiry,

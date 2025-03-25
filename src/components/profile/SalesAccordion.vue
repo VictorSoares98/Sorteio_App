@@ -2,6 +2,7 @@
 import { ref, computed, onMounted } from 'vue';
 import { useOrderStore } from '../../stores/orderStore';
 import { formatDate } from '../../utils/formatters';
+import { calculateTotalSoldNumbers } from '../../utils/orderUtils';
 import Card from '../ui/Card.vue';
 import type { Order } from '../../types/order';
 
@@ -13,15 +14,9 @@ const isReloading = ref(false);
 // Usar diretamente os pedidos ordenados da store
 const orders = computed<Order[]>(() => orderStore.userOrders);
 
-// Calcular o total de números vendidos
+// Calcular o total de números vendidos usando a função utilitária
 const totalNumbersSold = computed(() => {
-  return orders.value.reduce((total, order) => {
-    // Verificar se generatedNumbers existe e é um array
-    if (Array.isArray(order.generatedNumbers)) {
-      return total + order.generatedNumbers.length;
-    }
-    return total;
-  }, 0);
+  return calculateTotalSoldNumbers(orders.value);
 });
 
 // Pesquisa

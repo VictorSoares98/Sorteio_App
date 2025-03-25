@@ -138,27 +138,14 @@ export const createOrder = async (
   }
 };
 
+// Simplificar para usar diretamente as funções do raffleService
 export const fetchAllSoldNumbers = async (): Promise<string[]> => {
-  try {
-    // Usar o serviço raffleService diretamente em vez de reimplementar a função
-    return await raffleService.fetchSoldNumbers();
-  } catch (error) {
-    console.error('Erro ao buscar números vendidos:', error);
-    throw new Error('Não foi possível verificar os números já vendidos.');
-  }
+  return raffleService.fetchSoldNumbers();
 };
 
-/**
- * Verifica se um número está disponível
- */
+// Simplificar para usar diretamente as funções do raffleService
 export const isNumberAvailable = async (number: string): Promise<boolean> => {
-  try {
-    // Usar a implementação do raffleService em vez de duplicar código
-    return await raffleService.isNumberAvailable(number);
-  } catch (error) {
-    console.error('Erro ao verificar disponibilidade do número:', error);
-    throw new Error('Não foi possível verificar se o número está disponível.');
-  }
+  return raffleService.isNumberAvailable(number);
 };
 
 /**
