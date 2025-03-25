@@ -1,3 +1,13 @@
+import { 
+  MAX_AVAILABLE_NUMBERS, 
+  MIN_AVAILABLE_NUMBERS,
+  NUMBER_DIGIT_COUNT, 
+  RESERVATION_EXPIRY_TIME_MS,
+  MAX_NUMBERS_PER_REQUEST,
+  TICKET_NUMBER_PREFIX,
+  FORMAT_WITH_LEADING_ZEROS
+} from '../utils/constants';
+
 export enum PaymentMethod {
   PIX = 'pix',
   DINHEIRO = 'dinheiro'
@@ -56,11 +66,11 @@ export interface LotterySettings {
 
 // Configuração padrão do sorteio
 export const DEFAULT_LOTTERY_SETTINGS: LotterySettings = {
-  maxNumber: 10000,
-  minNumber: 1,
-  digitCount: 5,
-  reservationExpiryTimeMs: 5 * 60 * 1000, // 5 minutos
-  maxTicketsPerOrder: 100,
-  ticketNumberPrefix: '',
-  formatWithLeadingZeros: true
+  maxNumber: MAX_AVAILABLE_NUMBERS,
+  minNumber: MIN_AVAILABLE_NUMBERS,
+  digitCount: NUMBER_DIGIT_COUNT,
+  reservationExpiryTimeMs: RESERVATION_EXPIRY_TIME_MS,
+  maxTicketsPerOrder: MAX_NUMBERS_PER_REQUEST,
+  ticketNumberPrefix: TICKET_NUMBER_PREFIX,
+  formatWithLeadingZeros: FORMAT_WITH_LEADING_ZEROS
 };

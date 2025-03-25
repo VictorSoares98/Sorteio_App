@@ -1,4 +1,9 @@
 import { UserRole } from '../types/user';
+import { 
+  MAX_AVAILABLE_NUMBERS, 
+  MIN_AVAILABLE_NUMBERS, 
+  NUMBER_DIGIT_COUNT 
+} from './constants';
 
 /**
  * Formata o papel do usuário para exibição em português
@@ -79,28 +84,30 @@ export const formatDate = (date: Date, options?: Intl.DateTimeFormatOptions): st
  * Formata número do sorteio com zeros à esquerda
  * Garante que o número tenha exatamente 5 dígitos
  */
-export const formatRaffleNumber = (number: string): string => {
-  // Constantes do sistema de números
-  const MAX_NUMBER = 10000; // Limite máximo de números (10.000)
-  const DIGIT_COUNT = 5;    // Sempre 5 dígitos
+export const formatRaffleNumber = (number: string | number): string => {
+  // Converter para string se for número
+  const strValue = typeof number === 'number' ? number.toString() : number;
   
   // Se o número já tem o formato correto (5 dígitos), apenas retorne
-  if (/^\d{5}$/.test(number)) {
-    return number;
+  if (new RegExp(`^\\d{${NUMBER_DIGIT_COUNT}}$`).test(strValue)) {
+    return strValue;
   }
   
   // Limpa caracteres não numéricos
-  const cleaned = number.replace(/\D/g, '');
+  const cleaned = strValue.replace(/\D/g, '');
   
   // Converter para número e garantir que está no intervalo válido
   const numValue = parseInt(cleaned, 10) || 0;
-  if (numValue < 1 || numValue > MAX_NUMBER) {
-    console.warn(`Número fora do intervalo permitido (1-${MAX_NUMBER}): ${numValue}`);
+  if (numValue < MIN_AVAILABLE_NUMBERS || numValue > MAX_AVAILABLE_NUMBERS) {
+    console.warn(`Número fora do intervalo permitido (${MIN_AVAILABLE_NUMBERS}-${MAX_AVAILABLE_NUMBERS}): ${numValue}`);
     // Mesmo para números inválidos, formatamos para manter a consistência da UI
+    // retornando o número limitado ao intervalo válido
+    const safeValue = Math.max(MIN_AVAILABLE_NUMBERS, Math.min(numValue, MAX_AVAILABLE_NUMBERS));
+    return safeValue.toString().padStart(NUMBER_DIGIT_COUNT, '0');
   }
   
-  // Formata para ter 5 dígitos com zeros à esquerda
-  return cleaned.padStart(DIGIT_COUNT, '0').substring(0, DIGIT_COUNT);
+  // Formata para ter N dígitos com zeros à esquerda
+  return numValue.toString().padStart(NUMBER_DIGIT_COUNT, '0');
 };
 
 /**

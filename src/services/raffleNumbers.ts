@@ -1,14 +1,11 @@
 import { collection, getDocs, query, where, writeBatch, doc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase';
-
-// Constante para definir o limite máximo de números disponíveis no sistema
-const MAX_AVAILABLE_NUMBERS = 10000; // Limite de 10.000 números
-// Constante para definir o número de dígitos para formatação
-const NUMBER_DIGIT_COUNT = 5; // Sempre 5 dígitos
-// Limitar quantidade máxima de números por requisição para evitar abuso
-const MAX_NUMBERS_PER_REQUEST = 100;
-// Adicionar uma camada de segurança com uma semente específica da aplicação
-const APP_SEED = 'UMADRIMC-2023';
+import { 
+  MAX_AVAILABLE_NUMBERS, 
+  NUMBER_DIGIT_COUNT, 
+  MAX_NUMBERS_PER_REQUEST, 
+  APP_SEED 
+} from '../utils/constants';
 
 /**
  * Busca todos os números já vendidos diretamente do Firestore sem usar cache
