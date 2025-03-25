@@ -4,27 +4,87 @@ import { UserRole, type User, type AffiliationResponse } from '../types/user';
 import { processFirestoreDocument } from '../utils/firebaseUtils';
 
 /**
- * Gera um código de afiliado aleatório
+ * Gera um código de afiliado aleatório com melhor segurança
+ * Modificado para usar caracteres mais distinguíveis e adicionar entropia
  */
-const generateRandomCode = () => {
+const generateRandomCode = (): string => {
+  // Removidos caracteres ambíguos como 0/O, 1/I, etc.
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  
+  // Usar Crypto API quando disponível
+  if (typeof window !== 'undefined' && window.crypto && window.crypto.getRandomValues) {
+    const randomValues = new Uint32Array(6);
+    window.crypto.getRandomValues(randomValues);
+    
+    let result = '';
+    for (let i = 0; i < 6; i++) {
+      // Mapear cada valor aleatório para um índice no intervalo de chars
+      const index = randomValues[i] % chars.length;
+      result += chars.charAt(index);
+    }
+    return result;
+  } 
+  
+  // Fallback para método menos seguro, mas com entropia adicional
   let result = '';
+  const timestamp = Date.now().toString();
+  let entropyInput = timestamp;
+  
   for (let i = 0; i < 6; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length));
+    // Adiciona entropia misturando a posição atual com timestamp
+    const seedValue = entropyInput + i.toString();
+    let combinedSeed = 0;
+    
+    // Fisher-Yates para gerar índice mais aleatório
+    for (let j = 0; j < seedValue.length; j++) {
+      combinedSeed = ((combinedSeed << 5) - combinedSeed) + seedValue.charCodeAt(j);
+    }
+    
+    const index = Math.abs(combinedSeed) % chars.length;
+    result += chars.charAt(index);
+    
+    // Atualiza a entrada de entropia para próxima iteração
+    entropyInput = seedValue + result;
   }
+  
   return result;
 };
 
 /**
  * Verifica se um código de afiliado já existe
+ * Otimizado com verificação de códigos expirados
  */
 const checkCodeExists = async (code: string): Promise<boolean> => {
   try {
     const usersRef = collection(db, 'users');
+    
+    // Verificação em duas etapas para melhor eficiência
     const q = query(usersRef, where('affiliateCode', '==', code));
     const querySnapshot = await getDocs(q);
     
-    return !querySnapshot.empty;
+    if (querySnapshot.empty) {
+      return false; // Código não existe
+    }
+    
+    // Se existir, verificar se não está expirado
+    for (const docSnapshot of querySnapshot.docs) {
+      const userData = docSnapshot.data();
+      if (userData.affiliateCodeExpiry) {
+        const expiryDate = userData.affiliateCodeExpiry.toDate();
+        
+        // Se o código existe mas está expirado, pode ser considerado não existente
+        if (expiryDate < new Date()) {
+          continue;
+        }
+      }
+      
+      // Se chegou aqui, o código existe e está válido
+      return true;
+    }
+    
+    // Se todos os códigos encontrados estavam expirados
+    return false;
+    
   } catch (error) {
     console.error('Erro ao verificar existência de código:', error);
     return false;
@@ -32,31 +92,56 @@ const checkCodeExists = async (code: string): Promise<boolean> => {
 };
 
 /**
- * Gera um código de afiliado único usando estratégia comum
+ * Valida o formato do código de afiliado
+ */
+const isValidCodeFormat = (code: string): boolean => {
+  // Modificado para aceitar entrada em minúsculas ou maiúsculas
+  // (o servidor normalizará para maiúsculas antes do processamento)
+  const codeRegex = /^[A-Za-z0-9]{6}$/;
+  return codeRegex.test(code);
+};
+
+/**
+ * Gera um código de afiliado único usando estratégia melhorada
  * @param expiryMinutes Define se o código deve ter tempo de expiração, em minutos
  */
 const generateUniqueAffiliateCode = async (expiryMinutes?: number): Promise<{ 
   code: string, 
   expiryDate?: Date 
 }> => {
-  // Gerar um novo código único
-  let code = generateRandomCode();
-  let codeExists = await checkCodeExists(code);
+  // Número máximo de tentativas para evitar loop infinito
+  const MAX_ATTEMPTS = 10;
+  let attempts = 0;
   
-  // Tentar até encontrar um código único
-  while (codeExists) {
-    code = generateRandomCode();
-    codeExists = await checkCodeExists(code);
+  while (attempts < MAX_ATTEMPTS) {
+    // Gerar um novo código
+    const code = generateRandomCode();
+    
+    // Validar o formato do código
+    if (!isValidCodeFormat(code)) {
+      attempts++;
+      continue;
+    }
+    
+    // Verificar se o código já existe
+    const codeExists = await checkCodeExists(code);
+    
+    if (!codeExists) {
+      // Se foi especificado um tempo de expiração, calcular data
+      let expiryDate: Date | undefined;
+      if (expiryMinutes && expiryMinutes > 0) {
+        expiryDate = new Date();
+        expiryDate.setMinutes(expiryDate.getMinutes() + expiryMinutes);
+      }
+      
+      return { code, expiryDate };
+    }
+    
+    attempts++;
   }
   
-  // Se foi especificado um tempo de expiração, calcular data
-  let expiryDate: Date | undefined;
-  if (expiryMinutes && expiryMinutes > 0) {
-    expiryDate = new Date();
-    expiryDate.setMinutes(expiryDate.getMinutes() + expiryMinutes);
-  }
-  
-  return { code, expiryDate };
+  // Se não conseguiu gerar um código único após várias tentativas
+  throw new Error('Não foi possível gerar um código único. Tente novamente.');
 };
 
 /**
@@ -74,9 +159,19 @@ export const generateAffiliateCode = async (userId: string): Promise<string> => 
     
     const userData = userSnap.data();
     
-    // Se o usuário já tem um código, retorná-lo
+    // Se o usuário já tem um código não expirado, retorná-lo
     if (userData.affiliateCode) {
-      return userData.affiliateCode;
+      // Verificar se o código tem expiração
+      if (userData.affiliateCodeExpiry) {
+        const expiryDate = userData.affiliateCodeExpiry.toDate();
+        if (expiryDate > new Date()) {
+          return userData.affiliateCode;
+        }
+        // Se código expirou, vamos gerar um novo
+      } else {
+        // Se não tem expiração, retornar o código existente
+        return userData.affiliateCode;
+      }
     }
     
     // Usar função auxiliar para gerar código único
@@ -84,7 +179,8 @@ export const generateAffiliateCode = async (userId: string): Promise<string> => 
     
     // Salvar o código no perfil do usuário
     await updateDoc(userRef, {
-      affiliateCode: code
+      affiliateCode: code,
+      affiliateCodeExpiry: null // Código permanente não tem expiração
     });
     
     return code;
@@ -109,6 +205,17 @@ export const generateTemporaryAffiliateCode = async (userId: string): Promise<st
       throw new Error('Usuário não encontrado.');
     }
     
+    // Verificar se já tem um código válido
+    const userData = userSnap.data();
+    if (userData.affiliateCode && userData.affiliateCodeExpiry) {
+      const expiryDate = userData.affiliateCodeExpiry.toDate();
+      if (expiryDate > new Date()) {
+        // Se ainda é válido, retornar o código existente
+        console.log('Código existente ainda válido, retornando-o');
+        return userData.affiliateCode;
+      }
+    }
+    
     // Usar função auxiliar para gerar código único com expiração de 30 minutos
     const { code, expiryDate } = await generateUniqueAffiliateCode(30);
     
@@ -127,6 +234,7 @@ export const generateTemporaryAffiliateCode = async (userId: string): Promise<st
 
 /**
  * Afilia um usuário a outro usando código ou email
+ * Melhorado para validação mais rigorosa e processamento transacional
  */
 export const affiliateToUser = async (
   userId: string,
@@ -135,6 +243,25 @@ export const affiliateToUser = async (
 ): Promise<AffiliationResponse> => {
   try {
     console.log('[ProfileService] Iniciando processo de afiliação', { userId, targetType: isEmail ? 'email' : 'código' });
+    
+    // Normalizar código para maiúsculas
+    const normalizedIdentifier = isEmail ? targetIdentifier : targetIdentifier.toUpperCase();
+    
+    // Validar o formato do identificador
+    if (!isEmail && !isValidCodeFormat(normalizedIdentifier)) {
+      return {
+        success: false,
+        message: 'Formato de código de afiliação inválido. Deve ter 6 caracteres alfanuméricos.'
+      };
+    }
+    
+    if (isEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedIdentifier)) {
+      return {
+        success: false,
+        message: 'Formato de email inválido.'
+      };
+    }
+    
     // Referência ao usuário que vai ser afiliado
     const userRef = doc(db, 'users', userId);
     const userSnap = await getDoc(userRef);
@@ -158,7 +285,7 @@ export const affiliateToUser = async (
       };
     }
     
-    // NOVA VERIFICAÇÃO: Se já tem afiliados, não pode se afiliar a outra pessoa
+    // Se já tem afiliados, não pode se afiliar a outra pessoa
     if (userData.affiliates && userData.affiliates.length > 0) {
       console.warn('[ProfileService] Usuário com afiliados tentando se afiliar a outro');
       return {
@@ -171,10 +298,10 @@ export const affiliateToUser = async (
     let targetUserQuery;
     if (isEmail) {
       console.log('[ProfileService] Buscando usuário por email');
-      targetUserQuery = query(collection(db, 'users'), where('email', '==', targetIdentifier));
+      targetUserQuery = query(collection(db, 'users'), where('email', '==', normalizedIdentifier));
     } else {
       console.log('[ProfileService] Buscando usuário por código');
-      targetUserQuery = query(collection(db, 'users'), where('affiliateCode', '==', targetIdentifier));
+      targetUserQuery = query(collection(db, 'users'), where('affiliateCode', '==', normalizedIdentifier));
     }
     
     const querySnapshot = await getDocs(targetUserQuery);
@@ -219,21 +346,37 @@ export const affiliateToUser = async (
     }
     
     console.log('[ProfileService] Executando transação de afiliação');
-    // MELHORIA: Usar uma transação para garantir atomicidade
+    
+    // Usar uma transação para garantir atomicidade
+    let transactionSuccess = false;
     await runTransaction(db, async (transaction) => {
-      // 1. Atualizar o usuário com o link de afiliação
+      // 1. Verificar status atual do usuário
+      const userDoc = await transaction.get(userRef);
+      if (!userDoc.exists()) {
+        throw new Error('Usuário não encontrado durante a transação.');
+      }
+      
+      const currentUserData = userDoc.data();
+      if (currentUserData.affiliatedTo) {
+        throw new Error('Usuário já possui afiliação.');
+      }
+      
+      // 2. Verificar status atual do usuário alvo
+      const targetRef = doc(db, 'users', targetUserId);
+      const targetDoc = await transaction.get(targetRef);
+      
+      if (!targetDoc.exists()) {
+        throw new Error('Usuário alvo não encontrado durante a transação.');
+      }
+      
+      // 3. Atualizar o usuário com o link de afiliação
       transaction.update(userRef, {
-        affiliatedTo: targetUserId
+        affiliatedTo: targetUserData.displayName,
+        affiliatedToId: targetUserId
       });
       
-      // 2. Adicionar o usuário à lista de afiliados do alvo
-      const targetRef = doc(db, 'users', targetUserId);
-      
-      // Primeiro ler o documento para garantir dados atualizados
-      const targetDocSnap = await transaction.get(targetRef);
-      const currentAffiliates = targetDocSnap.exists() 
-        ? targetDocSnap.data().affiliates || [] 
-        : [];
+      // 4. Adicionar o usuário à lista de afiliados do alvo
+      const currentAffiliates = targetDoc.data().affiliates || [];
       
       if (!currentAffiliates.includes(userId)) {
         transaction.update(targetRef, {
@@ -241,26 +384,32 @@ export const affiliateToUser = async (
         });
       }
       
-      // 3. Se o usuário alvo não é ADMIN, promovê-lo
-      if (targetDocSnap.exists() && targetDocSnap.data().role === UserRole.USER) {
+      // 5. Se o usuário alvo não é ADMIN, promovê-lo
+      if (targetDoc.data().role === UserRole.USER) {
         transaction.update(targetRef, {
           role: UserRole.ADMIN
         });
       }
+      
+      transactionSuccess = true;
     });
     
-    // Atualizar o usuário atual para indicar que está afiliado ao alvo
-    // Armazenar mais informações sobre o afiliador
+    if (!transactionSuccess) {
+      return {
+        success: false,
+        message: 'Erro durante o processo de afiliação. Tente novamente.'
+      };
+    }
+    
+    // 6. Atualizar informações de afiliação no perfil do usuário
     await updateDoc(doc(db, 'users', userId), {
-      affiliatedTo: targetUserData.displayName,
-      affiliatedToId: targetUserId,
       affiliatedToEmail: targetUserData.email,
       affiliatedToInfo: {
         id: targetUserId,
         displayName: targetUserData.displayName,
         email: targetUserData.email,
         congregation: targetUserData.congregation || '',
-        photoURL: targetUserData.photoURL || '' // Agora é seguro usar esta propriedade
+        photoURL: targetUserData.photoURL || ''
       }
     });
 

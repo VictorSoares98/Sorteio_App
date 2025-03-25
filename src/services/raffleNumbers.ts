@@ -2,30 +2,90 @@ import { collection, getDocs, query, where, writeBatch, doc, serverTimestamp, se
 import { db } from '../firebase';
 import { 
   MAX_AVAILABLE_NUMBERS, 
+  MIN_AVAILABLE_NUMBERS,
   NUMBER_DIGIT_COUNT, 
   MAX_NUMBERS_PER_REQUEST, 
   APP_SEED 
 } from '../utils/constants';
 
 /**
- * Busca todos os números já vendidos diretamente do Firestore sem usar cache
+ * Função base para buscar números vendidos com ou sem filtros
+ * Este é um utilitário interno que consolida a lógica comum
  */
-export const fetchSoldNumbers = async (): Promise<string[]> => {
+const fetchSoldNumbersBase = async (
+  filters?: { 
+    afterDate?: Date, 
+    limit?: number,
+    sellerId?: string
+  }
+): Promise<string[]> => {
   try {
-    // Otimização: agora estamos usando query para a consulta
-    const ordersRef = collection(db, 'orders');
-    // Consulta básica sem filtros, mas usando a estrutura query
-    const ordersQuery = query(ordersRef);
+    // Iniciar construção da query base
+    let ordersRef = collection(db, 'orders');
+    let ordersQuery = query(ordersRef);
+    
+    // Adicionar filtros condicionalmente
+    if (filters) {
+      const conditions = [];
+      
+      if (filters.afterDate) {
+        conditions.push(where('createdAt', '>', filters.afterDate));
+      }
+      
+      if (filters.sellerId) {
+        // Verificar tanto sellerId quanto originalSellerId
+        // Este é um caso especial que precisa de OR lógico
+        const sellerQuery1 = query(ordersRef, where('sellerId', '==', filters.sellerId));
+        const sellerQuery2 = query(ordersRef, where('originalSellerId', '==', filters.sellerId));
+
+        // Executar ambas as consultas
+        const [snapshot1, snapshot2] = await Promise.all([
+          getDocs(sellerQuery1),
+          getDocs(sellerQuery2)
+        ]);
+        
+        // Combinar e processar resultados
+        const docs = [...snapshot1.docs, ...snapshot2.docs];
+        const soldNumbers: string[] = [];
+        
+        docs.forEach(doc => {
+          const orderData = doc.data();
+          if (orderData.generatedNumbers && Array.isArray(orderData.generatedNumbers)) {
+            soldNumbers.push(...orderData.generatedNumbers);
+          }
+        });
+        
+        // Aplicar limit se especificado
+        if (filters.limit && soldNumbers.length > filters.limit) {
+          return soldNumbers.slice(0, filters.limit);
+        }
+        
+        return soldNumbers;
+      }
+      
+      // Construir query composta se temos condições adicionais
+      if (conditions.length > 0) {
+        ordersQuery = query(ordersRef, ...conditions);
+      }
+    }
+    
+    // Executar a consulta
     const ordersSnapshot = await getDocs(ordersQuery);
     
     const soldNumbers: string[] = [];
     
+    // Processar resultados da consulta
     ordersSnapshot.forEach((doc) => {
       const orderData = doc.data();
       if (orderData.generatedNumbers && Array.isArray(orderData.generatedNumbers)) {
         soldNumbers.push(...orderData.generatedNumbers);
       }
     });
+    
+    // Aplicar limit se especificado
+    if (filters?.limit && soldNumbers.length > filters.limit) {
+      return soldNumbers.slice(0, filters.limit);
+    }
     
     return soldNumbers;
   } catch (err) {
@@ -35,76 +95,57 @@ export const fetchSoldNumbers = async (): Promise<string[]> => {
 };
 
 /**
+ * Busca todos os números já vendidos diretamente do Firestore sem usar cache
+ */
+export const fetchSoldNumbers = async (): Promise<string[]> => {
+  return fetchSoldNumbersBase();
+};
+
+/**
  * Busca números vendidos com filtros específicos, como por data
- * Esta função demonstra o uso adequado de query e where
  */
 export const fetchSoldNumbersWithFilters = async (
   afterDate?: Date,
-  limit?: number
+  limit?: number,
+  sellerId?: string
 ): Promise<string[]> => {
-  try {
-    const ordersRef = collection(db, 'orders');
-    
-    // Construir a consulta com filtros condicionais
-    let ordersQuery = query(ordersRef);
-    
-    // Adicionar filtro de data se especificado
-    if (afterDate) {
-      ordersQuery = query(
-        ordersRef,
-        where('createdAt', '>', afterDate)
-      );
-    }
-    
-    const ordersSnapshot = await getDocs(ordersQuery);
-    const soldNumbers: string[] = [];
-    
-    // Processar os documentos retornados
-    ordersSnapshot.forEach((doc) => {
-      const orderData = doc.data();
-      if (orderData.generatedNumbers && Array.isArray(orderData.generatedNumbers)) {
-        // Limitar a quantidade se necessário
-        const numbersToAdd = limit ? 
-          orderData.generatedNumbers.slice(0, limit - soldNumbers.length) : 
-          orderData.generatedNumbers;
-          
-        soldNumbers.push(...numbersToAdd);
-        
-        // Parar de processar se atingirmos o limite
-        if (limit && soldNumbers.length >= limit) return;
-      }
-    });
-    
-    return soldNumbers;
-  } catch (err) {
-    console.error('Erro ao buscar números vendidos com filtros:', err);
-    throw new Error('Não foi possível verificar os números já vendidos com os filtros especificados.');
-  }
+  return fetchSoldNumbersBase({ afterDate, limit, sellerId });
 };
 
 /**
  * Gera um número formatado com zeros à esquerda
- * @param totalNumbers Total de números disponíveis
+ * Implementação melhorada com mais entropia
  */
-export const generateFormattedNumber = (totalNumbers = MAX_AVAILABLE_NUMBERS): string => {
-  // Adicionar entropia extra ao gerador
-  const timestamp = Date.now();
-  const randomSeed = timestamp ^ (Math.random() * 10000000);
+export const generateFormattedNumber = (): string => {
+  // Usando crypto se disponível para melhor aleatoriedade
+  let randomValue: number;
   
-  // Combinar com a semente da aplicação para melhor distribuição
-  const combinedSeed = APP_SEED + randomSeed.toString();
-  
-  // Algoritmo Fisher-Yates para gerar número com melhor entropia
-  let hash = 0;
-  for (let i = 0; i < combinedSeed.length; i++) {
-    hash = ((hash << 5) - hash) + combinedSeed.charCodeAt(i);
-    hash = hash & hash; // Converter para inteiro 32 bits
+  if (typeof window !== 'undefined' && window.crypto && window.crypto.getRandomValues) {
+    const array = new Uint32Array(1);
+    window.crypto.getRandomValues(array);
+    randomValue = array[0];
+  } else {
+    // Adicionar entropia extra ao gerador se crypto não está disponível
+    const timestamp = Date.now();
+    const randomSeed = timestamp ^ (Math.random() * 10000000);
+    
+    // Combinar com a semente da aplicação para melhor distribuição
+    const combinedSeed = APP_SEED + randomSeed.toString();
+    
+    // Algoritmo Fisher-Yates para gerar número com melhor entropia
+    let hash = 0;
+    for (let i = 0; i < combinedSeed.length; i++) {
+      hash = ((hash << 5) - hash) + combinedSeed.charCodeAt(i);
+      hash = hash & hash; // Converter para inteiro 32 bits
+    }
+    
+    randomValue = Math.abs(hash);
   }
   
-  // Garantir número positivo e dentro da faixa (1 a 10000)
-  const randomNum = Math.abs(hash % totalNumbers) + 1;
+  // Garantir número positivo e dentro da faixa (MIN a MAX)
+  const randomNum = (randomValue % (MAX_AVAILABLE_NUMBERS - MIN_AVAILABLE_NUMBERS + 1)) + MIN_AVAILABLE_NUMBERS;
   
-  // Formatar para ter exatamente 5 dígitos com zeros à esquerda
+  // Formatar para ter exatamente o número correto de dígitos com zeros à esquerda
   return randomNum.toString().padStart(NUMBER_DIGIT_COUNT, '0');
 };
 
@@ -114,23 +155,23 @@ export const generateFormattedNumber = (totalNumbers = MAX_AVAILABLE_NUMBERS): s
  * @returns Verdadeiro se o número está no formato correto
  */
 export const isValidNumberFormat = (number: string): boolean => {
-  // Verificar se é uma string de exatamente 5 dígitos numéricos
-  const validFormatRegex = /^\d{5}$/;
+  // Verificar se é uma string de exatamente o número correto de dígitos numéricos
+  const validFormatRegex = new RegExp(`^\\d{${NUMBER_DIGIT_COUNT}}$`);
   
-  // Verificar se está dentro do intervalo permitido (00001 a 10000)
+  // Verificar se está dentro do intervalo permitido
   const numericValue = parseInt(number, 10);
   
   return (
     validFormatRegex.test(number) && 
-    numericValue >= 1 && 
+    numericValue >= MIN_AVAILABLE_NUMBERS && 
     numericValue <= MAX_AVAILABLE_NUMBERS
   );
 };
 
 /**
- * Formata um número para o padrão do sorteio (5 dígitos)
+ * Formata um número para o padrão do sorteio
  * @param number Número a ser formatado
- * @returns Número formatado com 5 dígitos
+ * @returns Número formatado com zeros à esquerda
  */
 export const formatRaffleNumber = (number: string | number): string => {
   const numStr = typeof number === 'number' ? number.toString() : number;
@@ -140,16 +181,16 @@ export const formatRaffleNumber = (number: string | number): string => {
   
   // Converter para número e garantir que está no intervalo válido
   const numericValue = parseInt(cleaned, 10) || 0;
-  if (numericValue < 1 || numericValue > MAX_AVAILABLE_NUMBERS) {
-    throw new Error(`Número fora do intervalo permitido (1-${MAX_AVAILABLE_NUMBERS}): ${numericValue}`);
+  if (numericValue < MIN_AVAILABLE_NUMBERS || numericValue > MAX_AVAILABLE_NUMBERS) {
+    throw new Error(`Número fora do intervalo permitido (${MIN_AVAILABLE_NUMBERS}-${MAX_AVAILABLE_NUMBERS}): ${numericValue}`);
   }
   
-  // Formatar para ter exatamente 5 dígitos com zeros à esquerda
+  // Formatar para ter exatamente o número correto de dígitos com zeros à esquerda
   return numericValue.toString().padStart(NUMBER_DIGIT_COUNT, '0');
 };
 
 /**
- * Gera múltiplos números únicos de forma simplificada
+ * Gera múltiplos números únicos de forma segura e eficiente
  * @param count Quantidade de números a gerar
  */
 export const generateUniqueNumbers = async (count: number): Promise<string[]> => {
@@ -175,9 +216,9 @@ export const generateUniqueNumbers = async (count: number): Promise<string[]> =>
   const soldNumbersSet = new Set(soldNumbers);
   const generatedNumbers = new Set<string>();
   
-  // Tentar gerar números únicos
+  // Tentar gerar números únicos com limite de tentativas adaptativo
   let attempts = 0;
-  const maxAttempts = count * 10; // Limite razoável de tentativas
+  const maxAttempts = Math.min(count * 10, MAX_AVAILABLE_NUMBERS); // Limite razoável e adaptativo
   
   while (generatedNumbers.size < count && attempts < maxAttempts) {
     const newNumber = generateFormattedNumber();
@@ -188,6 +229,34 @@ export const generateUniqueNumbers = async (count: number): Promise<string[]> =>
     }
     
     attempts++;
+    
+    // Se estivermos com muitas tentativas sem sucesso, estratégia alternativa
+    if (attempts > count * 5 && generatedNumbers.size < count / 2) {
+      // Abordagem diferente: gerar sequencialmente a partir de um número aleatório
+      const startingPoint = Math.floor(Math.random() * MAX_AVAILABLE_NUMBERS) + 1;
+      let currentNumber = startingPoint;
+      
+      // Buscar sequencialmente até o final
+      while (generatedNumbers.size < count && currentNumber <= MAX_AVAILABLE_NUMBERS) {
+        const formattedNum = currentNumber.toString().padStart(NUMBER_DIGIT_COUNT, '0');
+        if (!soldNumbersSet.has(formattedNum) && !generatedNumbers.has(formattedNum)) {
+          generatedNumbers.add(formattedNum);
+        }
+        currentNumber++;
+      }
+      
+      // Se ainda precisamos de mais números, começar do 1
+      currentNumber = 1;
+      while (generatedNumbers.size < count && currentNumber < startingPoint) {
+        const formattedNum = currentNumber.toString().padStart(NUMBER_DIGIT_COUNT, '0');
+        if (!soldNumbersSet.has(formattedNum) && !generatedNumbers.has(formattedNum)) {
+          generatedNumbers.add(formattedNum);
+        }
+        currentNumber++;
+      }
+      
+      break; // Sair do loop principal
+    }
   }
   
   // Verificar se conseguimos gerar todos os números necessários
@@ -206,6 +275,11 @@ export const generateUniqueNumbers = async (count: number): Promise<string[]> =>
  * Verifica se um número está disponível
  */
 export const isNumberAvailable = async (number: string): Promise<boolean> => {
+  // Validar formato do número primeiro
+  if (!isValidNumberFormat(number)) {
+    throw new Error(`Formato de número inválido: ${number}`);
+  }
+  
   // Verificar se o número já foi vendido
   const soldNumbers = await fetchSoldNumbers();
   return !soldNumbers.includes(number);
@@ -231,24 +305,40 @@ export const getAvailableNumbersCount = async (): Promise<number> => {
 };
 
 /**
- * Inicializa a coleção de números disponíveis
+ * Implementação otimizada para inicializar a coleção de números disponíveis
  * Esta função cria uma referência de todos os números disponíveis no sistema
  */
 export const initAvailableNumbersCollection = async (): Promise<void> => {
   try {
-    // 1. Buscar números já vendidos
+    // 1. Buscar números já vendidos (utilizando função base já existente)
     const soldNumbers = await fetchSoldNumbers();
     const soldSet = new Set(soldNumbers);
     
-    // 2. Criar uma coleção temporária no Firestore para rastrear disponíveis
+    console.log(`Iniciando geração de ${MAX_AVAILABLE_NUMBERS - soldSet.size} números disponíveis`);
+    
+    // 2. Criar referência à coleção de disponíveis
     const availableRef = collection(db, 'available_numbers');
     
-    // 3. Adicionar todos os números disponíveis em batches (máximo 500 por batch)
+    // 3. Processar em batches com tamanho ótimo para Firestore
+    const BATCH_SIZE = 500; // Máximo recomendado pelo Firestore
     let batchCount = 0;
     let currentBatch = writeBatch(db);
+    let processedCount = 0;
     
-    // Criar registro para cada número disponível
-    for (let i = 1; i <= MAX_AVAILABLE_NUMBERS; i++) {
+    // Função auxiliar para commitar batch atual e criar nova
+    const commitAndCreateNewBatch = async () => {
+      await currentBatch.commit();
+      currentBatch = writeBatch(db);
+      batchCount = 0;
+      
+      // Pequena pausa para evitar sobrecarregar o Firestore
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      console.log(`Processados ${processedCount} números`);
+    };
+    
+    // 4. Usar abordagem de incremento para processar apenas números disponíveis
+    for (let i = MIN_AVAILABLE_NUMBERS; i <= MAX_AVAILABLE_NUMBERS; i++) {
       const formattedNumber = i.toString().padStart(NUMBER_DIGIT_COUNT, '0');
       
       // Pular números já vendidos
@@ -265,15 +355,11 @@ export const initAvailableNumbersCollection = async (): Promise<void> => {
       });
       
       batchCount++;
+      processedCount++;
       
       // Se atingir o limite de batch, comitar e criar novo
-      if (batchCount >= 500) {
-        await currentBatch.commit();
-        currentBatch = writeBatch(db);
-        batchCount = 0;
-        
-        // Pequena pausa para evitar sobrecarregar o Firestore
-        await new Promise(resolve => setTimeout(resolve, 500));
+      if (batchCount >= BATCH_SIZE) {
+        await commitAndCreateNewBatch();
       }
     }
     
@@ -282,14 +368,15 @@ export const initAvailableNumbersCollection = async (): Promise<void> => {
       await currentBatch.commit();
     }
     
-    // 4. Criar um documento de metadata para rastrear última sincronização
+    // 5. Criar um documento de metadata para rastrear última sincronização
     await setDoc(doc(db, 'system', 'numbers_metadata'), {
       lastSync: serverTimestamp(),
       totalAvailable: MAX_AVAILABLE_NUMBERS - soldNumbers.length,
-      totalSold: soldNumbers.length
+      totalSold: soldNumbers.length,
+      updatedAt: serverTimestamp()
     });
     
-    console.log(`Coleção de números disponíveis inicializada com ${MAX_AVAILABLE_NUMBERS - soldNumbers.length} números`);
+    console.log(`✅ Coleção de números disponíveis inicializada com ${MAX_AVAILABLE_NUMBERS - soldNumbers.length} números`);
   } catch (err) {
     console.error('Erro ao inicializar coleção de números disponíveis:', err);
     throw new Error('Não foi possível inicializar o sistema de números.');
@@ -297,36 +384,58 @@ export const initAvailableNumbersCollection = async (): Promise<void> => {
 };
 
 /**
- * Sincroniza a coleção de números disponíveis com os vendidos
+ * Versão otimizada da sincronização de números disponíveis com vendidos
  * Remove os números vendidos da coleção de disponíveis
  */
 export const syncAvailableNumbersWithSoldOnes = async (): Promise<void> => {
   try {
-    // 1. Buscar números já vendidos
+    console.log('Iniciando sincronização de números...');
+    
+    // 1. Buscar números já vendidos usando a função base otimizada
     const soldNumbers = await fetchSoldNumbers();
+    
+    if (soldNumbers.length === 0) {
+      console.log('Nenhum número vendido para sincronizar');
+      
+      // Atualizar metadata mesmo sem mudanças
+      await updateDoc(doc(db, 'system', 'numbers_metadata'), {
+        lastSync: serverTimestamp(),
+        totalAvailable: MAX_AVAILABLE_NUMBERS,
+        totalSold: 0,
+        updatedAt: serverTimestamp()
+      });
+      
+      return;
+    }
+    
+    console.log(`Encontrados ${soldNumbers.length} números vendidos para sincronizar`);
     
     // 2. Referência à coleção de números disponíveis
     const availableRef = collection(db, 'available_numbers');
     
-    // 3. Processar em batches para não sobrecarregar o Firestore
+    // 3. Processar em batches com tamanho ideal
+    const BATCH_SIZE = 500;
     let batchCount = 0;
     let currentBatch = writeBatch(db);
+    let processedCount = 0;
     
-    // Remover cada número vendido da coleção de disponíveis
+    // Processar cada número vendido para remover da lista de disponíveis
     for (const number of soldNumbers) {
       const numRef = doc(availableRef, number);
       currentBatch.delete(numRef);
       
       batchCount++;
+      processedCount++;
       
       // Se atingir o limite de batch, comitar e criar novo
-      if (batchCount >= 500) {
+      if (batchCount >= BATCH_SIZE) {
         await currentBatch.commit();
         currentBatch = writeBatch(db);
         batchCount = 0;
         
         // Pausa para evitar sobrecarregar
         await new Promise(resolve => setTimeout(resolve, 500));
+        console.log(`Processados ${processedCount} números`);
       }
     }
     
@@ -339,10 +448,11 @@ export const syncAvailableNumbersWithSoldOnes = async (): Promise<void> => {
     await updateDoc(doc(db, 'system', 'numbers_metadata'), {
       lastSync: serverTimestamp(),
       totalAvailable: MAX_AVAILABLE_NUMBERS - soldNumbers.length,
-      totalSold: soldNumbers.length
+      totalSold: soldNumbers.length,
+      updatedAt: serverTimestamp()
     });
     
-    console.log(`Sincronização concluída. Removidos ${soldNumbers.length} números vendidos da coleção de disponíveis`);
+    console.log(`✅ Sincronização concluída. Removidos ${soldNumbers.length} números vendidos da coleção de disponíveis`);
   } catch (err) {
     console.error('Erro ao sincronizar números vendidos:', err);
     throw new Error('Não foi possível sincronizar os números vendidos.');

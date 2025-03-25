@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { useAffiliateCode } from '../../composables/useAffiliateCode';
 import Card from '../ui/Card.vue';
 import Alert from '../ui/Alert.vue';
@@ -15,17 +15,19 @@ const {
   generateTemporaryAffiliateCode,
   affiliateToUser,
   fetchAffiliatedUsers,
-  codeExpiry,       // Usar diretamente do composable
-  timeRemaining     // Usar diretamente do composable
+  timeRemaining,
+  isCodeValid,
+  isGeneratingCode,
+  checkCurrentCode
 } = useAffiliateCode();
 
 // Estados
 const copied = ref(false);
 const codeCopied = ref(false);
-const generating = ref(false);
 const affiliateTarget = ref('');
 const isEmail = ref(false);
 const affiliating = ref(false);
+const checkingInterval = ref<number | null>(null);
 
 // Computados
 const affiliateCode = computed(() => currentUser.value?.affiliateCode || null);
@@ -34,43 +36,110 @@ const affiliateLink = computed(() => {
   return `${window.location.origin}?ref=${affiliateCode.value}`;
 });
 
-// Usar a propriedade computada do composable 
-const isCodeValid = computed(() => {
-  if (!codeExpiry.value) return false;
-  return codeExpiry.value > new Date();
+// Verificar regularmente se o código ainda é válido
+const startExpiryCheck = () => {
+  if (checkingInterval.value) {
+    clearInterval(checkingInterval.value);
+  }
+  
+  // Verificar a cada 30 segundos se o código expirou
+  checkingInterval.value = window.setInterval(() => {
+    checkCurrentCode();
+  }, 30000);
+};
+
+// Verificar se o usuário pode se afiliar (não tem afiliados)
+const canAffiliate = computed(() => {
+  if (!currentUser.value) return false;
+  
+  // Se o usuário já está afiliado a alguém, não precisa mostrar esse aviso
+  if (currentUser.value.affiliatedTo) return false;
+  
+  // Se tem afiliados, não pode se afiliar a outra pessoa
+  return !(currentUser.value.affiliates && currentUser.value.affiliates.length > 0);
+});
+
+// Verificar se o usuário já está afiliado a alguém
+const isAlreadyAffiliated = computed(() => {
+  return !!currentUser.value?.affiliatedTo;
+});
+
+// Validar o formato do código/email antes de enviar
+const isValidTarget = computed(() => {
+  if (!affiliateTarget.value) return false;
+  
+  if (isEmail.value) {
+    // Validação básica de email
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(affiliateTarget.value);
+  } else {
+    // Códigos de afiliado têm 6 caracteres alfanuméricos (aceita minúsculas ou maiúsculas)
+    return /^[A-Za-z0-9]{6}$/.test(affiliateTarget.value);
+  }
+});
+
+// Normaliza o código de afiliação para caixa alta
+const normalizeAffiliateCode = (code: string): string => {
+  return code.toUpperCase();
+};
+
+// Contagem de afiliados
+const affiliatesCount = computed(() => {
+  return affiliatedUsers.value.length;
+});
+
+// Exibir resumo da rede de afiliação
+const affiliationSummary = computed(() => {
+  if (isAlreadyAffiliated.value) {
+    return `Você está afiliado a ${currentUser.value?.affiliatedTo}`;
+  }
+  
+  if (affiliatesCount.value > 0) {
+    return `Você tem ${affiliatesCount.value} ${affiliatesCount.value === 1 ? 'afiliado' : 'afiliados'}`;
+  }
+  
+  return 'Você ainda não tem afiliações';
 });
 
 // Gerar código temporário de afiliado
 const generateCode = async () => {
-  generating.value = true;
   try {
     console.log('[AffiliateLink] Gerando código temporário');
     await generateTemporaryAffiliateCode();
     console.log('[AffiliateLink] Código temporário gerado');
+    
+    // Iniciar verificação periódica após gerar código
+    startExpiryCheck();
   } catch (err) {
     console.error('[AffiliateLink] Erro ao gerar código:', err);
-  } finally {
-    generating.value = false;
   }
 };
 
-// Processar afiliação
+// Processar afiliação com validação e feedback melhorados
 const processAffiliation = async () => {
-  if (!affiliateTarget.value) return;
+  if (!affiliateTarget.value || !isValidTarget.value) {
+    error.value = isEmail.value 
+      ? 'Por favor, insira um email válido' 
+      : 'O código de afiliado deve ter 6 caracteres';
+    return;
+  }
   
   affiliating.value = true;
   try {
     console.log('[AffiliateLink] Iniciando processo de afiliação');
-    const response = await affiliateToUser(affiliateTarget.value, isEmail.value);
+    // Normalizar o código para maiúsculas antes de enviar
+    const normalizedTarget = isEmail.value 
+      ? affiliateTarget.value 
+      : normalizeAffiliateCode(affiliateTarget.value);
+    
+    const response = await affiliateToUser(normalizedTarget, isEmail.value);
     
     if (response && response.success) {
       console.log('[AffiliateLink] Afiliação bem-sucedida');
+      // Limpar campo após sucesso
+      affiliateTarget.value = '';
     } else {
       console.warn('[AffiliateLink] Afiliação falhou:', response?.message);
     }
-    
-    // Limpar campo após tentativa
-    affiliateTarget.value = '';
   } catch (err) {
     console.error('[AffiliateLink] Erro ao processar afiliação:', err);
   } finally {
@@ -94,7 +163,7 @@ const copyToClipboard = () => {
     });
 };
 
-// Nova função para copiar apenas o código
+// Função para copiar apenas o código
 const copyCodeToClipboard = () => {
   if (!affiliateCode.value) return;
   
@@ -110,22 +179,50 @@ const copyCodeToClipboard = () => {
     });
 };
 
-// Carregar afiliados quando o componente é montado
+// Observar mudanças no código e expiração
+watch(() => currentUser.value?.affiliateCode, (newVal) => {
+  if (newVal) {
+    startExpiryCheck();
+  } else if (checkingInterval.value) {
+    clearInterval(checkingInterval.value);
+    checkingInterval.value = null;
+  }
+});
+
+// Carregar afiliados e iniciar verificação quando o componente é montado
 onMounted(async () => {
   console.log('[AffiliateLink] Componente montado, buscando afiliados');
   try {
     await fetchAffiliatedUsers();
     console.log('[AffiliateLink] Afiliados carregados:', affiliatedUsers.value.length);
+    
+    // Iniciar verificação do código se existir
+    if (currentUser.value?.affiliateCode) {
+      checkCurrentCode();
+      startExpiryCheck();
+    }
   } catch (err) {
     console.error('[AffiliateLink] Erro ao carregar afiliados:', err);
+  }
+});
+
+// Limpar intervalo quando o componente é desmontado
+onUnmounted(() => {
+  if (checkingInterval.value) {
+    clearInterval(checkingInterval.value);
+    checkingInterval.value = null;
   }
 });
 </script>
 
 <template>
-  <Card title="Programa de Afiliações" class="mb-6">
+  <Card 
+    title="Programa de Afiliações" 
+    :subtitle="affiliationSummary" 
+    class="mb-6"
+  >
     <div class="p-4">
-      <!-- Alerts -->
+      <!-- Alertas -->
       <Alert
         v-if="error"
         type="error"
@@ -142,8 +239,29 @@ onMounted(async () => {
         class="mb-4"
       />
 
-      <!-- Afiliar-se a um usuário -->
-      <div class="mb-6 border-b pb-4">
+      <!-- Usuário já afiliado -->
+      <div v-if="isAlreadyAffiliated" class="mb-6 p-4 bg-green-50 rounded-lg border border-green-200">
+        <h3 class="text-lg font-medium text-green-700 mb-2">Você está afiliado</h3>
+        <p class="text-green-600">
+          Você já está afiliado a <strong>{{ currentUser?.affiliatedTo }}</strong>
+        </p>
+        <p v-if="currentUser?.affiliatedToEmail" class="text-green-600 text-sm mt-1">
+          {{ currentUser.affiliatedToEmail }}
+        </p>
+      </div>
+      
+      <!-- Aviso de restrição de afiliação -->
+      <div v-if="currentUser?.affiliates && currentUser.affiliates.length > 0 && !isAlreadyAffiliated" 
+           class="mb-6 p-4 bg-yellow-50 rounded-lg border border-yellow-200">
+        <h3 class="text-lg font-medium text-yellow-700 mb-2">Importante</h3>
+        <p class="text-yellow-600">
+          Como você já possui afiliados, não é possível se afiliar a outro usuário.
+          Isso é necessário para manter a hierarquia de afiliação.
+        </p>
+      </div>
+
+      <!-- Afiliar-se a um usuário - apenas mostrar se não tem afiliados -->
+      <div v-if="canAffiliate" class="mb-6 border-b pb-4">
         <h3 class="text-lg font-medium text-primary mb-2">Afiliar-se a um Usuário</h3>
         <p class="text-sm text-gray-600 mb-3">
           Insira um código de afiliado ou email para se afiliar a outro usuário.
@@ -160,17 +278,24 @@ onMounted(async () => {
               :placeholder="isEmail ? 'Email do usuário' : 'Código de afiliado'"
               type="text"
               class="flex-grow px-3 py-2 border border-gray-300 rounded-l-md focus:outline-none focus:ring-primary focus:border-primary"
+              :class="{'border-red-300': affiliateTarget && !isValidTarget, 'uppercase': !isEmail}"
+              @input="!isEmail && (affiliateTarget = affiliateTarget.toUpperCase())"
             />
             <button
               @click="processAffiliation"
-              :disabled="!affiliateTarget || affiliating"
+              :disabled="!affiliateTarget || affiliating || !isValidTarget"
               class="bg-primary hover:bg-primary-dark text-white px-4 py-2 rounded-r-md transition-colors"
-              :class="{ 'opacity-50 cursor-not-allowed': !affiliateTarget || affiliating }"
+              :class="{ 'opacity-50 cursor-not-allowed': !affiliateTarget || affiliating || !isValidTarget }"
             >
               <span v-if="affiliating">Processando...</span>
               <span v-else>Afiliar</span>
             </button>
           </div>
+          
+          <!-- Mensagem de validação -->
+          <p v-if="affiliateTarget && !isValidTarget" class="mt-1 text-sm text-danger">
+            {{ isEmail ? 'Email inválido' : 'Código de afiliado deve ter 6 caracteres' }}
+          </p>
           
           <div class="flex items-center mt-2">
             <label class="flex items-center text-sm text-gray-600">
@@ -251,17 +376,19 @@ onMounted(async () => {
         <Button 
           @click="generateCode" 
           variant="primary"
-          :disabled="generating || loading"
+          :disabled="isGeneratingCode || loading"
           class="w-full"
         >
-          <span v-if="generating || loading">Gerando...</span>
+          <span v-if="isGeneratingCode || loading">Gerando...</span>
           <span v-else>Gerar Código Temporário</span>
         </Button>
       </div>
       
       <!-- Usuários Afiliados -->
       <div v-if="affiliatedUsers.length > 0" class="mt-6 pt-2 border-t">
-        <h3 class="text-lg font-medium text-primary mb-2">Meus Afiliados</h3>
+        <h3 class="text-lg font-medium text-primary mb-2">
+          Meus Afiliados <span class="text-sm font-normal">({{ affiliatedUsers.length }})</span>
+        </h3>
         <p class="text-sm text-gray-600 mb-2">Usuários vinculados à sua conta:</p>
         
         <ul class="divide-y divide-gray-200">
@@ -270,6 +397,9 @@ onMounted(async () => {
               <div>
                 <p class="font-medium">{{ user.displayName }}</p>
                 <p class="text-xs text-gray-500">{{ user.email }}</p>
+                <p v-if="user.congregation" class="text-xs text-gray-400">
+                  {{ user.congregation }}
+                </p>
               </div>
             </div>
           </li>
@@ -279,9 +409,15 @@ onMounted(async () => {
       <!-- Afiliado a -->
       <div v-if="currentUser?.affiliatedTo" class="mt-6 pt-2 border-t">
         <h3 class="text-lg font-medium text-primary mb-2">Você está afiliado a:</h3>
-        <p class="text-sm text-gray-600 mb-2">
-          {{ currentUser.affiliatedTo }}
-        </p>
+        <div class="bg-gray-50 p-3 rounded-lg">
+          <p class="font-medium">{{ currentUser.affiliatedTo }}</p>
+          <p v-if="currentUser.affiliatedToEmail" class="text-xs text-gray-500">
+            {{ currentUser.affiliatedToEmail }}
+          </p>
+          <p v-if="currentUser.affiliatedToInfo?.congregation" class="text-xs text-gray-400">
+            {{ currentUser.affiliatedToInfo.congregation }}
+          </p>
+        </div>
       </div>
     </div>
   </Card>
