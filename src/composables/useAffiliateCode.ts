@@ -134,10 +134,12 @@ export function useAffiliateCode() {
     error.value = null;
     
     try {
+      console.log('[useAffiliateCode] Buscando afiliados para:', currentUser.value.id);
       const users = await profileService.getAffiliatedUsers(currentUser.value.id);
+      console.log('[useAffiliateCode] Afiliados encontrados:', users.length);
       affiliatedUsers.value = users;
     } catch (err: any) {
-      console.error('Erro ao buscar afiliados:', err);
+      console.error('[useAffiliateCode] Erro ao buscar afiliados:', err);
       error.value = err.message || 'Erro ao buscar usuários afiliados.';
     } finally {
       loading.value = false;

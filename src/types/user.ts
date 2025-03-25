@@ -13,9 +13,19 @@ export interface User {
   role: UserRole;
   phone?: string;
   congregation?: string;
+  photoURL?: string; // Adicionando esta propriedade para compatibilidade
   affiliateCode?: string;
   affiliateCodeExpiry?: Date | FirebaseTimestamp; // Atualizado para suportar ambos os tipos
   affiliatedTo?: string;      // ID do usuário ao qual este está afiliado
+  affiliatedToId?: string;
+  affiliatedToEmail?: string;
+  affiliatedToInfo?: {
+    id: string;
+    displayName: string;
+    email: string;
+    congregation?: string;
+    photoURL?: string;
+  };
   affiliates?: string[];      // IDs dos usuários afiliados a este
   createdAt: Date;
 }

@@ -238,6 +238,21 @@ export const affiliateToUser = async (
       }
     });
     
+    // Atualizar o usuário atual para indicar que está afiliado ao alvo
+    // Armazenar mais informações sobre o afiliador
+    await updateDoc(doc(db, 'users', userId), {
+      affiliatedTo: targetUserData.displayName,
+      affiliatedToId: targetUserId,
+      affiliatedToEmail: targetUserData.email,
+      affiliatedToInfo: {
+        id: targetUserId,
+        displayName: targetUserData.displayName,
+        email: targetUserData.email,
+        congregation: targetUserData.congregation || '',
+        photoURL: targetUserData.photoURL || '' // Agora é seguro usar esta propriedade
+      }
+    });
+
     console.log('[ProfileService] Afiliação concluída com sucesso');
     return {
       success: true,
@@ -300,6 +315,32 @@ export const findUserByAffiliateCode = async (code: string): Promise<User | null
 };
 
 /**
+ * Busca um usuário pelo username
+ */
+export const findUserByUsername = async (username: string): Promise<User | null> => {
+  try {
+    const usersRef = collection(db, 'users');
+    const q = query(usersRef, where('username', '==', username));
+    const querySnapshot = await getDocs(q);
+    
+    if (querySnapshot.empty) {
+      return null;
+    }
+    
+    const userData = querySnapshot.docs[0].data();
+    const createdAt = userData.createdAt?.toDate ? userData.createdAt.toDate() : new Date();
+    
+    return {
+      ...userData,
+      createdAt
+    } as User;
+  } catch (error) {
+    console.error('Erro ao buscar usuário por username:', error);
+    return null;
+  }
+};
+
+/**
  * Busca usuários afiliados a um usuário específico
  */
 export const getAffiliatedUsers = async (userId: string): Promise<User[]> => {
@@ -324,10 +365,12 @@ export const getAffiliatedUsers = async (userId: string): Promise<User[]> => {
       const affiliateSnap = await getDoc(doc(db, 'users', id));
       if (affiliateSnap.exists()) {
         const data = affiliateSnap.data();
+        const createdAt = data.createdAt?.toDate ? data.createdAt.toDate() : new Date();
+        
         affiliates.push({
           ...data,
           id: affiliateSnap.id,
-          createdAt: data.createdAt?.toDate()
+          createdAt
         } as User);
       }
     }

@@ -112,13 +112,14 @@ export const createOrder = async (
   sellerUsername?: string
 ): Promise<string> => {
   try {
-    // Usar o username para o ID ou fallback para um formato tradicional
+    // Usar o username para o ID ou fallback para um formato padronizado do nome
     const usernameToUse = sellerUsername || sellerName.toLowerCase().replace(/\s+/g, "_");
     
-    // Gerar um sellerId mais descritivo baseado no nome do vendedor
-    const sellerNameId = `seller_${usernameToUse}_${Date.now()}`;
-    
+    // Gerar ID de documento mais legível e consistente
     const newOrderId = generateDocumentId('order', usernameToUse);
+    
+    // Criar sellerId padronizado (sem timestamp para mais consistência)
+    const sellerNameId = `seller_${usernameToUse}`;
     
     // Verificar se paymentMethod está definido
     if (orderData.paymentMethod === undefined) {
@@ -135,9 +136,9 @@ export const createOrder = async (
       observations: orderData.observations,
       generatedNumbers: generatedNumbers,
       sellerName: sellerName,
-      sellerId: sellerNameId, // Usar o novo formato de sellerId
-      originalSellerId: sellerId, // Manter o ID original para referência
-      sellerUsername: sellerUsername || usernameToUse,
+      sellerId: sellerNameId, // ID padronizado
+      originalSellerId: sellerId, // Manter o ID original do Firebase
+      sellerUsername: usernameToUse,
       createdAt: new Date()
     };
     

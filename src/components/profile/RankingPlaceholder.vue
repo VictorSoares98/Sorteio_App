@@ -1,8 +1,23 @@
 <script setup lang="ts">
+import { computed } from 'vue';
 import Card from '../ui/Card.vue';
 import { useAuthStore } from '../../stores/authStore';
 
 const authStore = useAuthStore();
+
+const affiliatorInfo = computed(() => {
+  if (!authStore.currentUser?.affiliatedToInfo) {
+    return {
+      name: authStore.currentUser?.affiliatedTo || '',
+      email: authStore.currentUser?.affiliatedToEmail || ''
+    };
+  }
+  
+  return {
+    name: authStore.currentUser.affiliatedToInfo.displayName,
+    email: authStore.currentUser.affiliatedToInfo.email
+  };
+});
 </script>
 
 <template>
@@ -10,9 +25,13 @@ const authStore = useAuthStore();
     <div class="p-6">
       <div class="text-center mb-6">
         <h2 class="text-xl font-bold text-primary mb-2">Acompanhe seu Desempenho</h2>
+        <div class="bg-gray-50 p-3 rounded-lg mb-4">
+          <p class="text-gray-700 font-medium">Você está afiliado a:</p>
+          <p class="text-primary font-bold">{{ affiliatorInfo.name }}</p>
+          <p class="text-gray-600 text-sm">{{ affiliatorInfo.email }}</p>
+        </div>
         <p class="text-gray-600">
-          Como afiliado de {{ authStore.currentUser?.affiliatedTo }}, você pode acompanhar seu desempenho
-          e comparar com outros vendedores.
+          Como afiliado, você pode acompanhar seu desempenho e comparar com outros vendedores.
         </p>
       </div>
       
