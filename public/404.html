@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tá nas mãos de Deus!</title>
+  <script>
+    // Redirecionamento para SPA
+    // ========================================
+    // Esta solução garante que mesmo se o usuário
+    // acessar uma URL diretamente, será redirecionado
+    // para o index.html
+    const segmentCount = 0;
+    const location = window.location;
+    const l = location.pathname.split('/').slice(0, 1 + segmentCount).join('/');
+    const r = location.pathname.slice(l.length);
+    if (r && r !== '/') {
+      window.sessionStorage.setItem('redirect', r);
+      window.location.replace(l || '/');
+    }
+  </script>
+</head>
+<body>
+  <div id="app"></div>
+</body>
+</html>
