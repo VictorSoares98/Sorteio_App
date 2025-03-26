@@ -52,9 +52,6 @@
       </div>
     </div>
     
-    <!-- Helpers para lidar com problemas de carregamento -->
-    <script src="/loader.js"></script>
-    
     <script>
       // Captura erros em scripts antes mesmo da inicialização do Vue
       window.addEventListener('error', function(event) {
@@ -77,6 +74,23 @@
       // Injetar config de compatibilidade no Vite
       window.__vite_is_modern_browser = true;
       window.__vite_is_legacy_browser = false;
+      
+      // Verificação de carregamento lenta
+      setTimeout(function() {
+        const loader = document.getElementById('app-loading');
+        if (loader && document.body.contains(loader)) {
+          // Adicionar mensagem de ajuda após 15 segundos
+          const helpText = document.createElement('p');
+          helpText.style.marginTop = '20px';
+          helpText.style.color = '#FF8C00';
+          helpText.style.fontSize = '14px';
+          helpText.style.maxWidth = '400px';
+          helpText.style.textAlign = 'center';
+          helpText.innerText = 'Se a aplicação estiver demorando, pode ser devido a extensões do navegador. Tente no modo anônimo ou desative extensões.';
+          
+          loader.appendChild(helpText);
+        }
+      }, 15000);
     </script>
     
     <!-- Carregar o script principal -->

@@ -1,6 +1,5 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
-import path from 'path'
 
 // https://vitejs.dev/config/
 export default defineConfig({
@@ -11,15 +10,15 @@ export default defineConfig({
     outDir: 'dist',
     // Garantir que os assets são gerados corretamente
     assetsDir: 'assets',
+    // Adicionar sourcemaps para facilitar debug em produção
+    sourcemap: true,
     // Configuração para evitar problemas de MIME type
     rollupOptions: {
       output: {
         // Usar nomenclatura mais explícita para os chunks
-        entryFileNames: 'assets/[name].[hash].mjs',
-        chunkFileNames: 'assets/[name].[hash].mjs',
+        entryFileNames: 'assets/[name].[hash].js',
+        chunkFileNames: 'assets/[name].[hash].js',
         assetFileNames: 'assets/[name].[hash].[ext]',
-        // Forçar extensão .mjs para garantir que são tratados como módulos ES
-        format: 'es',
         // Estratégia de chunking manual para melhor divisão
         manualChunks: (id) => {
           // Agrupar dependências de firestore para otimizar
@@ -34,28 +33,22 @@ export default defineConfig({
           if (id.includes('vue') || id.includes('pinia')) {
             return 'vendor-vue';
           }
-          // Agrupar demais node_modules
+          // Outros node_modules
           if (id.includes('node_modules')) {
             return 'vendor-other';
           }
         }
       }
-    },
-    // Adicionar sourcemaps para facilitar debug em produção
-    sourcemap: true
+    }
   },
-  resolve: {
-    alias: {
-      '@': path.resolve(__dirname, './src'),
-      'punycode': 'punycode/'
-    },
+  server: {
+    // Configurações para desenvolvimento local
+    port: 3000,
+    strictPort: true,
+    open: true
   },
   optimizeDeps: {
-    esbuildOptions: {
-      // Suprimir avisos de depreciação relacionados ao punycode
-      logOverride: {
-        'deprecated-punycode': 'silent'
-      }
-    }
+    // Incluir explicitamente as dependências principais
+    include: ['vue', 'vue-router', 'pinia', 'firebase/app', 'firebase/auth', 'firebase/firestore']
   }
 })

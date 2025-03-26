@@ -3,12 +3,12 @@ window.loadModuleWithFallback = function(moduleUrl, maxRetries = 3) {
   return new Promise((resolve, reject) => {
     let retries = 0;
     
-    function attemptImport() {
+    function attemptImport(url = moduleUrl) {
       retries++;
-      console.log(`[Loader] Tentativa ${retries} de carregar: ${moduleUrl}`);
+      console.log(`[Loader] Tentativa ${retries} de carregar: ${url}`);
       
       // Try MJS first, then JS as fallback
-      import(moduleUrl)
+      import(url)
         .then(resolve)
         .catch(error => {
           console.warn(`[Loader] Erro: ${error.message}`);
@@ -16,27 +16,28 @@ window.loadModuleWithFallback = function(moduleUrl, maxRetries = 3) {
           // Se o erro for relacionado ao MIME type ou não puder buscar o módulo
           if (error.message.includes('MIME type') || 
               error.message.includes('Failed to fetch') ||
-              error.message.includes('Import', 'import')) {
+              error.message.includes('Import') ||
+              error.message.includes('import')) {
             
             // Se ainda temos tentativas, tente adicionar um timestamp ou mudar a extensão
             if (retries < maxRetries) {
-              const hasQuery = moduleUrl.includes('?');
+              const hasQuery = url.includes('?');
               const timestamp = Date.now();
               
               // Tente com um parâmetro de consulta para evitar cache
               if (retries === 1) {
                 const newUrl = hasQuery 
-                  ? `${moduleUrl}&t=${timestamp}` 
-                  : `${moduleUrl}?t=${timestamp}`;
+                  ? `${url}&t=${timestamp}` 
+                  : `${url}?t=${timestamp}`;
                 setTimeout(() => attemptImport(newUrl), 500);
               } 
               // Tente converter MJS para JS ou vice-versa como última tentativa
               else if (retries === 2) {
-                let newUrl = moduleUrl;
-                if (moduleUrl.endsWith('.mjs')) {
-                  newUrl = moduleUrl.replace('.mjs', '.js');
-                } else if (moduleUrl.endsWith('.js')) {
-                  newUrl = moduleUrl.replace('.js', '.mjs');
+                let newUrl = url;
+                if (url.endsWith('.mjs')) {
+                  newUrl = url.replace('.mjs', '.js');
+                } else if (url.endsWith('.js')) {
+                  newUrl = url.replace('.js', '.mjs');
                 }
                 newUrl = hasQuery 
                   ? `${newUrl}&t=${timestamp}` 
@@ -59,50 +60,41 @@ window.loadModuleWithFallback = function(moduleUrl, maxRetries = 3) {
   });
 };
 
-// Detectar e avisar sobre bloqueadores de anúncios
+// Método mais sutil para verificar problemas de carregamento
 (function() {
-  // Lista de URLs comumente bloqueadas por extensões
-  const testUrls = [
-    'https://www.google-analytics.com/analytics.js',
-    'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js'
-  ];
-  
-  let isAdBlockerDetected = false;
-  
-  // Tenta carregar um recurso que seria bloqueado
-  Promise.all(testUrls.map(url => {
-    return fetch(url, { method: 'HEAD', mode: 'no-cors' })
-      .catch(() => {
-        isAdBlockerDetected = true;
-      });
-  })).finally(() => {
-    if (isAdBlockerDetected) {
-      console.warn('[Loader] Bloqueador de anúncios detectado. Isso pode interferir no funcionamento da aplicação.');
-      
-      // Mostrar notificação sutil que não bloqueie a experiência
-      const wrapper = document.createElement('div');
-      wrapper.style.position = 'fixed';
-      wrapper.style.bottom = '0';
-      wrapper.style.left = '0';
-      wrapper.style.right = '0';
-      wrapper.style.padding = '8px';
-      wrapper.style.backgroundColor = 'rgba(255, 140, 0, 0.9)';
-      wrapper.style.color = 'white';
-      wrapper.style.textAlign = 'center';
-      wrapper.style.fontSize = '14px';
-      wrapper.style.zIndex = '9999';
-      wrapper.innerHTML = `
-        <p>Um bloqueador de anúncios foi detectado. Caso tenha problemas ao carregar a aplicação, desative-o temporariamente.</p>
-        <button id="dismiss-adblocker-warning" style="background: white; color: #FF8C00; border: none; padding: 4px 8px; margin-left: 8px; border-radius: 4px; cursor: pointer;">
-          Entendi
-        </button>
-      `;
-      
-      document.body.appendChild(wrapper);
-      
-      document.getElementById('dismiss-adblocker-warning').addEventListener('click', function() {
-        wrapper.style.display = 'none';
-      });
+  // Função para verificar se o módulo pode ser carregado
+  const checkModuleLoading = async () => {
+    try {
+      // Verificar se a aplicação está tendo problemas para carregar módulos
+      if (typeof window.__vite_dynamic_import !== 'function') {
+        console.warn('[Loader] __vite_dynamic_import não encontrado. Isso pode indicar problemas com o carregamento de módulos.');
+      }
+    } catch (err) {
+      console.warn('[Loader] Erro na verificação inicial:', err);
     }
-  });
+    
+    // Verificar problemas comuns de comportamento de bloqueio
+    setTimeout(() => {
+      const appLoading = document.getElementById('app-loading');
+      if (appLoading && document.body.contains(appLoading)) {
+        // A aplicação ainda não carregou completamente após 10 segundos
+        console.warn('[Loader] A aplicação está demorando mais do que o esperado para carregar.');
+        
+        // Mostrar uma dica sutil na interface de carregamento
+        const helpMessage = document.createElement('div');
+        helpMessage.style.fontSize = '14px';
+        helpMessage.style.color = '#FF8C00';
+        helpMessage.style.marginTop = '10px';
+        helpMessage.style.maxWidth = '400px';
+        helpMessage.style.textAlign = 'center';
+        helpMessage.style.padding = '10px';
+        helpMessage.innerHTML = 'Se a aplicação não carregar, tente desativar extensões do navegador ou usar o modo anônimo.';
+        
+        appLoading.appendChild(helpMessage);
+      }
+    }, 10000); // Verificar após 10 segundos
+  };
+  
+  // Executar a verificação
+  checkModuleLoading();
 })();
