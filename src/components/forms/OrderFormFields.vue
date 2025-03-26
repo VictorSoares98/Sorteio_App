@@ -146,6 +146,7 @@ const calculateCursorPosition = (oldValue: string, newValue: string, oldPosition
       @input="e => updateFormData('observations', (e.target as HTMLTextAreaElement).value)"
       class="form-input"
       rows="3"
+      style="min-height: 38px;"
     ></textarea>
   </div>
   
