@@ -213,6 +213,32 @@ const requestAffiliation = async () => {
   confirmDialogVisible.value = true;
 };
 
+// Adicionar variável para controlar o tempo de exibição das mensagens
+const messageTimeout = ref<number | null>(null);
+
+// Função para limpar mensagens de erro/sucesso após um tempo
+const clearMessagesAfterDelay = (delay = 5000) => {
+  if (messageTimeout.value) {
+    clearTimeout(messageTimeout.value);
+  }
+  
+  messageTimeout.value = window.setTimeout(() => {
+    // Limpar apenas mensagens de email não encontrado e afiliação realizada
+    if (error.value && (
+      error.value.includes('Email não encontrado') ||
+      error.value.includes('não foi encontrado')
+    )) {
+      error.value = null;
+    }
+    
+    if (success.value && success.value.includes('sucesso')) {
+      success.value = null;
+    }
+    
+    messageTimeout.value = null;
+  }, delay);
+};
+
 // Efetuar afiliação após confirmação
 const confirmAffiliation = async () => {
   if (!pendingAffiliationData.value) return;
@@ -240,8 +266,19 @@ const confirmAffiliation = async () => {
       setTimeout(() => {
         animateSuccess.value = false;
       }, 2000);
+      
+      // Configurar mensagem para desaparecer após um tempo
+      clearMessagesAfterDelay(8000);
     } else {
       console.warn('[AffiliateLink] Afiliação falhou:', response?.message);
+      
+      // Se for um erro de email não encontrado, configurar para desaparecer
+      if (response?.message && (
+        response.message.includes('Email não encontrado') || 
+        response.message.includes('não foi encontrado')
+      )) {
+        clearMessagesAfterDelay();
+      }
     }
   } catch (err) {
     console.error('[AffiliateLink] Erro ao processar afiliação:', err);
@@ -322,6 +359,19 @@ watch(isEmail, () => {
     error.value = null;
   }
 });
+
+// Limpar timeout quando o componente é desmontado
+onUnmounted(() => {
+  if (checkingInterval.value) {
+    clearInterval(checkingInterval.value);
+    checkingInterval.value = null;
+  }
+  
+  if (messageTimeout.value) {
+    clearTimeout(messageTimeout.value);
+    messageTimeout.value = null;
+  }
+});
 </script>
 
 <template>
@@ -348,8 +398,8 @@ watch(isEmail, () => {
         class="mb-4"
       />
 
-      <!-- Painel de Informações sobre Regras de Afiliação -->
-      <div class="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
+      <!-- Painel de Informações sobre Regras de Afiliação - exibir apenas para usuários que podem se afiliar -->
+      <div v-if="canAffiliate" class="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
         <h3 class="font-medium text-blue-800 mb-2">Regras de Afiliação</h3>
         <ul class="list-disc list-inside space-y-1 text-sm text-blue-700">
           <li>Cada usuário pode se afiliar a apenas <strong>uma</strong> pessoa</li>
@@ -359,7 +409,7 @@ watch(isEmail, () => {
         </ul>
       </div>
 
-      <!-- Usuário já afiliado - Aviso aprimorado -->
+      <!-- Usuário já afiliado - Aviso aprimorado com texto melhorado -->
       <div v-if="isAlreadyAffiliated" class="mb-6 p-4 bg-green-50 rounded-lg border border-green-200">
         <div class="flex items-start">
           <div class="mr-3 flex-shrink-0">
@@ -368,9 +418,9 @@ watch(isEmail, () => {
             </svg>
           </div>
           <div>
-            <h3 class="text-lg font-medium text-green-700 mb-2">Você está afiliado</h3>
+            <h3 class="text-lg font-medium text-green-700 mb-2">Conexão Ativa</h3>
             <p class="text-green-600">
-              Você já está afiliado a <strong>{{ currentUser?.affiliatedTo }}</strong> e não pode mudar sua afiliação.
+              Você está atualmente conectado à conta de <strong>{{ currentUser?.affiliatedTo }}</strong>. Por questões de hierarquia e integridade do sistema, essa afiliação não pode ser alterada, a menos que seja removida pela pessoa a quem você está afiliado.
             </p>
             <p v-if="currentUser?.affiliatedToEmail" class="text-green-600 text-sm mt-1">
               {{ currentUser.affiliatedToEmail }}
@@ -589,8 +639,8 @@ watch(isEmail, () => {
         </div>
       </div>
 
-      <!-- Meu Código de Afiliado -->
-      <div class="mb-4 pt-2">
+      <!-- Meu Código de Afiliado - ocultar para usuários já afiliados -->
+      <div v-if="!isAlreadyAffiliated" class="mb-4 pt-2">
         <h3 class="text-lg font-medium text-primary mb-2">Meu Código de Afiliado</h3>
         
         <div v-if="affiliateCode && isCodeValid" class="mb-4">
