@@ -69,7 +69,7 @@ const routes: AppRouteRecordRaw[] = [
 
 // Cria o roteador
 const router = createRouter({
-  history: createWebHistory(),
+  history: createWebHistory(import.meta.env.BASE_URL),
   routes,
   // Adicionar comportamento de scroll suave
   scrollBehavior(_to, _from, savedPosition) {
@@ -134,6 +134,12 @@ router.beforeEach(async (
   } else {
     next();
   }
+});
+
+// Add global navigation guard for debugging
+router.beforeEach((to, from, next) => {
+  console.log(`Navigation from ${from.path} to ${to.path}`);
+  next();
 });
 
 export default router;
