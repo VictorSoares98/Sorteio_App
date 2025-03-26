@@ -4,6 +4,7 @@ import * as raffleService from '../../services/raffleNumbers';
 import Card from '../ui/Card.vue';
 import Button from '../ui/Button.vue';
 import Alert from '../ui/Alert.vue';
+import ResetSalesButton from './ResetSalesButton.vue';
 
 const availableCount = ref<number>(0);
 const isLoading = ref(false);
@@ -61,6 +62,16 @@ const syncSoldNumbers = async () => {
   } finally {
     isSyncing.value = false;
   }
+};
+
+// Feedback de operação de reset
+const handleResetSuccess = () => {
+  success.value = 'Todas as vendas foram resetadas com sucesso!';
+  fetchAvailableCount(); // Atualizar contagem após reset
+};
+
+const handleResetError = (message: string) => {
+  error.value = message;
 };
 
 // Carregar dados quando o componente for montado
@@ -143,6 +154,17 @@ onMounted(() => {
             <span v-if="isLoading">Atualizando...</span>
             <span v-else>Atualizar Status</span>
           </Button>
+        </div>
+
+        <div class="mt-6 pt-4 border-t border-gray-200">
+          <h3 class="text-lg font-medium text-red-700 mb-3">Ações Destrutivas</h3>
+          
+          <!-- Botão de Reset de Vendas -->
+          <ResetSalesButton 
+            @success="handleResetSuccess"
+            @error="handleResetError"
+            block
+          />
         </div>
       </div>
     </div>

@@ -3,6 +3,7 @@ import Card from '../ui/Card.vue';
 import { useAuthStore } from '../../stores/authStore';
 import { computed } from 'vue';
 import { formatUserRole } from '../../utils/formatters';
+import ResetSalesButton from '../admin/ResetSalesButton.vue';
 
 const authStore = useAuthStore();
 
@@ -46,6 +47,28 @@ const pluralizedRole = computed(() => {
           O Painel de Controle está sendo preparado com recursos avançados para ajudar na sua gestão.
           Novas funcionalidades serão disponibilizadas em breve!
         </p>
+      </div>
+
+      <!-- Ações Administrativas -->
+      <div class="mt-8">
+        <h3 class="text-lg font-medium text-primary mb-4">Ações Administrativas</h3>
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="bg-gray-50 p-4 rounded-lg">
+            <h4 class="font-medium text-gray-800 mb-2">Acesso Rápido</h4>
+            <router-link 
+              to="/admin" 
+              class="text-primary hover:underline block mb-2"
+            >
+              Painel Administrativo Completo
+            </router-link>
+          </div>
+          
+          <div class="bg-red-50 p-4 rounded-lg">
+            <h4 class="font-medium text-red-800 mb-2">Ações Destrutivas</h4>
+            <ResetSalesButton variant="danger" />
+          </div>
+        </div>
       </div>
     </div>
   </Card>

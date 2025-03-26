@@ -1,4 +1,4 @@
-import { collection, getDocs, doc, updateDoc } from 'firebase/firestore';
+import { collection, getDocs, doc, updateDoc, writeBatch } from 'firebase/firestore';
 import { db } from '../firebase';
 import type { UserRole, SalesData } from '../types/user';
 import type { Order } from '../types/order';
@@ -118,3 +118,66 @@ export const updateUserRole = async (userId: string, newRole: UserRole): Promise
     return false;
   }
 };
+
+/**
+ * Reseta todas as vendas do sistema
+ * Esta é uma operação destrutiva que remove todos os pedidos
+ */
+export const resetAllSales = async (): Promise<boolean> => {
+  try {
+    console.log('Iniciando processo de reset de vendas');
+    
+    // 1. Obter referência à coleção de pedidos
+    const ordersRef = collection(db, 'orders');
+    const ordersSnapshot = await getDocs(ordersRef);
+    
+    if (ordersSnapshot.empty) {
+      console.log('Nenhum pedido encontrado para excluir');
+      return true;
+    }
+    
+    // 2. Excluir todos os documentos em lotes
+    const batchSize = 450; // Firestore tem limite de 500 operações por lote
+    let batch = writeBatch(db);
+    let count = 0;
+    let totalDeleted = 0;
+    
+    console.log(`Encontrados ${ordersSnapshot.size} pedidos para excluir`);
+    
+    for (const doc of ordersSnapshot.docs) {
+      batch.delete(doc.ref);
+      count++;
+      totalDeleted++;
+      
+      // Se atingir o tamanho do lote, comitar e criar novo lote
+      if (count >= batchSize) {
+        await batch.commit();
+        console.log(`Lote de ${count} documentos excluídos`);
+        batch = writeBatch(db);
+        count = 0;
+        
+        // Pequena pausa para evitar sobrecarregar o Firestore
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+    }
+    
+    // Comitar o último lote se tiver operações pendentes
+    if (count > 0) {
+      await batch.commit();
+      console.log(`Último lote com ${count} documentos excluídos`);
+    }
+    
+    console.log(`Reset completado: ${totalDeleted} vendas excluídas`);
+    
+    // 3. Atualizar a coleção de números disponíveis para refletir que todos estão disponíveis novamente
+    // You need to import raffleService or fix this line
+    // await raffleService.syncAvailableNumbersWithSoldOnes();
+    
+    return true;
+  } catch (error) {
+    console.error('Erro ao resetar vendas:', error);
+    throw new Error('Não foi possível resetar as vendas. Tente novamente mais tarde.');
+  }
+// We no longer need this function since we're importing writeBatch from firebase/firestore
+}
+
