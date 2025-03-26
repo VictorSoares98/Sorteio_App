@@ -34,6 +34,9 @@ const setupFallbackLoader = () => {
           retries++;
           console.log(`[App] Tentativa ${retries} de carregar: ${url}`);
           
+          // Usar comentário especial para evitar avisos do Vite durante o desenvolvimento
+          // @ts-ignore - Adicionar comentário especial para suprimir o aviso do TypeScript
+          /* @vite-ignore */ 
           import(url)
             .then(resolve)
             .catch(error => {
@@ -57,6 +60,7 @@ const setupFallbackLoader = () => {
   const originalImport = window.__vite_ssr_dynamic_import || window.__vite_dynamic_import;
   if (originalImport) {
     window.__vite_ssr_dynamic_import = window.__vite_dynamic_import = (chunk) => {
+      // Aqui o Vite já analisou o chunk, então não precisamos do @vite-ignore
       return window.loadModuleWithFallback?.(chunk, 3) || originalImport(chunk);
     };
   }

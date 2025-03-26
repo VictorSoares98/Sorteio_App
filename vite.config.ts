@@ -43,12 +43,16 @@ export default defineConfig({
   },
   server: {
     // Configurações para desenvolvimento local
-    port: 3000,
-    strictPort: true,
+    port: 5173,
     open: true
   },
+  // Configuração para melhorar o suporte a importações dinâmicas
   optimizeDeps: {
     // Incluir explicitamente as dependências principais
     include: ['vue', 'vue-router', 'pinia', 'firebase/app', 'firebase/auth', 'firebase/firestore']
+  },
+  // Permite importações dinâmicas, ainda que com warnings em desenvolvimento
+  esbuild: {
+    logOverride: { 'dynamic-import-in-replicated-modules': 'silent' }
   }
 })
