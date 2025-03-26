@@ -137,16 +137,16 @@ onMounted(async () => {
                 @click="toggleExpand(order.id)"
                 class="p-3 bg-gray-50 flex justify-between items-center cursor-pointer hover:bg-gray-100"
               >
-                <div>
-                  <h3 class="font-medium">{{ order.buyerName }}</h3>
+                <div class="flex-1 min-w-0 mr-2">
+                  <h3 class="font-medium truncate">{{ order.buyerName }}</h3>
                   <p class="text-xs text-gray-500">{{ formatDate(order.createdAt) }}</p>
                 </div>
-                <div class="flex items-center">
-                  <span class="bg-primary text-white px-2 py-1 rounded-full text-xs mr-3">
+                <div class="flex items-center flex-shrink-0">
+                  <span class="bg-primary text-white px-2 py-1 rounded-full text-xs mr-3 whitespace-nowrap">
                     {{ Array.isArray(order.generatedNumbers) ? order.generatedNumbers.length : 0 }} números
                   </span>
                   <svg 
-                    class="w-5 h-5 text-gray-500 transition-transform"
+                    class="w-5 h-5 text-gray-500 transition-transform flex-shrink-0"
                     :class="{ 'transform rotate-180': expandedOrderIds.has(order.id) }"
                     fill="none" 
                     stroke="currentColor" 
@@ -169,11 +169,11 @@ onMounted(async () => {
                   </div>
                   <div>
                     <p class="text-xs text-gray-500">Contato</p>
-                    <p class="text-sm">{{ order.contactNumber }}</p>
+                    <p class="text-sm truncate">{{ order.contactNumber }}</p>
                   </div>
                   <div>
                     <p class="text-xs text-gray-500">Local</p>
-                    <p class="text-sm">{{ order.addressOrCongregation }}</p>
+                    <p class="text-sm truncate">{{ order.addressOrCongregation }}</p>
                   </div>
                   <div v-if="order.observations">
                     <p class="text-xs text-gray-500">Observações</p>
