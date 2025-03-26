@@ -98,6 +98,18 @@ onMounted(async () => {
     
     <Card title="Suas Vendas" :subtitle="`Total: ${totalNumbersSold} números vendidos`">
       <div class="p-4">
+        <!-- Botão "Criar um Pedido" - SEMPRE VISÍVEL -->
+        <div class="mb-6 text-center sm:text-right">
+          <router-link 
+            to="/" 
+            class="inline-flex items-center px-4 py-2 bg-primary hover:bg-primary-dark text-white rounded transition-colors"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+            </svg>
+            Criar um Pedido
+          </router-link>
+        </div>
         
         <!-- Loading -->
         <div v-if="isLoading || orderStore.loading" class="text-center py-4">
@@ -108,9 +120,7 @@ onMounted(async () => {
         <!-- Empty State -->
         <div v-else-if="orders.length === 0" class="text-center py-6 text-gray-500">
           <p>Você ainda não realizou nenhuma venda.</p>
-          <router-link to="/" class="text-primary hover:underline block mt-2">
-            Criar um pedido
-          </router-link>
+          <p class="text-sm text-gray-400 mt-1">Clique no botão acima para criar seu primeiro pedido!</p>
         </div>
         
         <!-- Content -->
