@@ -115,6 +115,25 @@ export function useAffiliateCode() {
       return null;
     }
     
+    // NOVAS REGRAS - Verificar restrições antes de prosseguir
+    // Regra 1: Usuário já afiliado não pode se afiliar a outra pessoa
+    if (currentUser.value.affiliatedTo) {
+      error.value = 'Você já está afiliado a outro usuário e não pode mudar sua afiliação.';
+      return {
+        success: false,
+        message: error.value
+      };
+    }
+    
+    // Regra 2: Usuário com afiliados não pode se afiliar a outro
+    if (currentUser.value.affiliates && currentUser.value.affiliates.length > 0) {
+      error.value = 'Como você já possui afiliados, não é possível se afiliar a outro usuário.';
+      return {
+        success: false,
+        message: error.value
+      };
+    }
+    
     // Normalizar código para maiúsculas
     const normalizedIdentifier = isEmail ? targetIdentifier : targetIdentifier.toUpperCase();
     

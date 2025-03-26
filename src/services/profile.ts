@@ -276,21 +276,21 @@ export const affiliateToUser = async (
     
     const userData = userSnap.data() as User;
     
-    // Se já está afiliado a alguém
+    // REGRA 1: Se já está afiliado a alguém
     if (userData.affiliatedTo) {
       console.warn('[ProfileService] Usuário já afiliado a outro usuário');
       return {
         success: false,
-        message: 'Você já está afiliado a outro usuário.'
+        message: 'Você já está afiliado a outro usuário e não pode mudar sua afiliação.'
       };
     }
     
-    // Se já tem afiliados, não pode se afiliar a outra pessoa
+    // REGRA 2: Se já tem afiliados, não pode se afiliar a outra pessoa
     if (userData.affiliates && userData.affiliates.length > 0) {
       console.warn('[ProfileService] Usuário com afiliados tentando se afiliar a outro');
       return {
         success: false,
-        message: 'Usuários que já possuem afiliados não podem se afiliar a outras contas.'
+        message: 'Usuários que já possuem afiliados não podem se afiliar a outras contas para preservar a estrutura hierárquica.'
       };
     }
     
@@ -328,21 +328,13 @@ export const affiliateToUser = async (
       };
     }
     
-    // Se está usando código, verificar se ele não expirou
-    if (!isEmail && targetUserData.affiliateCodeExpiry) {
-      console.log('[ProfileService] Verificando validade do código');
-      // Verificar se temos um Timestamp do Firebase ou uma Date
-      const expiryDate = 'toDate' in targetUserData.affiliateCodeExpiry
-        ? targetUserData.affiliateCodeExpiry.toDate()
-        : targetUserData.affiliateCodeExpiry;
-        
-      if (expiryDate < new Date()) {
-        console.warn('[ProfileService] Código expirado');
-        return {
-          success: false,
-          message: 'Este código de afiliado expirou.'
-        };
-      }
+    // NOVA REGRA 3: Verificar se o alvo já está afiliado a alguém
+    if (targetUserData.affiliatedTo) {
+      console.warn('[ProfileService] Usuário alvo já afiliado a outro usuário e não pode receber afiliados');
+      return {
+        success: false,
+        message: 'Este usuário já está afiliado a outra pessoa e não pode receber afiliados.'
+      };
     }
     
     console.log('[ProfileService] Executando transação de afiliação');
@@ -357,8 +349,14 @@ export const affiliateToUser = async (
       }
       
       const currentUserData = userDoc.data();
+      
+      // VERIFICAÇÃO EXTRA: Verificar novamente na transação para garantir consistência
       if (currentUserData.affiliatedTo) {
         throw new Error('Usuário já possui afiliação.');
+      }
+      
+      if (currentUserData.affiliates && currentUserData.affiliates.length > 0) {
+        throw new Error('Usuário com afiliados não pode se afiliar a outro usuário.');
       }
       
       // 2. Verificar status atual do usuário alvo
@@ -367,6 +365,12 @@ export const affiliateToUser = async (
       
       if (!targetDoc.exists()) {
         throw new Error('Usuário alvo não encontrado durante a transação.');
+      }
+      
+      // VERIFICAÇÃO EXTRA: Verificar novamente se o alvo já está afiliado
+      const targetData = targetDoc.data();
+      if (targetData.affiliatedTo) {
+        throw new Error('O usuário alvo já está afiliado a outra pessoa e não pode receber afiliados.');
       }
       
       // 3. Atualizar o usuário com o link de afiliação
