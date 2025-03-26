@@ -4,6 +4,8 @@ import { auth, db } from '../firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import { UserRole } from '../types/user';
 import { isAdmin } from '../utils/permissions';
+import { onAuthStateChanged } from 'firebase/auth';
+import type { User } from 'firebase/auth';
 
 // Interface para metadados de rota personalizados
 interface RouteMeta {
@@ -79,6 +81,16 @@ const router = createRouter({
   }
 });
 
+// Função para verificar se o estado de autenticação já foi resolvido
+const getCurrentUser = () => {
+  return new Promise<User | null>((resolve, reject) => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      unsubscribe();
+      resolve(user);
+    }, reject);
+  });
+};
+
 // Navegação com proteção de rotas
 router.beforeEach(async (
   to: RouteLocationNormalized,
@@ -90,10 +102,14 @@ router.beforeEach(async (
   
   const requiresAuth = to.matched.some(record => record.meta.requiresAuth);
   const requiresAdmin = to.matched.some(record => record.meta.requiresAdmin);
-  const currentUser = auth.currentUser;
+  
+  // Aguardar a resolução do estado de autenticação antes de decidir
+    const currentUser = await getCurrentUser() as User | null;
+    console.log(`[Router] Navegando para ${to.path}, autenticado: ${!!currentUser}, requer auth: ${requiresAuth}`);
 
   if (requiresAuth && !currentUser) {
     // Salvar a URL para redirecionamento após login
+    console.log(`[Router] Redirecionando para login, URL original: ${to.fullPath}`);
     next({ 
       name: 'login', 
       query: { redirect: to.fullPath } 
@@ -108,6 +124,7 @@ router.beforeEach(async (
         next();
       } else {
         // Não é admin, redirecionar para home
+        console.log('[Router] Usuário não é admin, redirecionando para home');
         next({ name: 'home' });
       }
     } catch (error) {
