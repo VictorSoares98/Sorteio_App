@@ -1,17 +1,26 @@
-import { type Order } from '../types/order';
+import type { Order } from '../types/order';
 
 /**
  * Calcula o total de números vendidos a partir de uma lista de pedidos
- * @param orders Lista de pedidos a serem processados
- * @returns Número total de bilhetes vendidos
+ * com validação robusta para evitar erros
+ * 
+ * @param orders Lista de pedidos para processar
+ * @returns Total de números vendidos
  */
 export const calculateTotalSoldNumbers = (orders: Order[]): number => {
+  if (!Array.isArray(orders)) {
+    console.warn('calculateTotalSoldNumbers: orders não é um array');
+    return 0;
+  }
+  
   return orders.reduce((total, order) => {
     // Verificar se generatedNumbers existe e é um array
-    if (Array.isArray(order.generatedNumbers)) {
-      return total + order.generatedNumbers.length;
+    if (!order.generatedNumbers || !Array.isArray(order.generatedNumbers)) {
+      console.warn(`calculateTotalSoldNumbers: pedido ${order.id} não tem números válidos`);
+      return total;
     }
-    return total;
+    
+    return total + order.generatedNumbers.length;
   }, 0);
 };
 
@@ -33,14 +42,34 @@ export const getAllSoldNumbers = (orders: Order[]): string[] => {
 };
 
 /**
- * Verifica se um número específico está presente em algum dos pedidos
- * @param orders Lista de pedidos a serem verificados
- * @param number Número a ser procurado
- * @returns Verdadeiro se o número estiver presente em algum pedido
+ * Verifica se um número específico já foi vendido em algum pedido
+ * 
+ * @param orders Lista de pedidos para verificar
+ * @param number Número a ser verificado
+ * @returns true se o número já foi vendido, false caso contrário
  */
-export const isNumberInOrders = (orders: Order[], number: string): boolean => {
+export const isNumberSold = (orders: Order[], number: string): boolean => {
+  if (!Array.isArray(orders) || !number) {
+    return false;
+  }
+  
   return orders.some(order => 
     Array.isArray(order.generatedNumbers) && 
     order.generatedNumbers.includes(number)
   );
+};
+
+/**
+ * Formata o valor total em reais com base nos números vendidos
+ * 
+ * @param numberCount Quantidade de números vendidos
+ * @param pricePerTicket Preço por número (padrão: R$ 10,00)
+ * @returns Valor formatado em reais
+ */
+export const calculateTotalValue = (numberCount: number, pricePerTicket: number = 10): string => {
+  const total = numberCount * pricePerTicket;
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL'
+  }).format(total);
 };
