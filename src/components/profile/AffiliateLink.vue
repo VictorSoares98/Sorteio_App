@@ -560,12 +560,6 @@ watch(isEmail, () => {
                   {{ error }}
                 </span>
                 <span 
-                  v-else-if="codeStatus === 'empty'" 
-                  class="text-gray-500"
-                >
-                  Digite o código de 6 caracteres
-                </span>
-                <span 
                   v-else-if="codeStatus === 'incomplete'" 
                   class="text-primary"
                 >
