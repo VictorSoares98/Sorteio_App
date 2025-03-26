@@ -6,7 +6,6 @@
   <title>Tá nas mãos de Deus!</title>
   <script>
     // Solução otimizada para redirecionamento SPA no Firebase Hosting
-    // Baseada nas melhores práticas para Vue Router
     (function() {
       // Pegar a URL completa
       const path = window.location.pathname;
@@ -17,16 +16,48 @@
       // Salvar URL para redirecionamento
       sessionStorage.setItem('spaRedirect', url);
       
-      // Redirecionar para a página principal
-      window.location.href = '/';
+      // Evitar problemas de cache adicionando timestamp
+      const timestamp = Date.now();
+      
+      // Redirecionar para a página principal com parâmetro anti-cache
+      window.location.href = '/?nocache=' + timestamp;
     })();
   </script>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      background-color: #f9f9f9;
+    }
+    .container {
+      text-align: center;
+      padding: 2rem;
+    }
+    .loader {
+      border: 4px solid #FF8C00;
+      border-radius: 50%;
+      border-top: 4px solid transparent;
+      width: 40px;
+      height: 40px;
+      animation: spin 1s linear infinite;
+      margin: 20px auto;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
 </head>
 <body>
-  <div id="app">
-    <p style="text-align: center; padding: 2rem; font-family: sans-serif;">
-      Redirecionando...
-    </p>
+  <div class="container">
+    <h2>Tá nas mãos de Deus!</h2>
+    <div class="loader"></div>
+    <p>Redirecionando...</p>
   </div>
 </body>
 </html>

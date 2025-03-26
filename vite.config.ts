@@ -11,57 +11,38 @@ export default defineConfig({
     outDir: 'dist',
     // Garantir que os assets são gerados corretamente
     assetsDir: 'assets',
-    // Adicionar hash aos nomes dos arquivos para evitar problemas de cache
+    // Configuração para evitar problemas de MIME type
     rollupOptions: {
       output: {
-        entryFileNames: 'assets/[name].[hash].js',
-        chunkFileNames: 'assets/[name].[hash].js',
+        // Usar nomenclatura mais explícita para os chunks
+        entryFileNames: 'assets/[name].[hash].mjs',
+        chunkFileNames: 'assets/[name].[hash].mjs',
         assetFileNames: 'assets/[name].[hash].[ext]',
+        // Forçar extensão .mjs para garantir que são tratados como módulos ES
+        format: 'es',
         // Estratégia de chunking manual para melhor divisão
         manualChunks: (id) => {
-          // Separar dependências grandes em chunks próprios
+          // Agrupar dependências de firestore para otimizar
+          if (id.includes('firebase/firestore')) {
+            return 'vendor-firestore';
+          }
+          // Agrupar outras dependências do Firebase
+          if (id.includes('firebase/') && !id.includes('firestore')) {
+            return 'vendor-firebase-core';
+          }
+          // Vue e dependências relacionadas
+          if (id.includes('vue') || id.includes('pinia')) {
+            return 'vendor-vue';
+          }
+          // Agrupar demais node_modules
           if (id.includes('node_modules')) {
-            // Firebase em um chunk separado
-            if (id.includes('firebase')) {
-              return 'vendor-firebase';
-            }
-            
-            // Vue e ferramentas relacionadas em outro chunk
-            if (id.includes('vue') || id.includes('pinia')) {
-              return 'vendor-vue';
-            }
-            
-            // Outras bibliotecas em um chunk compartilhado
-            return 'vendor';
-          }
-          
-          // Agrupar componentes por tipo/recurso
-          if (id.includes('/src/components/')) {
-            if (id.includes('/admin/')) {
-              return 'components-admin';
-            }
-            if (id.includes('/forms/')) {
-              return 'components-forms';
-            }
-            if (id.includes('/profile/')) {
-              return 'components-profile';
-            }
-            if (id.includes('/ui/')) {
-              return 'components-ui';
-            }
-            return 'components-common';
-          }
-          
-          // Agrupar serviços e stores
-          if (id.includes('/src/services/')) {
-            return 'services';
-          }
-          if (id.includes('/src/stores/')) {
-            return 'stores';
+            return 'vendor-other';
           }
         }
       }
-    }
+    },
+    // Adicionar sourcemaps para facilitar debug em produção
+    sourcemap: true
   },
   resolve: {
     alias: {
