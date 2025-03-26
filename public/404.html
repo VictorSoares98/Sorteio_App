@@ -5,22 +5,28 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Tá nas mãos de Deus!</title>
   <script>
-    // Redirecionamento para SPA
-    // ========================================
-    // Esta solução garante que mesmo se o usuário
-    // acessar uma URL diretamente, será redirecionado
-    // para o index.html
-    const segmentCount = 0;
-    const location = window.location;
-    const l = location.pathname.split('/').slice(0, 1 + segmentCount).join('/');
-    const r = location.pathname.slice(l.length);
-    if (r && r !== '/') {
-      window.sessionStorage.setItem('redirect', r);
-      window.location.replace(l || '/');
-    }
+    // Solução otimizada para redirecionamento SPA no Firebase Hosting
+    // Baseada nas melhores práticas para Vue Router
+    (function() {
+      // Pegar a URL completa
+      const path = window.location.pathname;
+      const search = window.location.search;
+      const hash = window.location.hash;
+      const url = path + search + hash;
+      
+      // Salvar URL para redirecionamento
+      sessionStorage.setItem('spaRedirect', url);
+      
+      // Redirecionar para a página principal
+      window.location.href = '/';
+    })();
   </script>
 </head>
 <body>
-  <div id="app"></div>
+  <div id="app">
+    <p style="text-align: center; padding: 2rem; font-family: sans-serif;">
+      Redirecionando...
+    </p>
+  </div>
 </body>
 </html>

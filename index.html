@@ -5,6 +5,17 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Tá nas mãos de Deus!</title>
+    <script>
+      // Código para recuperar redirecionamentos do 404.html
+      (function() {
+        const redirect = sessionStorage.getItem('spaRedirect');
+        if (redirect && redirect !== location.pathname) {
+          sessionStorage.removeItem('spaRedirect');
+          history.replaceState(null, null, redirect);
+          console.log('[SPA Redirect] Redirecionado de 404 para:', redirect);
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="app"></div>
