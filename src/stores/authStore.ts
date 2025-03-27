@@ -15,6 +15,7 @@ import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 import { type User, UserRole } from '../types/user';
 import { convertTimestampsInObject } from '../utils/firebaseUtils';
+import { affiliateToUser } from '../services/profile';
 
 export const useAuthStore = defineStore('auth', () => {
   const currentUser = ref<User | null>(null);
@@ -75,11 +76,14 @@ export const useAuthStore = defineStore('auth', () => {
     }
   };
 
-  // Login com Google
+  // Login com Google modificado para processar afiliação
   const loginWithGoogle = async (redirectPath = '/') => {
     try {
       error.value = null;
       loading.value = true;
+      
+      // Verificar se existe um código de afiliação pendente
+      const pendingAffiliateCode = localStorage.getItem('pendingAffiliateCode');
       
       // Criar provedor do Google
       const provider = new GoogleAuthProvider();
@@ -95,7 +99,10 @@ export const useAuthStore = defineStore('auth', () => {
       const userRef = doc(db, 'users', googleUser.uid);
       const userDoc = await getDoc(userRef);
       
-      if (!userDoc.exists()) {
+      // Flag para indicar se é um novo usuário
+      const isNewUser = !userDoc.exists();
+      
+      if (isNewUser) {
         // Se não existe, criar perfil básico para o usuário
         await setDoc(userRef, {
           id: googleUser.uid,
@@ -107,6 +114,19 @@ export const useAuthStore = defineStore('auth', () => {
           photoURL: googleUser.photoURL || '',
           authProvider: 'google'
         });
+        
+        // Se for novo usuário e tiver código de afiliação pendente, processar afiliação
+        if (pendingAffiliateCode) {
+          console.log('[AuthStore] Processando afiliação para novo usuário Google com código:', pendingAffiliateCode);
+          try {
+            await affiliateToUser(googleUser.uid, pendingAffiliateCode, false);
+            // Limpar código após processamento
+            localStorage.removeItem('pendingAffiliateCode');
+          } catch (affiliateError) {
+            console.error('[AuthStore] Erro ao processar afiliação:', affiliateError);
+            // Não interromper o fluxo por falha na afiliação
+          }
+        }
       }
       
       // Buscar dados do usuário do Firestore
@@ -154,15 +174,20 @@ export const useAuthStore = defineStore('auth', () => {
     }
   };
 
-  // Registro de novo usuário
+  // Registro de novo usuário modificado para processar afiliação e incluir username
   const register = async (email: string, password: string, userData: { 
     displayName: string;
+    username?: string; // Tornar username opcional para compatibilidade
     congregation?: string;
   }) => {
     loading.value = true;
     error.value = null;
     
     try {
+      // Verificar se existe um código de afiliação pendente
+      const pendingAffiliateCode = localStorage.getItem('pendingAffiliateCode');
+      console.log('[AuthStore] Iniciando registro com código de afiliação pendente:', pendingAffiliateCode);
+      
       // Criar o usuário no Firebase Authentication
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
@@ -172,15 +197,38 @@ export const useAuthStore = defineStore('auth', () => {
         displayName: userData.displayName
       });
       
-      // Salvar dados adicionais no Firestore
+      // Salvar dados adicionais no Firestore, incluindo username se fornecido
       await setDoc(doc(db, 'users', user.uid), {
         id: user.uid,
         displayName: userData.displayName,
         email: email,
+        username: userData.username || userData.displayName.toLowerCase().replace(/\s+/g, '_'), // Usar username fornecido ou gerar a partir do displayName
         role: UserRole.USER,
         congregation: userData.congregation || '',
         createdAt: serverTimestamp(),
       });
+      
+      // Se tiver código de afiliação pendente, processar afiliação
+      if (pendingAffiliateCode) {
+        console.log('[AuthStore] Processando afiliação para novo usuário com código:', pendingAffiliateCode);
+        try {
+          // Processar afiliação e AGUARDAR o resultado
+          const affiliationResult = await affiliateToUser(user.uid, pendingAffiliateCode, false);
+          
+          // Verificar se a afiliação foi bem-sucedida
+          if (affiliationResult.success) {
+            console.log('[AuthStore] Afiliação processada com sucesso:', affiliationResult);
+            // Limpar código APENAS após processamento bem-sucedido
+            localStorage.removeItem('pendingAffiliateCode');
+          } else {
+            console.error('[AuthStore] Erro na afiliação:', affiliationResult.message);
+            // Manter o código no localStorage para permitir nova tentativa
+          }
+        } catch (affiliateError) {
+          console.error('[AuthStore] Exceção ao processar afiliação:', affiliateError);
+          // Não interromper o fluxo por falha na afiliação
+        }
+      }
       
       // Buscar dados completos
       await fetchUserData();

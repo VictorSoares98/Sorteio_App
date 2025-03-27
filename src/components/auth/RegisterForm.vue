@@ -1,11 +1,9 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
-import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { auth, db } from '../../firebase';
+// Remover importações não necessárias do Firebase que agora serão gerenciadas pelo store
 import { validateEmail, validatePassword, validateName } from '../../utils/validation';
-import { UserRole } from '../../types/user';
+// Removida importação não utilizada de UserRole
 import { useFormValidation } from '../../composables/useFormValidation';
 import { useAuthStore } from '../../stores/authStore';
 import Input from '../ui/Input.vue';
@@ -52,6 +50,7 @@ const validateFields = () => {
   return isFormValid();
 };
 
+// Método de registro modificado para usar o authStore
 const register = async () => {
   // Limpar mensagem de erro anterior
   errorMessage.value = '';
@@ -62,36 +61,32 @@ const register = async () => {
   loading.value = true;
   
   try {
-    // Criar o usuário no Firebase Authentication
-    const userCredential = await createUserWithEmailAndPassword(auth, email.value, password.value);
-    const user = userCredential.user;
-    
-    // Atualizar o perfil do usuário com o displayName
-    await updateProfile(user, {
-      displayName: displayName.value
-    });
-    
-    // Salvar dados adicionais no Firestore
-    await setDoc(doc(db, 'users', user.uid), {
-      id: user.uid,
+    // Em vez de implementar a lógica diretamente, usar o método do authStore
+    // Preparar os dados do usuário no formato esperado pelo authStore.register
+    const userData = {
       displayName: displayName.value,
-      username: username.value, // Salvar nome de usuário em vez de congregação
-      email: email.value,
-      role: UserRole.USER,
-      createdAt: serverTimestamp(),
-    });
+      username: username.value // Passar o username para o store
+    };
     
-    // Redirecionar para a página inicial após o cadastro
-    router.push('/');
-  } catch (error: any) {
-    console.error('Erro no cadastro:', error);
-    
-    // Tratar erros comuns
-    if (error.code === 'auth/email-already-in-use') {
-      errorMessage.value = 'Este email já está em uso.';
-    } else {
-      errorMessage.value = 'Erro ao criar conta. Tente novamente.';
+    // Verificar se há um código de afiliação pendente (para logging)
+    const pendingCode = localStorage.getItem('pendingAffiliateCode');
+    if (pendingCode) {
+      console.log('[RegisterForm] Detectado código de afiliação pendente:', pendingCode);
     }
+    
+    // Chamar o método register do authStore que processa códigos de afiliação
+    const success = await authStore.register(email.value, password.value, userData);
+    
+    if (success) {
+      console.log('[RegisterForm] Registro bem-sucedido, redirecionando');
+      // Redirecionar para a página inicial após o cadastro
+      router.push('/');
+    }
+  } catch (error: any) {
+    console.error('[RegisterForm] Erro no cadastro:', error);
+    
+    // Usar a mensagem de erro do store se disponível, ou criar uma mensagem padrão
+    errorMessage.value = authStore.error || 'Erro ao criar conta. Tente novamente.';
   } finally {
     loading.value = false;
   }

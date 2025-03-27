@@ -37,7 +37,7 @@ const animateSuccess = ref(false);
 const affiliateCode = computed(() => currentUser.value?.affiliateCode || null);
 const affiliateLink = computed(() => {
   if (!affiliateCode.value) return '';
-  return `${window.location.origin}?ref=${affiliateCode.value}`;
+  return `${window.location.origin}/register?ref=${affiliateCode.value}`;
 });
 
 // Verificar regularmente se o código ainda é válido

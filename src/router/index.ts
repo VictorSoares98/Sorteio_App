@@ -91,6 +91,29 @@ const getCurrentUser = () => {
   });
 };
 
+// Verificar parâmetro de afiliação na URL
+router.beforeEach((to, _from, next) => {
+  // Verificar se há código de afiliado na query
+  const refCode = to.query.ref as string;
+  
+  if (refCode) {
+    // Salvar código no localStorage para usar após registro/login
+    localStorage.setItem('pendingAffiliateCode', refCode);
+    console.log(`[Router] Código de afiliação detectado: ${refCode}`);
+    
+    // Se estiver indo para página inicial ou login, redirecionar para registro
+    if (to.path === '/' || to.path === '/login') {
+      console.log('[Router] Redirecionando para página de registro com código de afiliado');
+      return next({ 
+        path: '/register',
+        query: { ref: refCode }
+      });
+    }
+  }
+  
+  next();
+});
+
 // Navegação com proteção de rotas
 router.beforeEach(async (
   to: RouteLocationNormalized,
@@ -103,10 +126,15 @@ router.beforeEach(async (
   const requiresAuth = to.matched.some(record => record.meta.requiresAuth);
   const requiresAdmin = to.matched.some(record => record.meta.requiresAdmin);
   
-  // Aguardar a resolução do estado de autenticação antes de decidir
-    const currentUser = await getCurrentUser() as User | null;
-    console.log(`[Router] Navegando para ${to.path}, autenticado: ${!!currentUser}, requer auth: ${requiresAuth}`);
-
+  // Verificar se está indo para página de autenticação e já está logado
+  const currentUser = await getCurrentUser() as User | null;
+  
+  if ((to.path === '/login' || to.path === '/register') && currentUser) {
+    console.log('[Router] Usuário já autenticado, redirecionando para home');
+    return next({ name: 'home' });
+  }
+  
+  // Resto da lógica de proteção de rotas
   if (requiresAuth && !currentUser) {
     // Salvar a URL para redirecionamento após login
     console.log(`[Router] Redirecionando para login, URL original: ${to.fullPath}`);
