@@ -18,14 +18,14 @@ const isAdmin = computed(() => {
 // Verificar a cada transição de rota se os dados do usuário precisam ser atualizados
 onMounted(() => {
   // Força a atualização dos dados do usuário ao montar o componente
-  if (authStore.isLoggedIn) {
+  if (authStore.isAuthenticated) {
     console.log('[NavBar] Atualizando dados do usuário no mount');
     authStore.fetchUserData();
   }
 });
 
 // Observar mudanças de autenticação para atualizar a interface
-watch(() => authStore.isLoggedIn, (newValue) => {
+watch(() => authStore.isAuthenticated, (newValue) => {
   if (newValue) {
     console.log('[NavBar] Detectada mudança de autenticação, atualizando dados');
     authStore.fetchUserData();
