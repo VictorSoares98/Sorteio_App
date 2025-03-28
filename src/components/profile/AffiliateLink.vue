@@ -988,8 +988,8 @@ const handleChangeRole = async (userId: string, newRole: UserRole) => {
         </div>
       </div>
       
-      <!-- Usuários Afiliados - agora sempre visível -->
-      <div class="mt-6 pt-2 border-t relative"
+      <!-- Usuários Afiliados - agora só visível para usuários NÃO afiliados a outros -->
+      <div v-if="!isAlreadyAffiliated" class="mt-6 pt-2 border-t relative"
            :class="{ 'animate-pulse bg-green-50 rounded-lg': animateSuccess }">
         <div class="flex justify-between items-center mb-2">
           <h3 class="text-lg font-medium text-primary">
