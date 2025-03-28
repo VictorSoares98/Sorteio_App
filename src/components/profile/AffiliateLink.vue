@@ -377,6 +377,21 @@ const validateCodeInput = (event: KeyboardEvent) => {
   }
 };
 
+// Função para controle rigoroso da entrada com debounce embutido
+const handleCodeInput = (event: Event) => {
+  const input = event.target as HTMLInputElement;
+  const value = input.value.toUpperCase();
+  
+  // Garantir que nunca exceda 6 caracteres, mesmo em conexões lentas
+  if (value.length > 6) {
+    affiliateTarget.value = value.slice(0, 6);
+    return;
+  }
+  
+  // Normalização e conversão para maiúsculas
+  affiliateTarget.value = value;
+};
+
 // Indicador visual de validade do código
 const codeStatus = computed(() => {
   if (!affiliateTarget.value) return 'empty';
@@ -701,13 +716,16 @@ const handleChangeRole = async (userId: string, newRole: UserRole) => {
               <input
                 ref="affiliateCodeInputRef"
                 v-model="affiliateTarget"
-                placeholder="Email do usuário"
+                placeholder="Digite o código"
                 type="text"
-                class="flex-grow px-3 py-2 border border-gray-300 rounded-l-md focus:outline-none focus:ring-primary focus:border-primary transition-all"
+                maxlength="6"
+                class="flex-grow px-3 py-2 border border-gray-300 rounded-l-md focus:outline-none focus:ring-primary focus:border-primary transition-all uppercase tracking-wider font-mono"
                 :class="{
-                  'border-red-300': (affiliateTarget && !isValidTarget) || (error && getErrorCategory === 'email'),
+                  'border-red-300': (affiliateTarget && !isValidTarget) || (error && getErrorCategory === 'code'),
+                  'border-green-300': codeStatus === 'valid',
                   'animate-pulse': affiliating
                 }"
+                @keypress="validateCodeInput"
                 @keyup.enter="requestAffiliation"
               />
               <button
@@ -758,7 +776,7 @@ const handleChangeRole = async (userId: string, newRole: UserRole) => {
                   'border-green-300': codeStatus === 'valid',
                   'animate-pulse': affiliating
                 }"
-                @input="affiliateTarget = affiliateTarget.toUpperCase()"
+                @input="handleCodeInput"
                 @keypress="validateCodeInput"
                 @keyup.enter="requestAffiliation"
               />
@@ -779,19 +797,20 @@ const handleChangeRole = async (userId: string, newRole: UserRole) => {
               </button>
             </div>
             
-            <!-- Visualização em caixas para cada caractere do código -->
+            <!-- Visualização em caixas para cada caractere do código com melhor sincronização -->
             <div class="flex justify-between mb-2 code-boxes">
-                <div 
+              <div 
                 v-for="index in 6" 
                 :key="index"
                 class="w-12 h-12 flex items-center justify-center border-2 rounded-md text-xl font-bold transition-all overflow-hidden"
                 :class="{
                   'border-gray-300 bg-gray-50': !affiliateTarget || index > affiliateTarget.length,
                   'border-primary text-primary': affiliateTarget && index <= affiliateTarget.length,
-                  'border-green-500 bg-green-50 text-green-600': codeStatus === 'valid' && index <= affiliateTarget.length
+                  'border-green-500 bg-green-50 text-green-600': codeStatus === 'valid' && index <= affiliateTarget.length,
+                  'shake-animation': error && getErrorCategory === 'code' && index <= affiliateTarget.length
                 }"
               >
-                {{ affiliateTarget && index <= affiliateTarget.length ? affiliateTarget[index-1] : '' }}
+                {{ affiliateTarget && index <= affiliateTarget.length && index <= 6 ? affiliateTarget[index-1] : '' }}
               </div>
             </div>
             
@@ -1209,5 +1228,16 @@ const handleChangeRole = async (userId: string, newRole: UserRole) => {
 .dropdown-leave-to {
   opacity: 0;
   transform: translateY(-10px);
+}
+
+/* Animação de erro para caixas de código */
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-5px); }
+  40%, 80% { transform: translateX(5px); }
+}
+
+.shake-animation {
+  animation: shake 0.5s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
 }
 </style>
