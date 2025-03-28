@@ -1,6 +1,14 @@
 import { collection, getDocs, query, where, doc, getDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 
+// Define UserRole enum if it's not imported from elsewhere
+enum UserRole {
+  USER = 'USER',
+  ADMIN = 'ADMIN',
+  SECRETARIA = 'SECRETARIA',
+  TESOUREIRO = 'TESOUREIRO'
+}
+
 /**
  * Script para migrar dados de afiliação existentes para o novo formato
  */
@@ -58,6 +66,57 @@ export const migrateAffiliations = async () => {
     
   } catch (error) {
     console.error('Erro ao executar migração:', error);
+    throw error;
+  }
+};
+
+/**
+ * Script para corrigir hierarquias de usuários sem afiliação válida
+ */
+export const fixUserRoles = async () => {
+  try {
+    // Buscar todos os usuários com papéis administrativos
+    const usersRef = collection(db, 'users');
+    const q = query(
+      usersRef,
+      where('role', 'in', [UserRole.ADMIN, UserRole.SECRETARIA, UserRole.TESOUREIRO])
+    );
+    const querySnapshot = await getDocs(q);
+    
+    console.log(`Encontrados ${querySnapshot.size} usuários com papéis administrativos para verificar`);
+    
+    let fixedCount = 0;
+    let skippedCount = 0;
+    
+    for (const userDoc of querySnapshot.docs) {
+      try {
+        const userData = userDoc.data();
+        const userId = userDoc.id;
+        
+        // Verificar se o usuário tem afiliados ou está afiliado a alguém
+        const hasAffiliates = userData.affiliates && userData.affiliates.length > 0;
+        const isAffiliated = !!userData.affiliatedToId;
+        
+        // Se não tiver nem afiliados nem afiliação, redefinir para USER
+        if (!hasAffiliates && !isAffiliated) {
+          console.log(`Corrigindo papel do usuário ${userId}. Atual: ${userData.role}`);
+          await updateDoc(doc(db, 'users', userId), {
+            role: UserRole.USER
+          });
+          fixedCount++;
+        } else {
+          skippedCount++;
+        }
+      } catch (err) {
+        console.error(`Erro ao processar usuário ${userDoc.id}:`, err);
+      }
+    }
+    
+    console.log(`Correção concluída: ${fixedCount} corrigidos, ${skippedCount} mantidos`);
+    return { fixed: fixedCount, skipped: skippedCount };
+    
+  } catch (error) {
+    console.error('Erro ao executar correção de papéis:', error);
     throw error;
   }
 };

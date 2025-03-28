@@ -68,6 +68,37 @@ const closeRoleModal = () => {
 // Atualizar papel do usuário
 const updateUserRole = async (userId: string, newRole: UserRole) => {
   try {
+    // Verificar se o usuário tem afiliados
+    const user = await userStore.fetchUserById(userId);
+    if (!user) {
+      actionError.value = 'Usuário não encontrado.';
+      setTimeout(() => {
+        actionError.value = null;
+      }, 3000);
+      closeRoleModal();
+      return;
+    }
+    
+    const hasAffiliates = user.affiliates && user.affiliates.length > 0;
+    const hasValidAffiliation = !!user.affiliatedToId;
+    
+    // Regras de negócio para papéis administrativos:
+    // 1. Usuários com afiliados podem ter papéis administrativos
+    // 2. Usuários afiliados a outros usuários também podem ter papéis administrativos
+    const canHaveAdminRole = hasAffiliates || hasValidAffiliation;
+    
+    if (!canHaveAdminRole && 
+        (newRole === UserRole.ADMIN || 
+         newRole === UserRole.SECRETARIA || 
+         newRole === UserRole.TESOUREIRO)) {
+      actionError.value = 'Apenas usuários com afiliados ou com afiliação válida podem ter papéis administrativos.';
+      setTimeout(() => {
+        actionError.value = null;
+      }, 3000);
+      closeRoleModal();
+      return;
+    }
+    
     const success = await userStore.updateUserRole(userId, newRole);
     
     if (success) {

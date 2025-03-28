@@ -1,6 +1,7 @@
-import { collection, getDocs, doc, updateDoc, writeBatch } from 'firebase/firestore';
+import { collection, getDocs, doc, getDoc, updateDoc, writeBatch } from 'firebase/firestore';
 import { db } from '../firebase';
-import type { UserRole, SalesData } from '../types/user';
+import { UserRole } from '../types/user';
+import type { SalesData } from '../types/user';
 import type { Order } from '../types/order';
 import { updateOrderPayment } from './orders';
 
@@ -110,7 +111,27 @@ export const updateOrderPaymentStatus = async (orderId: string, isPaid: boolean)
 
 export const updateUserRole = async (userId: string, newRole: UserRole): Promise<boolean> => {
   try {
+    // Verificar se o usuário tem afiliados antes de permitir papel administrativo
     const userRef = doc(db, 'users', userId);
+    const userDoc = await getDoc(userRef);
+    
+    if (!userDoc.exists()) {
+      console.error('Usuário não encontrado ao atualizar papel');
+      return false;
+    }
+    
+    const userData = userDoc.data();
+    const hasAffiliates = userData.affiliates && userData.affiliates.length > 0;
+    
+    // Se estiver tentando atribuir papel administrativo a usuário sem afiliados
+    if (!hasAffiliates && 
+        (newRole === UserRole.ADMIN || 
+         newRole === UserRole.SECRETARIA || 
+         newRole === UserRole.TESOUREIRO)) {
+      console.warn('Tentativa de atribuir papel administrativo a usuário sem afiliados');
+      return false;
+    }
+    
     await updateDoc(userRef, { role: newRole });
     return true;
   } catch (error) {

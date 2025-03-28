@@ -319,6 +319,37 @@ export function useAffiliateCode() {
     error.value = null;
     
     try {
+      // Verificar se o afiliado ainda está na lista de afiliados do usuário atual
+      const userAffiliate = affiliatedUsers.value.find(user => user.id === affiliateId);
+      if (!userAffiliate) {
+        error.value = 'Este usuário não é mais seu afiliado ou a relação foi rompida.';
+        return {
+          success: false,
+          message: error.value
+        };
+      }
+      
+      // Verificar se está tentando atribuir papel administrativo, mas o usuário não tem mais afiliação válida
+      if ((newRole === UserRole.ADMIN || 
+           newRole === UserRole.SECRETARIA || 
+           newRole === UserRole.TESOUREIRO) && 
+          (!userAffiliate.affiliatedToId || userAffiliate.affiliatedToId !== currentUser.value.id)) {
+        error.value = 'Não é possível atribuir papel administrativo a um usuário sem afiliação válida.';
+        return {
+          success: false,
+          message: error.value
+        };
+      }
+      
+      // Se o papel atual for administrativo e o usuário não tiver mais afiliação válida,
+      // forçar o papel para USER independente do solicitado
+      if ((userAffiliate.role === UserRole.ADMIN || 
+           userAffiliate.role === UserRole.SECRETARIA || 
+           userAffiliate.role === UserRole.TESOUREIRO) && 
+          (!userAffiliate.affiliatedToId || userAffiliate.affiliatedToId !== currentUser.value.id)) {
+        newRole = UserRole.USER;
+      }
+      
       const result = await updateAffiliateRoleService(currentUser.value.id, affiliateId, newRole);
       
       if (result.success) {

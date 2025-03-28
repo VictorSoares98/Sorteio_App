@@ -484,17 +484,31 @@ export const removeAffiliate = async (
     // Usar uma transação para garantir atomicidade
     let transactionSuccess = false;
     await runTransaction(db, async (transaction) => {
-      // 1. Remover o afiliado da lista do proprietário
-      transaction.update(ownerRef, {
-        affiliates: ownerData.affiliates.filter((id: string) => id !== affiliateId)
-      });
+      // Calcular a nova lista de afiliados após a remoção
+      const updatedAffiliates = ownerData.affiliates.filter((id: string) => id !== affiliateId);
       
-      // 2. Remover informações de afiliação do afiliado
+      // 1. Atualizar o proprietário
+      if (updatedAffiliates.length === 0) {
+        // Se o proprietário não tem mais afiliados, redefinir seu papel para USER
+        console.log('[ProfileService] Proprietário não tem mais afiliados, redefinindo papel para USER');
+        transaction.update(ownerRef, {
+          affiliates: updatedAffiliates,
+          role: UserRole.USER // Redefine o papel do proprietário para usuário padrão
+        });
+      } else {
+        // Apenas atualiza a lista de afiliados
+        transaction.update(ownerRef, {
+          affiliates: updatedAffiliates
+        });
+      }
+      
+      // 2. Remover informações de afiliação do afiliado e redefinir papel para USER
       transaction.update(affiliateRef, {
         affiliatedTo: null,
         affiliatedToId: null,
         affiliatedToEmail: null,
-        affiliatedToInfo: null
+        affiliatedToInfo: null,
+        role: UserRole.USER // Redefine o papel para usuário padrão
       });
       
       transactionSuccess = true;
@@ -570,6 +584,27 @@ export const updateAffiliateRole = async (
         success: false,
         message: 'Este usuário não é seu afiliado.'
       };
+    }
+    
+    // Verificação adicional: Garantir que apenas usuários com status de afiliados 
+    // válidos podem receber papéis administrativos
+    if ((newRole === UserRole.ADMIN || 
+         newRole === UserRole.SECRETARIA || 
+         newRole === UserRole.TESOUREIRO) && 
+        (!affiliateData.affiliatedToId || affiliateData.affiliatedToId !== ownerId)) {
+      
+      // Forçar papel USER se tentando definir papel administrativo para usuário sem afiliação válida
+      if (affiliateData.role === UserRole.ADMIN || 
+          affiliateData.role === UserRole.SECRETARIA || 
+          affiliateData.role === UserRole.TESOUREIRO) {
+        newRole = UserRole.USER;
+        console.log('[ProfileService] Redefinindo papel para USER pois usuário não tem afiliação válida');
+      } else {
+        return {
+          success: false,
+          message: 'Este usuário não pode receber papel administrativo sem uma afiliação válida.'
+        };
+      }
     }
     
     // Verificar se o afiliado já tem o papel solicitado

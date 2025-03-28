@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { useAuthStore } from '../../stores/authStore';
 import { useOrderStore } from '../../stores/orderStore';
 import { formatUserRole } from '../../utils/formatters';
@@ -15,6 +15,8 @@ const orderStore = useOrderStore();
 const isLoading = ref(true);
 const activeTab = ref('sales'); // Inicia com a tab de vendas ativa
 
+// Removido isAdmin não utilizado e substituído pelo showDashboard que tem a mesma lógica
+
 // Verificar se o usuário tem permissão para ver o Painel de Controle
 const showDashboard = computed(() => {
   if (!authStore.currentUser) return false;
@@ -27,14 +29,25 @@ const showRanking = computed(() => {
   return !!authStore.currentUser.affiliatedTo;
 });
 
+// Observar mudanças no papel do usuário
+watch(() => authStore.currentUser?.role, (newRole) => {
+  if (newRole) {
+    console.log('[ProfileView] Papel do usuário atualizado:', newRole);
+    // Forçar atualização do componente
+    isLoading.value = true;
+    setTimeout(() => {
+      isLoading.value = false;
+    }, 100);
+  }
+});
+
 // Garantir que os dados do usuário e pedidos estejam carregados
 onMounted(async () => {
   console.log('[ProfileView] Montando componente');
   try {
-    if (!authStore.currentUser) {
-      console.log('[ProfileView] Usuário não encontrado, buscando dados');
-      await authStore.fetchUserData();
-    }
+    // Forçar atualização completa dos dados do usuário
+    console.log('[ProfileView] Buscando dados atualizados do usuário');
+    await authStore.fetchUserData(true); // Adicionar parâmetro para forçar atualização
     
     // Carregar os pedidos do usuário
     console.log('[ProfileView] Buscando pedidos do usuário');

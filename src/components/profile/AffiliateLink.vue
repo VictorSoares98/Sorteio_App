@@ -530,9 +530,34 @@ const confirmRemoveAffiliate = (userId: string, event: Event) => {
   activeDropdownId.value = null; // Fechar dropdown
 };
 
-// Abrir diálogo de confirmação para mudar papel
+// Função que verifica se um determinado papel pode ser atribuído ao usuário
+const canAssignRole = (user: any, role: UserRole): boolean => {
+  // Papéis administrativos só podem ser atribuídos a usuários com afiliação válida
+  if (role === UserRole.ADMIN || role === UserRole.SECRETARIA || role === UserRole.TESOUREIRO) {
+    return !!user.affiliatedToId && user.affiliatedToId === currentUser.value?.id;
+  }
+  
+  // Papel de usuário comum pode ser atribuído a qualquer usuário
+  return true;
+};
+
+// Verificar se um usuário pode ter sua hierarquia alterada
+const canChangeUserRole = (user: any): boolean => {
+  // Só pode alterar o papel se o usuário estiver afiliado ao usuário atual
+  return !!user.affiliatedToId && user.affiliatedToId === currentUser.value?.id;
+};
+
+// Função para abrir diálogo de confirmação para mudar papel
 const confirmChangeRole = (userId: string, role: UserRole, event: Event) => {
   event.stopPropagation();
+  
+  // Verifica se o papel pode ser atribuído ao usuário
+  const user = affiliatedUsers.value.find(u => u.id === userId);
+  if (user && !canAssignRole(user, role)) {
+    showTemporaryMessage('error', 'Não é possível atribuir este papel a um usuário sem afiliação válida.');
+    return;
+  }
+  
   confirmAction.value = {
     type: 'role',
     id: userId,
@@ -716,16 +741,14 @@ const handleChangeRole = async (userId: string, newRole: UserRole) => {
               <input
                 ref="affiliateCodeInputRef"
                 v-model="affiliateTarget"
-                placeholder="Digite o código"
-                type="text"
-                maxlength="6"
-                class="flex-grow px-3 py-2 border border-gray-300 rounded-l-md focus:outline-none focus:ring-primary focus:border-primary transition-all uppercase tracking-wider font-mono"
+                placeholder="Digite o email"
+                type="email"
+                class="flex-grow px-3 py-2 border border-gray-300 rounded-l-md focus:outline-none focus:ring-primary focus:border-primary transition-all"
                 :class="{
-                  'border-red-300': (affiliateTarget && !isValidTarget) || (error && getErrorCategory === 'code'),
-                  'border-green-300': codeStatus === 'valid',
+                  'border-red-300': (affiliateTarget && !isValidTarget) || (error && getErrorCategory === 'email'),
+                  'border-green-300': affiliateTarget && isValidTarget,
                   'animate-pulse': affiliating
                 }"
-                @keypress="validateCodeInput"
                 @keyup.enter="requestAffiliation"
               />
               <button
@@ -1020,8 +1043,8 @@ const handleChangeRole = async (userId: string, newRole: UserRole) => {
                 @click.stop
               >
                 <div class="py-1">
-                  <!-- Opção: Alterar Hierarquia -->
-                  <div class="relative">
+                  <!-- Opção: Alterar Hierarquia - só mostrar se o usuário puder ter a hierarquia alterada -->
+                  <div class="relative" v-if="canChangeUserRole(user)">
                     <button 
                       @click="toggleRoleMenu(user.id, $event)"
                       class="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 hover:text-primary flex justify-between items-center"
@@ -1047,8 +1070,10 @@ const handleChangeRole = async (userId: string, newRole: UserRole) => {
                           :class="[
                             user.role === role 
                               ? 'text-primary font-medium' 
-                              : 'text-gray-700 hover:text-primary'
+                              : 'text-gray-700 hover:text-primary',
+                            !canAssignRole(user, role as UserRole) ? 'opacity-50 cursor-not-allowed' : ''
                           ]"
+                          :disabled="!canAssignRole(user, role as UserRole)"
                         >
                           <span v-if="user.role === role">✓ </span>
                           {{ label }}
@@ -1057,8 +1082,8 @@ const handleChangeRole = async (userId: string, newRole: UserRole) => {
                     </div>
                   </div>
                   
-                  <!-- Separador -->
-                  <hr class="my-1 border-gray-200">
+                  <!-- Separador - só mostrar se tiver a opção de alterar hierarquia -->
+                  <hr v-if="canChangeUserRole(user)" class="my-1 border-gray-200">
                   
                   <!-- Opção: Remover afiliado -->
                   <button 

@@ -1,11 +1,36 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, computed, watch, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '../../stores/authStore';
+import { UserRole } from '../../types/user';
 
 const router = useRouter();
 const authStore = useAuthStore();
 const isMenuOpen = ref(false);
+
+// Recalcular as permissões sempre que o papel do usuário mudar
+const isAdmin = computed(() => {
+  return authStore.currentUser?.role === UserRole.ADMIN || 
+         authStore.currentUser?.role === UserRole.SECRETARIA || 
+         authStore.currentUser?.role === UserRole.TESOUREIRO;
+});
+
+// Verificar a cada transição de rota se os dados do usuário precisam ser atualizados
+onMounted(() => {
+  // Força a atualização dos dados do usuário ao montar o componente
+  if (authStore.isLoggedIn) {
+    console.log('[NavBar] Atualizando dados do usuário no mount');
+    authStore.fetchUserData();
+  }
+});
+
+// Observar mudanças de autenticação para atualizar a interface
+watch(() => authStore.isLoggedIn, (newValue) => {
+  if (newValue) {
+    console.log('[NavBar] Detectada mudança de autenticação, atualizando dados');
+    authStore.fetchUserData();
+  }
+});
 
 const navigateTo = (path: string) => {
   router.push(path);
@@ -48,7 +73,7 @@ const toggleMenu = () => {
               Perfil
             </button>
             <button 
-              v-if="authStore.isAdmin" 
+              v-if="isAdmin" 
               @click="navigateTo('/admin')" 
               class="px-3 py-2 rounded hover:bg-primary-dark text-sm md:text-base transition-colors"
             >
@@ -106,7 +131,7 @@ const toggleMenu = () => {
               Perfil
             </button>
             <button 
-              v-if="authStore.isAdmin" 
+              v-if="isAdmin" 
               @click="navigateTo('/admin')" 
               class="block w-full text-left px-3 py-2 rounded hover:bg-primary-dark transition-colors"
             >
