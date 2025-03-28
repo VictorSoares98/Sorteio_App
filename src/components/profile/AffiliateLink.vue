@@ -988,9 +988,8 @@ const handleChangeRole = async (userId: string, newRole: UserRole) => {
         </div>
       </div>
       
-      <!-- Usuários Afiliados - com animação de sucesso -->
-      <div v-if="affiliatedUsers.length > 0" 
-           class="mt-6 pt-2 border-t relative"
+      <!-- Usuários Afiliados - agora sempre visível -->
+      <div class="mt-6 pt-2 border-t relative"
            :class="{ 'animate-pulse bg-green-50 rounded-lg': animateSuccess }">
         <div class="flex justify-between items-center mb-2">
           <h3 class="text-lg font-medium text-primary">
@@ -1012,7 +1011,8 @@ const handleChangeRole = async (userId: string, newRole: UserRole) => {
         
         <p class="text-sm text-gray-600 mb-2">Usuários vinculados à sua conta:</p>
         
-        <ul class="divide-y divide-gray-200">
+        <!-- Lista de afiliados - exibida apenas se houver afiliados -->
+        <ul v-if="affiliatedUsers.length > 0" class="divide-y divide-gray-200">
           <li v-for="user in affiliatedUsers" :key="user.id" class="py-2 relative">
             <div class="flex justify-between items-center">
               <div>
@@ -1097,6 +1097,25 @@ const handleChangeRole = async (userId: string, newRole: UserRole) => {
             </div>
           </li>
         </ul>
+        
+        <!-- Mensagem para quando não há afiliados -->
+        <div v-else class="p-4 bg-gray-50 border border-gray-200 rounded-lg mb-4">
+          <div class="flex items-start">
+            <div class="mr-3 flex-shrink-0">
+              <svg class="h-5 w-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <div>
+              <p class="text-gray-600">
+                Você ainda não possui usuários afiliados.
+              </p>
+              <p class="text-sm text-gray-500 mt-2">
+                Compartilhe seu código de afiliação para começar a formar sua rede.
+              </p>
+            </div>
+          </div>
+        </div>
       </div>
       
       <!-- Afiliado a -->

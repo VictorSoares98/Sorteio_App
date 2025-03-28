@@ -15,6 +15,7 @@ const authStore = useAuthStore();
 const orderStore = useOrderStore();
 const isLoading = ref(true);
 const activeTab = ref('sales'); // Inicia com a tab de vendas ativa
+const affiliateLinkKey = ref(0); // Chave para forçar recreação do componente AffiliateLink
 
 // Removido isAdmin não utilizado e substituído pelo showDashboard que tem a mesma lógica
 
@@ -45,6 +46,15 @@ const fixAdminRole = async () => {
   } finally {
     isLoading.value = false;
   }
+};
+
+// Função para alternar entre abas com reinicialização para o componente de afiliados
+const switchTab = (tab: string) => {
+  // Se estiver mudando para a aba de afiliados, incrementar a chave
+  if (tab === 'affiliate') {
+    affiliateLinkKey.value++;
+  }
+  activeTab.value = tab;
 };
 
 // Observar mudanças no papel do usuário
@@ -131,7 +141,7 @@ onMounted(async () => {
           <div class="flex flex-col space-y-2">
             <!-- 1. Minhas Vendas -->
             <button 
-              @click="activeTab = 'sales'" 
+              @click="switchTab('sales')" 
               class="py-2 px-4 rounded-md text-left transition-colors"
               :class="activeTab === 'sales' 
                 ? 'bg-primary bg-opacity-10 text-white font-medium' 
@@ -148,7 +158,7 @@ onMounted(async () => {
             <!-- 2. Painel de Controle (novo - apenas para admin/secretária/tesoureiro) -->
             <button 
               v-if="showDashboard"
-              @click="activeTab = 'dashboard'" 
+              @click="switchTab('dashboard')" 
               class="py-2 px-4 rounded-md text-left transition-colors"
               :class="activeTab === 'dashboard' 
                 ? 'bg-primary bg-opacity-10 text-white font-medium' 
@@ -165,7 +175,7 @@ onMounted(async () => {
             <!-- 3. Ranking (novo - apenas para afiliados) -->
             <button 
               v-if="showRanking"
-              @click="activeTab = 'ranking'" 
+              @click="switchTab('ranking')" 
               class="py-2 px-4 rounded-md text-left transition-colors"
               :class="activeTab === 'ranking' 
                 ? 'bg-primary bg-opacity-10 text-white font-medium' 
@@ -181,7 +191,7 @@ onMounted(async () => {
             
             <!-- 4. Programa de Afiliados -->
             <button 
-              @click="activeTab = 'affiliate'" 
+              @click="switchTab('affiliate')" 
               class="py-2 px-4 rounded-md text-left transition-colors"
               :class="activeTab === 'affiliate' 
                 ? 'bg-primary bg-opacity-10 text-white font-medium' 
@@ -197,7 +207,7 @@ onMounted(async () => {
             
             <!-- 5. Informações do Perfil -->
             <button 
-              @click="activeTab = 'profile'" 
+              @click="switchTab('profile')" 
               class="py-2 px-4 rounded-md text-left transition-colors"
               :class="activeTab === 'profile' 
                 ? 'bg-primary bg-opacity-10 text-white font-medium' 
@@ -226,9 +236,9 @@ onMounted(async () => {
           <SalesAccordion />
         </div>
         
-        <!-- Link de Afiliado -->
+        <!-- Link de Afiliado - com key dinâmica para recriação do componente -->
         <div v-else-if="activeTab === 'affiliate'">
-          <AffiliateLink />
+          <AffiliateLink :key="affiliateLinkKey" />
         </div>
         
         <!-- Painel de Controle (novo) -->
