@@ -74,10 +74,10 @@ export function useAffiliateCode() {
       return null;
     }
     
-    loading.value = true;
+    loading.value = true;           // Ativa o estado de carregamento
     error.value = null;
     success.value = null;
-    isGeneratingCode.value = true;
+    isGeneratingCode.value = true;  // Ativa a transição visual do botão
     
     try {
       console.log('[useAffiliateCode] Gerando código temporário');
@@ -108,8 +108,8 @@ export function useAffiliateCode() {
       error.value = err.message || 'Erro ao gerar código temporário.';
       return null;
     } finally {
-      loading.value = false;
-      isGeneratingCode.value = false;
+      loading.value = false;            // Desativa o estado de carregamento
+      isGeneratingCode.value = false;   // Retorna o botão ao estado original
     }
   };
   
