@@ -6,6 +6,7 @@ import { UserRole } from '../types/user';
 import { isAdmin } from '../utils/permissions';
 import { onAuthStateChanged } from 'firebase/auth';
 import type { User } from 'firebase/auth';
+import { useAuthStore } from '../stores/authStore'; // Importação necessária para o novo guard
 
 // Interface para metadados de rota personalizados
 interface RouteMeta {
@@ -162,6 +163,26 @@ router.beforeEach(async (
   } else {
     next();
   }
+});
+
+// Configurar guards de navegação
+router.beforeEach(async (to, from, next) => {
+  // Se está navegando para a página inicial e tem afiliação pendente,
+  // garantir que os dados de usuário estejam atualizados
+  if (to.path === '/' && (sessionStorage.getItem('newAffiliation') === 'true' || from.path === '/register' || from.path === '/login')) {
+    console.log('[Router] Detectada possível nova afiliação, atualizando dados do usuário');
+    const authStore = useAuthStore();
+    if (authStore.isAuthenticated) {
+      try {
+        // Forçar atualização dos dados do usuário
+        await authStore.fetchUserData(true);
+      } catch (err) {
+        console.error('[Router] Erro ao atualizar dados de usuário:', err);
+      }
+    }
+  }
+  
+  next();
 });
 
 // Add global navigation guard for debugging

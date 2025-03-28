@@ -146,42 +146,63 @@ export const useAuthStore = defineStore('auth', () => {
     }
   };
 
+  /**
+   * Registra um novo usuário
+   */
   const register = async (email: string, password: string, userData: { 
     displayName: string;
     username?: string;
     congregation?: string;
-  }) => {
+  }): Promise<boolean> => {
     loading.value = true;
     error.value = null;
     
     try {
-      const pendingAffiliateCode = localStorage.getItem('pendingAffiliateCode');
-      console.log('[AuthStore] Iniciando registro com código de afiliação pendente:', pendingAffiliateCode);
-      
+      // Criar usuário com Firebase Auth
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
       
+      // Atualizar displayName do usuário
       await updateProfile(user, {
         displayName: userData.displayName
       });
       
-      await setDoc(doc(db, 'users', user.uid), {
-        id: user.uid,
+      // Criar documento do usuário no Firestore
+      const userDoc = {
+        uid: user.uid,
+        email: user.email,
         displayName: userData.displayName,
-        email: email,
         username: userData.username || userData.displayName.toLowerCase().replace(/\s+/g, '_'),
+        photoURL: user.photoURL || '',
         role: UserRole.USER,
         congregation: userData.congregation || '',
         createdAt: serverTimestamp(),
-      });
+        phone: '',
+        affiliateCode: null,
+        affiliateCodeExpiry: null,
+        affiliatedTo: null,
+        affiliatedToId: null,
+        affiliatedToEmail: null,
+        affiliatedToInfo: null,
+        affiliates: []
+      };
       
+      await setDoc(doc(db, 'users', user.uid), userDoc);
+      
+      // Verificar se há um código de afiliado pendente no localStorage
+      const pendingAffiliateCode = localStorage.getItem('pendingAffiliateCode');
       if (pendingAffiliateCode) {
-        console.log('[AuthStore] Processando afiliação para novo usuário com código:', pendingAffiliateCode);
+        console.log('[AuthStore] Processando código de afiliado pendente:', pendingAffiliateCode);
         try {
+          // Importar função de afiliação sob demanda para não sobrecarregar o bundle inicial
+          const { affiliateToUser } = await import('../services/profile');
           const affiliationResult = await affiliateToUser(user.uid, pendingAffiliateCode, false);
           
           if (affiliationResult.success) {
             console.log('[AuthStore] Afiliação processada com sucesso:', affiliationResult);
+            // Definir flag de nova afiliação para exibir notificação
+            sessionStorage.setItem('newAffiliation', 'true');
+            // Remover código de afiliado do localStorage após uso bem-sucedido
             localStorage.removeItem('pendingAffiliateCode');
           } else {
             console.error('[AuthStore] Erro na afiliação:', affiliationResult.message);
@@ -191,11 +212,12 @@ export const useAuthStore = defineStore('auth', () => {
         }
       }
       
-      await fetchUserData();
+      // Buscar dados completos do usuário após criação
+      await fetchUserData(true);
       
       return true;
     } catch (err: any) {
-      console.error('Erro no cadastro:', err);
+      console.error('[AuthStore] Erro no cadastro:', err);
       
       if (err.code === 'auth/email-already-in-use') {
         error.value = 'Este email já está em uso.';
@@ -210,7 +232,7 @@ export const useAuthStore = defineStore('auth', () => {
   };
 
   /**
-   * Busca dados do usuário logado com opção para forçar a atualização
+   * Busca os dados do usuário atual no Firestore
    */
   const fetchUserData = async (forceRefresh = false): Promise<User | null> => {
     if (!firebaseUser.value) {

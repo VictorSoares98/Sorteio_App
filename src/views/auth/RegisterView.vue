@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onBeforeMount } from 'vue';
+import { ref, onBeforeMount, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
 import RegisterForm from '../../components/auth/RegisterForm.vue';
 
@@ -12,8 +12,34 @@ onBeforeMount(() => {
   const refCode = route.query.ref as string || localStorage.getItem('pendingAffiliateCode');
   
   if (refCode) {
+    console.log('[RegisterView] Código de afiliado encontrado:', refCode);
     affiliateCode.value = refCode;
     affiliationMessage.value = 'Você foi convidado e está se cadastrando vinculado a outro usuário.';
+  }
+});
+
+// Capturar o código de afiliação da URL e armazená-lo
+onMounted(() => {
+  const urlParams = new URLSearchParams(window.location.search);
+  const refCode = urlParams.get('ref');
+  
+  if (refCode) {
+    console.log('[RegisterView] Código de afiliado detectado na URL:', refCode);
+    localStorage.setItem('pendingAffiliateCode', refCode);
+    
+    // Definir o código para exibição se ainda não estiver definido
+    if (!affiliateCode.value) {
+      affiliateCode.value = refCode;
+      affiliationMessage.value = 'Você foi convidado e está se cadastrando vinculado a outro usuário.';
+    }
+    
+    // Log de diagnóstico
+    console.log('[RegisterView] Estado atual da afiliação pendente:', {
+      codigoUrl: refCode,
+      codigoLocalStorage: localStorage.getItem('pendingAffiliateCode')
+    });
+  } else {
+    console.log('[RegisterView] Nenhum código de afiliado na URL');
   }
 });
 </script>

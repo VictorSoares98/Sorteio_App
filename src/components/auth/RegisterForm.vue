@@ -79,6 +79,12 @@ const register = async () => {
     
     if (success) {
       console.log('[RegisterForm] Registro bem-sucedido, redirecionando');
+      
+      // Verificar novamente se há afiliação pendente
+      if (localStorage.getItem('pendingAffiliateCode') || sessionStorage.getItem('newAffiliation')) {
+        console.log('[RegisterForm] Afiliação detectada após registro, definindo flag');
+      }
+      
       // Redirecionar para a página inicial após o cadastro
       router.push('/');
     }

@@ -7,39 +7,85 @@ import { useOrderStore } from '../stores/orderStore';
 const authStore = useAuthStore();
 const orderStore = useOrderStore();
 
-// Estado para controlar a exibição da notificação de afiliação
+// Verificar se há notificação de afiliação pendente
+const hasNewAffiliation = sessionStorage.getItem('newAffiliation') === 'true';
+console.log('[HomeView] Verificando nova afiliação:', hasNewAffiliation);
+
+// Dados da afiliação para exibir na notificação
 const showAffiliationNotification = ref(false);
 const affiliationUserData = ref({
   name: '',
   email: ''
 });
 
-// Carrega dados necessários quando o componente é montado
+// Melhorar a verificação da afiliação
 onMounted(async () => {
-  // Verificar se há uma afiliação recente
-  const hasNewAffiliation = sessionStorage.getItem('newAffiliation') === 'true';
+  console.log('[HomeView] Componente montado, verificando afiliação');
   
-  // Apenas carregue dados se o usuário estiver autenticado mas sem dados carregados
-  if (authStore.isAuthenticated && !authStore.currentUser) {
-    await authStore.fetchUserData();
-    // Carrega os pedidos do usuário após buscar seus dados
-    await orderStore.fetchUserOrders();
+  // Garantir que temos dados atualizados do usuário
+  if (authStore.isAuthenticated) {
+    if (!authStore.currentUser) {
+      console.log('[HomeView] Buscando dados do usuário');
+      await authStore.fetchUserData(true); // Forçar atualização para ter dados mais recentes
+    }
+    
+    // Carregar pedidos do usuário após ter seus dados
+    if (authStore.currentUser) {
+      await orderStore.fetchUserOrders();
+    }
   }
   
-  // Se o usuário está autenticado e há uma nova afiliação, exibir notificação
-  if (hasNewAffiliation && authStore.currentUser && authStore.currentUser.affiliatedTo) {
-    showAffiliationNotification.value = true;
-    affiliationUserData.value = {
-      name: authStore.currentUser.affiliatedTo,
-      email: authStore.currentUser.affiliatedToEmail || ''
-    };
-    // Limpar a flag após exibir a notificação
-    sessionStorage.removeItem('newAffiliation');
+  // Verificar se há uma nova afiliação para exibir notificação
+  if (hasNewAffiliation && authStore.isAuthenticated && authStore.currentUser) {
+    console.log('[HomeView] Verificando dados de afiliação para notificação');
     
-    // Fechar automaticamente após 5 segundos
-    setTimeout(() => {
-      showAffiliationNotification.value = false;
-    }, 5000);
+    // Verificar se temos dados de afiliação
+    if (authStore.currentUser.affiliatedTo) {
+      console.log('[HomeView] Exibindo notificação de afiliação bem-sucedida');
+      showAffiliationNotification.value = true;
+      affiliationUserData.value = {
+        name: authStore.currentUser.affiliatedTo,
+        email: authStore.currentUser.affiliatedToEmail || ''
+      };
+      
+      // Limpar a flag após exibir a notificação
+      sessionStorage.removeItem('newAffiliation');
+      
+      // Fechar automaticamente após 10 segundos para dar mais tempo de leitura
+      setTimeout(() => {
+        showAffiliationNotification.value = false;
+      }, 10000);
+    } else {
+      console.warn('[HomeView] Flag de afiliação presente, mas dados de afiliação ausentes');
+      // Verificar se precisamos atualizar os dados novamente
+      if (!authStore.loading) {
+        console.log('[HomeView] Tentando atualizar dados do usuário');
+        await authStore.fetchUserData(true);
+        
+        // Verificar novamente após atualização
+        if (authStore.currentUser?.affiliatedTo) {
+          console.log('[HomeView] Dados atualizados, exibindo notificação');
+          showAffiliationNotification.value = true;
+          affiliationUserData.value = {
+            name: authStore.currentUser.affiliatedTo,
+            email: authStore.currentUser.affiliatedToEmail || ''
+          };
+          
+          // Limpar a flag
+          sessionStorage.removeItem('newAffiliation');
+          
+          setTimeout(() => {
+            showAffiliationNotification.value = false;
+          }, 10000);
+        } else {
+          console.warn('[HomeView] Dados atualizados, mas ainda sem afiliação');
+          sessionStorage.removeItem('newAffiliation');
+        }
+      } else {
+        // Se estiver carregando, aguardar e remover a flag
+        sessionStorage.removeItem('newAffiliation');
+      }
+    }
   }
 });
 
@@ -53,25 +99,12 @@ const closeNotification = () => {
   <div class="container mx-auto py-8">
     <h1 class="text-3xl font-bold mb-8 text-center">Formulário de Pedidos</h1>
     
-    <div v-if="authStore.loading" class="text-center py-8">
-      <p>Carregando...</p>
-    </div>
-    
-    <div v-else-if="!authStore.isAuthenticated" class="text-center py-8">
-      <p class="mb-4">Você precisa estar logado para criar um pedido.</p>
-      <router-link to="/login" class="text-primary hover:underline">Fazer login</router-link>
-    </div>
-    
-    <OrderForm v-else />
-    
-    <!-- Notificação de Afiliação Bem-sucedida -->
-    <div 
-      v-if="showAffiliationNotification" 
-      class="fixed bottom-4 right-4 max-w-md w-full bg-green-50 border border-green-200 rounded-lg shadow-lg p-4 z-50 animate-rise"
-    >
-      <div class="flex">
+    <!-- Notificação de afiliação concluída com sucesso - Agora com largura responsiva -->
+    <div v-if="showAffiliationNotification"
+         class="mb-8 bg-green-50 border-l-4 border-green-500 p-4 rounded-md shadow-md relative transition-all duration-300 w-full max-w-3xl mx-auto">
+      <div class="flex items-start">
         <div class="flex-shrink-0">
-          <svg class="h-6 w-6 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
         </div>
@@ -90,21 +123,24 @@ const closeNotification = () => {
             </button>
           </div>
         </div>
-        <div class="ml-auto pl-3">
-          <div class="-mx-1.5 -my-1.5">
-            <button 
-              @click="closeNotification" 
-              class="inline-flex rounded-md p-1.5 text-green-500 hover:bg-green-100 focus:outline-none"
-            >
-              <span class="sr-only">Fechar</span>
-              <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
-              </svg>
-            </button>
-          </div>
-        </div>
+        <button @click="closeNotification" class="absolute top-2 right-2 text-green-600 hover:text-green-800">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
+          </svg>
+        </button>
       </div>
     </div>
+    
+    <div v-if="authStore.loading" class="text-center py-8">
+      <p>Carregando...</p>
+    </div>
+    
+    <div v-else-if="!authStore.isAuthenticated" class="text-center py-8">
+      <p class="mb-4">Você precisa estar logado para criar um pedido.</p>
+      <router-link to="/login" class="text-primary hover:underline">Fazer login</router-link>
+    </div>
+    
+    <OrderForm v-else />
   </div>
 </template>
 
