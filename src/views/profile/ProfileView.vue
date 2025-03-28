@@ -9,6 +9,7 @@ import AffiliateLink from '../../components/profile/AffiliateLink.vue';
 import SalesAccordion from '../../components/profile/SalesAccordion.vue';
 import DashboardPlaceholder from '../../components/profile/DashboardPlaceholder.vue';
 import RankingPlaceholder from '../../components/profile/RankingPlaceholder.vue';
+import Alert from '../../components/ui/Alert.vue';
 
 const authStore = useAuthStore();
 const orderStore = useOrderStore();
@@ -28,6 +29,23 @@ const showRanking = computed(() => {
   if (!authStore.currentUser) return false;
   return !!authStore.currentUser.affiliatedTo;
 });
+
+// Função para corrigir perfil administrativo manualmente
+const fixAdminRole = async () => {
+  isLoading.value = true;
+  try {
+    // Importar a função sob demanda para não sobrecarregar a aplicação
+    const { fixAdminRoles } = await import('../../services/profile');
+    await fixAdminRoles();
+    // Atualizar dados do usuário após a correção
+    await authStore.fetchUserData(true);
+    console.log('[ProfileView] Papel administrativo verificado e atualizado');
+  } catch (error) {
+    console.error('[ProfileView] Erro ao corrigir papel administrativo:', error);
+  } finally {
+    isLoading.value = false;
+  }
+};
 
 // Observar mudanças no papel do usuário
 watch(() => authStore.currentUser?.role, (newRole) => {
@@ -58,6 +76,18 @@ onMounted(async () => {
   } finally {
     isLoading.value = false;
   }
+
+  // Verificar se o usuário tem afiliados mas não tem papel administrativo
+  const user = authStore.currentUser;
+  if (user && user.affiliates && user.affiliates.length > 0 && 
+      user.role === UserRole.USER) {
+    console.warn('[ProfileView] Detectado usuário com afiliados mas sem papel administrativo');
+    try {
+      await fixAdminRole();
+    } catch (error) {
+      console.error('[ProfileView] Falha ao corrigir papel administrativo:', error);
+    }
+  }
 });
 </script>
 
@@ -70,6 +100,22 @@ onMounted(async () => {
     </div>
     
     <div v-else-if="authStore.currentUser" class="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <!-- Alerta de inconsistência de papel -->
+      <div v-if="authStore.currentUser.affiliates && 
+                 authStore.currentUser.affiliates.length > 0 && 
+                 authStore.currentUser.role === UserRole.USER"
+           class="md:col-span-3 mb-4">
+        <Alert type="warning" dismissible message="Inconsistência Detectada">
+          <div class="flex items-center">
+            <span class="mr-2">Detectamos que você tem afiliados mas não tem acesso administrativo.</span>
+            <button @click="fixAdminRole" 
+                    class="bg-primary text-white px-3 py-1 rounded text-sm hover:bg-primary-dark">
+              Corrigir Agora
+            </button>
+          </div>
+        </Alert>
+      </div>
+      
       <!-- Navegação lateral -->
       <div class="md:col-span-1">
         <div class="bg-white p-6 rounded-lg shadow-md">

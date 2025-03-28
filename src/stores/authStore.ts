@@ -11,10 +11,10 @@ import {
   GoogleAuthProvider,
   signInWithPopup
 } from 'firebase/auth';
-import { doc, getDoc, setDoc, serverTimestamp, onSnapshot } from 'firebase/firestore';
+import { doc, getDoc, setDoc, serverTimestamp, onSnapshot, updateDoc } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 import { type User, UserRole } from '../types/user';
-import { convertTimestampsInObject } from '../utils/firebaseUtils';
+import { convertTimestampsInObject, processFirestoreDocument } from '../utils/firebaseUtils';
 import { affiliateToUser } from '../services/profile';
 
 export const useAuthStore = defineStore('auth', () => {
@@ -24,6 +24,7 @@ export const useAuthStore = defineStore('auth', () => {
   const error = ref<string | null>(null);
   let router: Router | undefined;
   let userDataUnsubscribe: (() => void) | null = null;
+  const userDataCache = new Map<string, { data: User; timestamp: number }>();
 
   const isAuthenticated = computed(() => !!currentUser.value);
   const userRole = computed(() => currentUser.value?.role || null);
@@ -208,48 +209,67 @@ export const useAuthStore = defineStore('auth', () => {
     }
   };
 
-  const fetchUserData = async (forceRefresh = false): Promise<void> => {
-    if (!firebaseUser.value) return;
+  /**
+   * Busca dados do usuário logado com opção para forçar a atualização
+   */
+  const fetchUserData = async (forceRefresh = false): Promise<User | null> => {
+    if (!firebaseUser.value) {
+      console.log('[AuthStore] Não há usuário logado para buscar dados');
+      return null;
+    }
     
     try {
-      console.log('[AuthStore] Buscando dados do usuário:', firebaseUser.value.uid);
-      const userId = firebaseUser.value.uid;
+      console.log('[AuthStore] Buscando dados do usuário', firebaseUser.value.uid);
       
+      // Buscar dados diretamente do Firestore para garantir dados atualizados
       if (forceRefresh) {
         console.log('[AuthStore] Forçando atualização dos dados');
+        // Limpar cache se existir
+        userDataCache.delete(firebaseUser.value.uid);
       }
       
-      const userDocRef = doc(db, 'users', userId);
-      const userDoc = await getDoc(userDocRef);
+      const docRef = doc(db, 'users', firebaseUser.value.uid);
+      const docSnap = await getDoc(docRef);
       
-      if (userDoc.exists()) {
-        const userData = userDoc.data();
-        const processedData = convertTimestampsInObject(userData);
-        const currentFirebaseUser = firebaseUser.value;
-        
-        currentUser.value = {
-          ...processedData,
-          id: currentFirebaseUser.uid,
-        } as User;
-        
-        console.log('[AuthStore] Dados do usuário atualizados com sucesso');
-      } else {
-        console.warn('[AuthStore] Documento do usuário não encontrado no Firestore');
-        if (currentUser.value === null && firebaseUser.value) {
-          currentUser.value = {
-            id: firebaseUser.value.uid,
-            email: firebaseUser.value.email || '',
-            displayName: firebaseUser.value.displayName || 'Usuário',
-            username: '',
-            role: UserRole.USER,
-            createdAt: new Date()
-          } as User;
+      if (!docSnap.exists()) {
+        console.warn('[AuthStore] Dados do usuário não encontrados');
+        return null;
+      }
+      
+      // Processar e armazenar dados
+      const userData = processFirestoreDocument<User>(docSnap);
+      currentUser.value = userData;
+      
+      // Atualizar cache com timestamp para controle de dados antigos
+      userDataCache.set(firebaseUser.value.uid, {
+        data: userData,
+        timestamp: Date.now()
+      });
+      
+      console.log('[AuthStore] Dados do usuário carregados com sucesso, papel:', userData.role);
+      
+      // Verificar se o usuário tem afiliados mas não tem papel administrativo
+      // Isso serve como uma verificação adicional de segurança
+      if (userData.affiliates && 
+          userData.affiliates.length > 0 && 
+          userData.role === UserRole.USER) {
+        console.warn('[AuthStore] Usuário com afiliados mas sem papel administrativo. Tentando corrigir...');
+        try {
+          // Corrigir o papel diretamente
+          await updateDoc(docRef, {
+            role: UserRole.ADMIN
+          });
+          // Recarregar os dados após a correção
+          return await fetchUserData(true);
+        } catch (fixError) {
+          console.error('[AuthStore] Falha ao corrigir papel do usuário:', fixError);
         }
-        error.value = 'Dados completos do usuário não encontrados.';
       }
-    } catch (err) {
-      console.error('[AuthStore] Erro ao buscar dados do usuário:', err);
-      error.value = 'Erro ao carregar dados do usuário.';
+      
+      return userData;
+    } catch (error) {
+      console.error('[AuthStore] Erro ao buscar dados do usuário:', error);
+      return null;
     }
   };
 

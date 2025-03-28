@@ -388,8 +388,12 @@ export const affiliateToUser = async (
         });
       }
       
-      // 5. Se o usuário alvo não é ADMIN, promovê-lo
-      if (targetDoc.data().role === UserRole.USER) {
+      // 5. Se o usuário alvo não tem papel administrativo, promovê-lo para ADMIN
+      // Corrigido para verificar se é qualquer papel não administrativo, não apenas USER
+      if (targetDoc.data().role !== UserRole.ADMIN && 
+          targetDoc.data().role !== UserRole.SECRETARIA && 
+          targetDoc.data().role !== UserRole.TESOUREIRO) {
+        console.log('[ProfileService] Promovendo usuário para papel administrativo');
         transaction.update(targetRef, {
           role: UserRole.ADMIN
         });
@@ -728,5 +732,52 @@ export const getAffiliatedUsers = async (userId: string): Promise<User[]> => {
   } catch (error) {
     console.error('Erro ao buscar afiliados:', error);
     return [];
+  }
+};
+
+/**
+ * Função utilitária para corrigir papéis de usuários que têm afiliados mas não são administradores
+ * Esta função deve ser chamada quando for identificado um problema nos papéis administrativos
+ */
+export const fixAdminRoles = async (): Promise<{fixed: number, error: number}> => {
+  try {
+    console.log('[ProfileService] Iniciando correção de papéis administrativos');
+    const usersRef = collection(db, 'users');
+    const querySnapshot = await getDocs(usersRef);
+    
+    let fixedCount = 0;
+    let errorCount = 0;
+    
+    for (const userDoc of querySnapshot.docs) {
+      try {
+        const userData = userDoc.data();
+        const userId = userDoc.id;
+        
+        // Verificar se o usuário tem afiliados mas não tem papel administrativo
+        if (userData.affiliates && 
+            userData.affiliates.length > 0 && 
+            userData.role !== UserRole.ADMIN && 
+            userData.role !== UserRole.SECRETARIA && 
+            userData.role !== UserRole.TESOUREIRO) {
+          
+          console.log(`[ProfileService] Corrigindo papel do usuário ${userId}`);
+          await updateDoc(doc(db, 'users', userId), {
+            role: UserRole.ADMIN
+          });
+          
+          fixedCount++;
+        }
+      } catch (err) {
+        console.error(`[ProfileService] Erro ao processar usuário: ${userDoc.id}`, err);
+        errorCount++;
+      }
+    }
+    
+    console.log(`[ProfileService] Correção concluída: ${fixedCount} usuários corrigidos, ${errorCount} erros`);
+    return { fixed: fixedCount, error: errorCount };
+    
+  } catch (error) {
+    console.error('[ProfileService] Erro na correção de papéis administrativos:', error);
+    throw error;
   }
 };
