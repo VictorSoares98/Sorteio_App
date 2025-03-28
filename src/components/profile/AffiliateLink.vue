@@ -4,6 +4,7 @@ import { useAffiliateCode } from '../../composables/useAffiliateCode';
 import Card from '../ui/Card.vue';
 import Alert from '../ui/Alert.vue';
 import Button from '../ui/Button.vue';
+import { UserRole } from '../../types/user';
 
 // Hooks - usar o composable que já tem toda a lógica necessária
 const { 
@@ -18,7 +19,9 @@ const {
   timeRemaining,
   isCodeValid,
   isGeneratingCode,
-  checkCurrentCode
+  checkCurrentCode,
+  removeAffiliate,
+  updateAffiliateRole
 } = useAffiliateCode();
 
 // Estados
@@ -32,6 +35,27 @@ const confirmDialogVisible = ref(false);
 const pendingAffiliationData = ref<{ target: string; isEmail: boolean } | null>(null);
 const affiliateCodeInputRef = ref<HTMLInputElement | null>(null);
 const animateSuccess = ref(false);
+
+// Novos estados para o menu de afiliados e reload
+const reloadingAffiliates = ref(false);
+const activeDropdownId = ref<string | null>(null);
+const showRoleMenu = ref<string | null>(null);
+const roleUpdateLoading = ref<string | null>(null);
+
+// Novos estados para confirmação
+const showConfirmDialog = ref(false);
+const confirmAction = ref<{type: 'remove' | 'role'; id: string; role?: UserRole}>({
+  type: 'remove',
+  id: ''
+});
+
+// Termos mais intuitivos para os papéis (hierarquias)
+const roleLabels = {
+  [UserRole.ADMIN]: 'Administrador',
+  [UserRole.SECRETARIA]: 'Secretário',
+  [UserRole.TESOUREIRO]: 'Tesoureiro',
+  [UserRole.USER]: 'Usuário Padrão'
+};
 
 // Computados
 const affiliateCode = computed(() => currentUser.value?.affiliateCode || null);
@@ -72,8 +96,6 @@ const isAlreadyAffiliated = computed(() => {
 const hasAffiliates = computed(() => {
   return !!(currentUser.value?.affiliates && currentUser.value.affiliates.length > 0);
 });
-
-// Removed unused computed property
 
 // Validar o formato do código/email antes de enviar
 const isValidTarget = computed(() => {
@@ -125,38 +147,34 @@ const generateCode = async () => {
   }
 };
 
-// Removed unused function processAffiliation since requestAffiliation and confirmAffiliation are used instead
-
 // Copiar link para clipboard
-const copyToClipboard = () => {
-  if (!affiliateLink.value) return;
+const copyToClipboard = async (text: string, type: 'code' | 'link' = 'link') => {
+  if (!text) return;
   
-  navigator.clipboard.writeText(affiliateLink.value)
-    .then(() => {
-      copied.value = true;
-      setTimeout(() => {
-        copied.value = false;
-      }, 2000);
-    })
-    .catch(err => {
-      console.error('Falha ao copiar texto:', err);
-    });
-};
-
-// Função para copiar apenas o código
-const copyCodeToClipboard = () => {
-  if (!affiliateCode.value) return;
-  
-  navigator.clipboard.writeText(affiliateCode.value)
-    .then(() => {
+  try {
+    await navigator.clipboard.writeText(text);
+    
+    if (type === 'code') {
       codeCopied.value = true;
       setTimeout(() => {
         codeCopied.value = false;
       }, 2000);
-    })
-    .catch(err => {
-      console.error('Falha ao copiar código:', err);
-    });
+    } else {
+      copied.value = true;
+      setTimeout(() => {
+        copied.value = false;
+      }, 2000);
+    }
+  } catch (err) {
+    console.error(`Falha ao copiar ${type}:`, err);
+  }
+};
+
+// Função para copiar apenas o código
+const copyCodeToClipboard = () => {
+  if (affiliateCode.value) {
+    copyToClipboard(affiliateCode.value, 'code');
+  }
 };
 
 // Observar mudanças no código e expiração
@@ -184,14 +202,21 @@ onMounted(async () => {
   } catch (err) {
     console.error('[AffiliateLink] Erro ao carregar afiliados:', err);
   }
+
+  // Adicionar evento de clique global para fechar menus
+  document.addEventListener('click', closeAllMenus);
+  
+  // Enviar evento para armazenar status de novas afiliações
+  if (sessionStorage.getItem('newAffiliation') === 'true') {
+    sessionStorage.removeItem('newAffiliation');
+  }
 });
 
 // Limpar intervalo quando o componente é desmontado
 onUnmounted(() => {
-  if (checkingInterval.value) {
-    clearInterval(checkingInterval.value);
-    checkingInterval.value = null;
-  }
+  clearResources();
+  // Remover evento de clique global
+  document.removeEventListener('click', closeAllMenus);
 });
 
 // Processar afiliação com confirmação
@@ -223,7 +248,7 @@ const clearMessagesAfterDelay = (delay = 5000) => {
   }
   
   messageTimeout.value = window.setTimeout(() => {
-    // Limpar apenas mensagens de email não encontrado e afiliação realizada
+    // Limpar apenas mensagens específicas
     if (error.value && (
       error.value.includes('Email não encontrado') ||
       error.value.includes('não foi encontrado')
@@ -237,6 +262,34 @@ const clearMessagesAfterDelay = (delay = 5000) => {
     
     messageTimeout.value = null;
   }, delay);
+};
+
+// Função auxiliar para mostrar mensagens temporárias
+const showTemporaryMessage = (
+  type: 'error' | 'success',
+  message: string,
+  duration: number = 3000
+) => {
+  // Limpar mensagem existente do mesmo tipo
+  if (type === 'error') {
+    error.value = message;
+  } else {
+    success.value = message;
+  }
+  
+  // Criar um timeout para limpar a mensagem
+  if (messageTimeout.value) {
+    clearTimeout(messageTimeout.value);
+  }
+  
+  messageTimeout.value = window.setTimeout(() => {
+    if (type === 'error') {
+      error.value = null;
+    } else {
+      success.value = null;
+    }
+    messageTimeout.value = null;
+  }, duration);
 };
 
 // Efetuar afiliação após confirmação
@@ -324,8 +377,6 @@ const validateCodeInput = (event: KeyboardEvent) => {
   }
 };
 
-// Removing unused computed property as it's not being used in the template
-
 // Indicador visual de validade do código
 const codeStatus = computed(() => {
   if (!affiliateTarget.value) return 'empty';
@@ -360,8 +411,8 @@ watch(isEmail, () => {
   }
 });
 
-// Limpar timeout quando o componente é desmontado
-onUnmounted(() => {
+// Função unificada para limpar recursos
+const clearResources = () => {
   if (checkingInterval.value) {
     clearInterval(checkingInterval.value);
     checkingInterval.value = null;
@@ -371,7 +422,154 @@ onUnmounted(() => {
     clearTimeout(messageTimeout.value);
     messageTimeout.value = null;
   }
-});
+};
+
+// Função para recarregar a lista de afiliados
+const reloadAffiliates = async () => {
+  if (reloadingAffiliates.value) return;
+  
+  reloadingAffiliates.value = true;
+  try {
+    await fetchAffiliatedUsers();
+    console.log('[AffiliateLink] Lista de afiliados recarregada com sucesso');
+  } catch (err) {
+    console.error('[AffiliateLink] Erro ao recarregar afiliados:', err);
+    showTemporaryMessage('error', 'Não foi possível atualizar a lista de afiliados.');
+  } finally {
+    reloadingAffiliates.value = false;
+  }
+};
+
+// Toggle do menu dropdown
+const toggleDropdown = (userId: string) => {
+  if (activeDropdownId.value === userId) {
+    activeDropdownId.value = null;
+  } else {
+    activeDropdownId.value = userId;
+    showRoleMenu.value = null; // Fechar submenu de papéis
+  }
+};
+
+// Toggle do submenu de papéis
+const toggleRoleMenu = (userId: string, event: Event) => {
+  event.stopPropagation(); // Evitar que feche o dropdown principal
+  
+  if (showRoleMenu.value === userId) {
+    showRoleMenu.value = null;
+  } else {
+    showRoleMenu.value = userId;
+  }
+  
+  // Pequeno delay para permitir que o DOM seja atualizado antes de calcular posições
+  setTimeout(() => {
+    calculateMenuPosition(userId);
+  }, 0);
+};
+
+// Calculando posição ideal do menu para garantir visibilidade na tela
+const calculateMenuPosition = (userId: string) => {
+  // Em dispositivos móveis, posicionar abaixo em vez de ao lado
+  if (window.innerWidth < 640) {
+    return {
+      right: 'auto',
+      left: '0',
+      top: '2rem'
+    };
+  }
+  
+  // Verificar posição em relação à janela para decidir se abre à esquerda ou direita
+  const menuElement = document.querySelector(`[data-user-id="${userId}"]`);
+  if (menuElement) {
+    const rect = menuElement.getBoundingClientRect();
+    
+    // Se estiver perto da borda direita da tela, abrir à esquerda
+    if (rect.right + 240 > window.innerWidth) {
+      return {
+        left: 'auto',
+        right: '100%'
+      };
+    }
+  }
+  
+  // Padrão: abrir à direita (mais comum em telas amplas)
+  return {
+    left: '100%',
+    right: 'auto'
+  };
+};
+
+// Fechar todos os menus quando clicar fora
+const closeAllMenus = () => {
+  activeDropdownId.value = null;
+  showRoleMenu.value = null;
+};
+
+// Abrir diálogo de confirmação para remover afiliado
+const confirmRemoveAffiliate = (userId: string, event: Event) => {
+  event.stopPropagation();
+  confirmAction.value = {
+    type: 'remove',
+    id: userId
+  };
+  showConfirmDialog.value = true;
+  activeDropdownId.value = null; // Fechar dropdown
+};
+
+// Abrir diálogo de confirmação para mudar papel
+const confirmChangeRole = (userId: string, role: UserRole, event: Event) => {
+  event.stopPropagation();
+  confirmAction.value = {
+    type: 'role',
+    id: userId,
+    role
+  };
+  showConfirmDialog.value = true;
+  activeDropdownId.value = null; // Fechar dropdown
+  showRoleMenu.value = null; // Fechar submenu de papéis
+};
+
+// Executar a ação confirmada
+const executeConfirmedAction = async () => {
+  if (confirmAction.value.type === 'remove') {
+    await handleRemoveAffiliate(confirmAction.value.id);
+  } else if (confirmAction.value.type === 'role' && confirmAction.value.role) {
+    await handleChangeRole(confirmAction.value.id, confirmAction.value.role);
+  }
+  
+  showConfirmDialog.value = false;
+};
+
+// Função para remover afiliado
+const handleRemoveAffiliate = async (userId: string) => {
+  try {
+    const result = await removeAffiliate(userId);
+    if (result.success) {
+      showTemporaryMessage('success', 'Afiliado removido com sucesso!');
+    } else {
+      showTemporaryMessage('error', result.message || 'Não foi possível remover o afiliado.');
+    }
+  } catch (err: any) {
+    showTemporaryMessage('error', err.message || 'Erro ao processar a solicitação.');
+  }
+};
+
+// Função para alterar o papel (hierarquia) do afiliado
+const handleChangeRole = async (userId: string, newRole: UserRole) => {
+  roleUpdateLoading.value = userId;
+  try {
+    const result = await updateAffiliateRole(userId, newRole);
+    if (result.success) {
+      showTemporaryMessage('success', `Papel alterado para ${roleLabels[newRole]} com sucesso!`);
+    } else {
+      showTemporaryMessage('error', result.message || 'Não foi possível alterar o papel do afiliado.');
+    }
+  } catch (err: any) {
+    showTemporaryMessage('error', err.message || 'Erro ao alterar o papel do afiliado.');
+  } finally {
+    roleUpdateLoading.value = null;
+  }
+};
+
 </script>
 
 <template>
@@ -686,7 +884,7 @@ onUnmounted(() => {
                 class="flex-grow px-3 py-2 border border-gray-300 rounded-l-md focus:outline-none focus:ring-primary focus:border-primary bg-gray-50"
               />
               <button
-                @click="copyToClipboard"
+                @click="copyToClipboard(affiliateLink, 'link')"
                 class="bg-primary hover:bg-primary-dark text-white px-4 py-2 rounded-r-md transition-colors flex items-center"
                 :class="{ 'bg-green-600': copied }"
               >
@@ -712,46 +910,145 @@ onUnmounted(() => {
         </div>
         
         <div v-else class="mb-4">
-          <p class="text-gray-600 mb-4">
-            Você ainda não possui um código de afiliado ativo. Gere um código temporário válido por 30 minutos.
-          </p>
+          <div class="p-4 bg-gray-50 border border-gray-200 rounded-lg mb-4">
+            <div class="flex items-start">
+              <div class="mr-3 flex-shrink-0">
+                <svg class="h-5 w-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <div>
+                <p class="text-gray-600">
+                  Você ainda não possui um código de afiliado ativo. Gere um código temporário válido por 30 minutos.
+                </p>
+                <p class="text-sm text-gray-500 mt-2">
+                  Códigos temporários permitem que outros usuários se vinculem à sua conta.
+                </p>
+              </div>
+            </div>
+          </div>
+          
+          <Button 
+            @click="generateCode" 
+            variant="primary"
+            :disabled="isGeneratingCode || loading"
+            class="w-full"
+          >
+            <span v-if="isGeneratingCode || loading" class="flex items-center justify-center">
+              <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              Gerando...
+            </span>
+            <span v-else>Gerar Código Temporário</span>
+          </Button>
         </div>
-        
-        <Button 
-          @click="generateCode" 
-          variant="primary"
-          :disabled="isGeneratingCode || loading"
-          class="w-full"
-        >
-          <span v-if="isGeneratingCode || loading" class="flex items-center justify-center">
-            <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-            </svg>
-            Gerando...
-          </span>
-          <span v-else>Gerar Código Temporário</span>
-        </Button>
       </div>
       
       <!-- Usuários Afiliados - com animação de sucesso -->
       <div v-if="affiliatedUsers.length > 0" 
-           class="mt-6 pt-2 border-t"
+           class="mt-6 pt-2 border-t relative"
            :class="{ 'animate-pulse bg-green-50 rounded-lg': animateSuccess }">
-        <h3 class="text-lg font-medium text-primary mb-2">
-          Meus Afiliados <span class="text-sm font-normal">({{ affiliatedUsers.length }})</span>
-        </h3>
+        <div class="flex justify-between items-center mb-2">
+          <h3 class="text-lg font-medium text-primary">
+            Meus Afiliados <span class="text-sm font-normal">({{ affiliatedUsers.length }})</span>
+          </h3>
+          
+          <!-- Botão de Recarregar -->
+          <button 
+            @click.stop="reloadAffiliates" 
+            class="text-gray-500 hover:text-primary p-2 rounded-full hover:bg-gray-100 transition-colors"
+            :class="{ 'animate-spin': reloadingAffiliates }"
+            title="Atualizar lista de afiliados"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+          </button>
+        </div>
+        
         <p class="text-sm text-gray-600 mb-2">Usuários vinculados à sua conta:</p>
         
         <ul class="divide-y divide-gray-200">
-          <li v-for="user in affiliatedUsers" :key="user.id" class="py-2">
+          <li v-for="user in affiliatedUsers" :key="user.id" class="py-2 relative">
             <div class="flex justify-between items-center">
               <div>
                 <p class="font-medium">{{ user.displayName }}</p>
                 <p class="text-xs text-gray-500">{{ user.email }}</p>
-                <p v-if="user.congregation" class="text-xs text-gray-400">
-                  {{ user.congregation }}
-                </p>
+                <div class="mt-1">
+                  <span class="px-2 py-0.5 rounded-full text-xs bg-blue-100 text-blue-800">
+                    {{ roleLabels[user.role || UserRole.USER] }}
+                  </span>
+                </div>
+              </div>
+              
+              <!-- Menu de ações -->
+              <button 
+                @click.stop="toggleDropdown(user.id)" 
+                class="text-gray-500 hover:text-primary p-2 rounded-full hover:bg-gray-100 transition-colors"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
+                </svg>
+              </button>
+              
+              <!-- Dropdown do menu de ações -->
+              <div 
+                v-if="activeDropdownId === user.id" 
+                class="absolute right-0 mt-1 w-56 bg-white rounded-md shadow-lg z-10 border border-gray-200"
+                :data-user-id="user.id"
+                @click.stop
+              >
+                <div class="py-1">
+                  <!-- Opção: Alterar Hierarquia -->
+                  <div class="relative">
+                    <button 
+                      @click="toggleRoleMenu(user.id, $event)"
+                      class="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 hover:text-primary flex justify-between items-center"
+                    >
+                      <span>Alterar Hierarquia</span>
+                      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                      </svg>
+                    </button>
+                    
+                    <!-- Submenu de papéis (hierarquias) -->
+                    <div 
+                      v-if="showRoleMenu === user.id" 
+                      class="absolute sm:left-full right-full sm:right-auto top-0 w-56 bg-white rounded-md shadow-lg z-30 border border-gray-200"
+                      :style="calculateMenuPosition(user.id)"
+                    >
+                      <div class="py-1">
+                        <button 
+                          v-for="(label, role) in roleLabels" 
+                          :key="role"
+                          @click="confirmChangeRole(user.id, role as UserRole, $event)"
+                          class="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 transition-colors"
+                          :class="[
+                            user.role === role 
+                              ? 'text-primary font-medium' 
+                              : 'text-gray-700 hover:text-primary'
+                          ]"
+                        >
+                          <span v-if="user.role === role">✓ </span>
+                          {{ label }}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <!-- Separador -->
+                  <hr class="my-1 border-gray-200">
+                  
+                  <!-- Opção: Remover afiliado -->
+                  <button 
+                    @click="confirmRemoveAffiliate(user.id, $event)"
+                    class="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50"
+                  >
+                    Remover Afiliado
+                  </button>
+                </div>
               </div>
             </div>
           </li>
@@ -807,6 +1104,56 @@ onUnmounted(() => {
       </div>
     </div>
   </div>
+
+  <!-- Modal de Confirmação de Ação -->
+  <div v-if="showConfirmDialog" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+    <div class="bg-white rounded-lg shadow-xl max-w-md w-full p-6 transform transition-all">
+      <h3 class="text-lg font-medium text-gray-900 mb-2">
+        {{ confirmAction.type === 'remove' ? 'Confirmar Remoção' : 'Confirmar Alteração de Papel' }}
+      </h3>
+      
+      <p class="text-gray-600 mb-4">
+        <template v-if="confirmAction.type === 'remove'">
+          Você tem certeza que deseja remover este afiliado? Esta ação não pode ser desfeita.
+        </template>
+        <template v-else-if="confirmAction.type === 'role' && confirmAction.role">
+          Você está prestes a alterar o papel deste afiliado para <strong>{{ roleLabels[confirmAction.role] }}</strong>. Deseja continuar?
+        </template>
+      </p>
+      
+      <div v-if="confirmAction.type === 'role'" class="bg-blue-50 p-3 rounded-md border border-blue-200 mb-4">
+        <p class="text-blue-700 text-sm">
+          <span class="font-medium">Nota:</span> Alterar a hierarquia pode conceder diferentes permissões ao usuário na plataforma.
+        </p>
+      </div>
+      
+      <div v-if="confirmAction.type === 'remove'" class="bg-red-50 p-3 rounded-md border border-red-200 mb-4">
+        <p class="text-red-700 text-sm">
+          <span class="font-medium">Atenção:</span> Remover um afiliado irá desvincular o usuário da sua conta permanentemente.
+        </p>
+      </div>
+      
+      <div class="flex justify-end space-x-3">
+        <button 
+          @click="showConfirmDialog = false"
+          class="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+        >
+          Cancelar
+        </button>
+        <button 
+          @click="executeConfirmedAction"
+          :class="[
+            confirmAction.type === 'remove' 
+              ? 'bg-red-600 hover:bg-red-700 text-white' 
+              : 'bg-primary hover:bg-primary-dark text-white'
+          ]"
+          class="px-4 py-2 rounded-md"
+        >
+          {{ confirmAction.type === 'remove' ? 'Remover' : 'Confirmar' }}
+        </button>
+      </div>
+    </div>
+  </div>
 </template>
 
 <style scoped>
@@ -850,5 +1197,17 @@ onUnmounted(() => {
     height: 2.5rem;
     font-size: 1rem;
   }
+}
+
+/* Adiciona estilo para o menu dropdown */
+.dropdown-enter-active,
+.dropdown-leave-active {
+  transition: opacity 0.2s, transform 0.2s;
+}
+
+.dropdown-enter-from,
+.dropdown-leave-to {
+  opacity: 0;
+  transform: translateY(-10px);
 }
 </style>

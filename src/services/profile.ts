@@ -436,6 +436,170 @@ export const affiliateToUser = async (
 };
 
 /**
+ * Remove um afiliado de um usuário
+ */
+export const removeAffiliate = async (
+  ownerId: string,
+  affiliateId: string
+): Promise<AffiliationResponse> => {
+  try {
+    const ownerRef = doc(db, 'users', ownerId);
+    const affiliateRef = doc(db, 'users', affiliateId);
+    
+    // Buscar documentos para validação
+    const ownerDoc = await getDoc(ownerRef);
+    const affiliateDoc = await getDoc(affiliateRef);
+    
+    if (!ownerDoc.exists()) {
+      return {
+        success: false,
+        message: 'Seu perfil não foi encontrado.'
+      };
+    }
+    
+    if (!affiliateDoc.exists()) {
+      return {
+        success: false,
+        message: 'Perfil do afiliado não encontrado.'
+      };
+    }
+    
+    const ownerData = ownerDoc.data();
+    const affiliateData = affiliateDoc.data();
+    
+    // Verificar se o afiliado realmente pertence ao usuário
+    const affiliates = ownerData.affiliates || [];
+    if (!affiliates.includes(affiliateId)) {
+      return {
+        success: false,
+        message: 'Este usuário não é seu afiliado.'
+      };
+    }
+    
+    // Verificar se o afiliado tem o proprietário como affiliatedTo
+    if (affiliateData.affiliatedToId !== ownerId) {
+      console.warn('Inconsistência: Afiliado não referencia o proprietário correto');
+    }
+    
+    // Usar uma transação para garantir atomicidade
+    let transactionSuccess = false;
+    await runTransaction(db, async (transaction) => {
+      // 1. Remover o afiliado da lista do proprietário
+      transaction.update(ownerRef, {
+        affiliates: ownerData.affiliates.filter((id: string) => id !== affiliateId)
+      });
+      
+      // 2. Remover informações de afiliação do afiliado
+      transaction.update(affiliateRef, {
+        affiliatedTo: null,
+        affiliatedToId: null,
+        affiliatedToEmail: null,
+        affiliatedToInfo: null
+      });
+      
+      transactionSuccess = true;
+    });
+    
+    if (!transactionSuccess) {
+      return {
+        success: false,
+        message: 'Erro durante o processo de remoção. Tente novamente.'
+      };
+    }
+    
+    console.log('[ProfileService] Afiliado removido com sucesso');
+    return {
+      success: true,
+      message: 'Afiliado removido com sucesso!'
+    };
+  } catch (error) {
+    console.error('[ProfileService] Erro ao remover afiliado:', error);
+    return {
+      success: false,
+      message: 'Ocorreu um erro ao processar a remoção do afiliado.'
+    };
+  }
+};
+
+/**
+ * Atualiza o papel (role/hierarquia) de um afiliado
+ */
+export const updateAffiliateRole = async (
+  ownerId: string,
+  affiliateId: string,
+  newRole: UserRole
+): Promise<AffiliationResponse> => {
+  try {
+    // Validar o papel solicitado
+    const validRoles = [UserRole.ADMIN, UserRole.SECRETARIA, UserRole.TESOUREIRO, UserRole.USER];
+    if (!validRoles.includes(newRole)) {
+      return {
+        success: false,
+        message: 'Papel inválido.'
+      };
+    }
+    
+    const ownerRef = doc(db, 'users', ownerId);
+    const affiliateRef = doc(db, 'users', affiliateId);
+    
+    // Buscar documentos para validação
+    const ownerDoc = await getDoc(ownerRef);
+    const affiliateDoc = await getDoc(affiliateRef);
+    
+    if (!ownerDoc.exists()) {
+      return {
+        success: false,
+        message: 'Seu perfil não foi encontrado.'
+      };
+    }
+    
+    if (!affiliateDoc.exists()) {
+      return {
+        success: false,
+        message: 'Perfil do afiliado não encontrado.'
+      };
+    }
+    
+    const ownerData = ownerDoc.data();
+    const affiliateData = affiliateDoc.data();
+    
+    // Verificar se o afiliado realmente pertence ao usuário
+    const affiliates = ownerData.affiliates || [];
+    if (!affiliates.includes(affiliateId)) {
+      return {
+        success: false,
+        message: 'Este usuário não é seu afiliado.'
+      };
+    }
+    
+    // Verificar se o afiliado já tem o papel solicitado
+    if (affiliateData.role === newRole) {
+      return {
+        success: false,
+        message: 'O usuário já possui este papel.'
+      };
+    }
+    
+    // Atualizar o papel do afiliado
+    await updateDoc(affiliateRef, {
+      role: newRole
+    });
+    
+    console.log(`[ProfileService] Papel do afiliado atualizado para ${newRole}`);
+    return {
+      success: true,
+      message: 'Papel do afiliado atualizado com sucesso!'
+    };
+  } catch (error) {
+    console.error('[ProfileService] Erro ao atualizar papel do afiliado:', error);
+    return {
+      success: false,
+      message: 'Ocorreu um erro ao processar a atualização do papel.'
+    };
+  }
+};
+
+/**
  * Atualiza os dados do perfil do usuário
  */
 export const updateProfile = async (

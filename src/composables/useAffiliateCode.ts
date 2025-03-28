@@ -3,6 +3,11 @@ import { useAuthStore } from '../stores/authStore';
 import type { User, AffiliationResponse } from '../types/user';
 import * as profileService from '../services/profile';
 import { timestampToDate } from '../utils/firebaseUtils';
+import { 
+  removeAffiliate as removeAffiliateService,
+  updateAffiliateRole as updateAffiliateRoleService
+} from '../services/profile';
+import { UserRole } from '../types/user';
 
 export function useAffiliateCode() {
   const authStore = useAuthStore();
@@ -121,7 +126,7 @@ export function useAffiliateCode() {
       error.value = 'Você já está afiliado a outro usuário e não pode mudar sua afiliação.';
       return {
         success: false,
-        message: error.value
+        message: error.value || 'Erro desconhecido'
       };
     }
     
@@ -130,7 +135,7 @@ export function useAffiliateCode() {
       error.value = 'Como você já possui afiliados, não é possível se afiliar a outro usuário.';
       return {
         success: false,
-        message: error.value
+        message: error.value || 'Erro desconhecido'
       };
     }
     
@@ -183,6 +188,9 @@ export function useAffiliateCode() {
       
       if (response.success) {
         console.log('[useAffiliateCode] Afiliação bem-sucedida');
+        // Armazenar flag de nova afiliação para notificação na página inicial
+        sessionStorage.setItem('newAffiliation', 'true');
+        
         // Atualização segura com timeout
         setTimeout(async () => {
           await authStore.fetchUserData();
@@ -253,6 +261,87 @@ export function useAffiliateCode() {
     }
   };
   
+  /**
+   * Remove um afiliado
+   */
+  const removeAffiliate = async (affiliateId: string): Promise<AffiliationResponse> => {
+    if (!currentUser.value) {
+      error.value = 'Usuário não está autenticado.';
+      return {
+        success: false,
+        message: error.value || 'Erro desconhecido'
+      };
+    }
+    
+    loading.value = true;
+    error.value = null;
+    
+    try {
+      const result = await removeAffiliateService(currentUser.value.id, affiliateId);
+      
+      if (result.success) {
+        // Atualizar a lista de afiliados após remoção bem-sucedida
+        await fetchAffiliatedUsers();
+        success.value = result.message;
+      } else {
+        error.value = result.message;
+      }
+      
+      return result;
+    } catch (err: any) {
+      console.error('[useAffiliateCode] Erro ao remover afiliado:', err);
+      error.value = err.message || 'Erro ao remover afiliado.';
+      return {
+        success: false,
+        message: error.value || 'Erro desconhecido'
+      };
+    } finally {
+      loading.value = false;
+    }
+  };
+  
+  /**
+   * Atualiza o papel (role/hierarquia) de um afiliado
+   */
+  const updateAffiliateRole = async (
+    affiliateId: string, 
+    newRole: UserRole
+  ): Promise<AffiliationResponse> => {
+    if (!currentUser.value) {
+      error.value = 'Usuário não está autenticado.';
+      return {
+        success: false,
+        message: error.value || 'Erro desconhecido'
+      };
+    }
+    
+    loading.value = true;
+    error.value = null;
+    
+    try {
+      const result = await updateAffiliateRoleService(currentUser.value.id, affiliateId, newRole);
+      
+      if (result.success) {
+        // Atualizar a lista de afiliados após atualização bem-sucedida
+        await fetchAffiliatedUsers();
+        success.value = result.message;
+      } else {
+        error.value = result.message;
+      }
+      
+      return result;
+    } catch (err: any) {
+      console.error('[useAffiliateCode] Erro ao atualizar papel do afiliado:', err);
+      error.value = err.message || 'Erro ao atualizar papel do afiliado.';
+      return {
+        success: false,
+        message: error.value || 'Erro desconhecido'
+      };
+    } finally {
+      loading.value = false;
+    }
+  };
+
   // Inicializar verificação de código
   checkCurrentCode();
   
@@ -271,6 +360,8 @@ export function useAffiliateCode() {
     isCodeValid,
     isGeneratingCode,
     checkCurrentCode,
-    checkAffiliateCode
+    checkAffiliateCode,
+    removeAffiliate,
+    updateAffiliateRole
   };
 }
