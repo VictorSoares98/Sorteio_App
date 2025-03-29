@@ -19,6 +19,24 @@ const totalNumbersSold = computed(() => {
   return calculateTotalSoldNumbers(orders.value);
 });
 
+// Adicionar função para calcular o valor total (R$1 por número)
+const totalValueSold = computed(() => {
+  return totalNumbersSold.value;
+});
+
+// Função para calcular o valor de um pedido específico
+const calculateOrderValue = (order: Order) => {
+  if (!order.generatedNumbers || !Array.isArray(order.generatedNumbers)) {
+    return 0;
+  }
+  return order.generatedNumbers.length;
+};
+
+// Formatar o valor em Reais
+const formatCurrency = (value: number) => {
+  return `R$ ${value},00`;
+};
+
 // Pesquisa
 const searchQuery = ref('');
 const filteredOrders = computed<Order[]>(() => {
@@ -96,7 +114,8 @@ onMounted(async () => {
       </svg>
     </button>
     
-    <Card title="Suas Vendas" :subtitle="`Total: ${totalNumbersSold} números vendidos`">
+    <!-- Atualizar o subtitle para incluir o valor total -->
+    <Card title="Suas Vendas" :subtitle="`Total: ${totalNumbersSold} números vendidos (${formatCurrency(totalValueSold)})`">
       <div class="p-4">
         <!-- Botão "Criar um Pedido" - SEMPRE VISÍVEL -->
         <div class="mb-6 text-center sm:text-right">
@@ -145,25 +164,24 @@ onMounted(async () => {
               <!-- Accordion Header -->
               <div 
                 @click="toggleExpand(order.id)"
-                class="p-3 bg-gray-50 flex justify-between items-center cursor-pointer hover:bg-gray-100"
+                class="p-3 flex justify-between items-center bg-gray-50 hover:bg-gray-100 cursor-pointer"
               >
-                <div class="flex-1 min-w-0 mr-2">
-                  <h3 class="font-medium truncate">{{ order.buyerName }}</h3>
+                <div class="flex-grow overflow-hidden mr-2">
+                  <p class="font-medium text-gray-900 truncate" :title="order.buyerName">{{ order.buyerName }}</p>
                   <p class="text-xs text-gray-500">{{ formatDate(order.createdAt) }}</p>
                 </div>
-                <div class="flex items-center flex-shrink-0">
-                  <span class="bg-primary text-white px-2 py-1 rounded-full text-xs mr-3 whitespace-nowrap">
-                    {{ Array.isArray(order.generatedNumbers) ? order.generatedNumbers.length : 0 }} números
-                  </span>
-                  <svg 
-                    class="w-5 h-5 text-gray-500 transition-transform flex-shrink-0"
-                    :class="{ 'transform rotate-180': expandedOrderIds.has(order.id) }"
-                    fill="none" 
-                    stroke="currentColor" 
-                    viewBox="0 0 24 24"
-                  >
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-                  </svg>
+                
+                <!-- Adicionar valor total do pedido ao cabeçalho -->
+                <div class="flex items-center gap-3 flex-shrink-0">
+                  <div class="text-right">
+                    <span class="text-sm font-medium text-gray-700">{{ formatCurrency(calculateOrderValue(order)) }}</span>
+                    <p class="text-xs text-gray-500">{{ order.generatedNumbers?.length || 0 }} números</p>
+                  </div>
+                  <div class="transform transition-transform" :class="{ 'rotate-180': expandedOrderIds.has(order.id) }">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </div>
                 </div>
               </div>
               
@@ -173,6 +191,16 @@ onMounted(async () => {
                 class="p-3 border-t"
               >
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                  <!-- Adicionar informação de valor no conteúdo do acordeão -->
+                  <div class="bg-green-50 p-2 rounded border border-green-200">
+                    <p class="text-xs text-green-700 font-semibold">Valor Total</p>
+                    <p class="text-lg font-medium text-green-800">{{ formatCurrency(calculateOrderValue(order)) }}</p>
+                  </div>
+                  
+                  <div>
+                    <p class="text-xs text-gray-500">Comprador</p>
+                    <p class="text-sm truncate" :title="order.buyerName">{{ order.buyerName }}</p>
+                  </div>
                   <div>
                     <p class="text-xs text-gray-500">Forma de Pagamento</p>
                     <p class="text-sm">{{ order.paymentMethod === 'pix' ? 'PIX' : 'Dinheiro' }}</p>
