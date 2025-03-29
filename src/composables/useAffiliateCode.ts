@@ -1,12 +1,7 @@
 import { ref, computed } from 'vue';
 import { useAuthStore } from '../stores/authStore';
 import type { User, AffiliationResponse } from '../types/user';
-import * as profileService from '../services/profile';
 import { timestampToDate } from '../utils/firebaseUtils';
-import { 
-  removeAffiliate as removeAffiliateService,
-  updateAffiliateRole as updateAffiliateRoleService
-} from '../services/profile';
 import { UserRole } from '../types/user';
 
 export function useAffiliateCode() {
@@ -82,8 +77,11 @@ export function useAffiliateCode() {
     try {
       console.log('[useAffiliateCode] Gerando código temporário');
       
+      // Importação dinâmica
+      const { generateTemporaryAffiliateCode } = await import('../services/profile');
+      
       // Usar diretamente o serviço sem reimplementar a lógica
-      const code = await profileService.generateTemporaryAffiliateCode(currentUser.value.id);
+      const code = await generateTemporaryAffiliateCode(currentUser.value.id);
       
       if (!code) {
         throw new Error('Não foi possível gerar o código temporário.');
@@ -159,10 +157,11 @@ export function useAffiliateCode() {
     
     try {
       console.log('[useAffiliateCode] Iniciando processo de afiliação');
-      // Usar diretamente o serviço com tratamento de tentativas
+      // Importação dinâmica
+      const { affiliateToUser } = await import('../services/profile');
       
       // Primeira tentativa (com identificador normalizado)
-      let response = await profileService.affiliateToUser(
+      let response = await affiliateToUser(
         currentUser.value.id,
         normalizedIdentifier,
         isEmail
@@ -179,7 +178,7 @@ export function useAffiliateCode() {
         await new Promise(resolve => setTimeout(resolve, 1000));
         
         // Segunda tentativa
-        response = await profileService.affiliateToUser(
+        response = await affiliateToUser(
           currentUser.value.id,
           targetIdentifier,
           isEmail
@@ -224,8 +223,11 @@ export function useAffiliateCode() {
     
     try {
       console.log('[useAffiliateCode] Buscando afiliados');
+      // Importação dinâmica
+      const { getAffiliatedUsers } = await import('../services/profile');
+      
       // Buscar afiliados diretamente do serviço
-      affiliatedUsers.value = await profileService.getAffiliatedUsers(currentUser.value.id);
+      affiliatedUsers.value = await getAffiliatedUsers(currentUser.value.id);
       
       // Atualizar a contagem de afiliados no usuário atual
       if (authStore.currentUser && affiliatedUsers.value.length > 0) {
@@ -250,8 +252,11 @@ export function useAffiliateCode() {
     error.value = null;
     
     try {
+      // Importação dinâmica
+      const { findUserByAffiliateCode } = await import('../services/profile');
+      
       // Usar diretamente o serviço sem reimplementar a lógica
-      return await profileService.findUserByAffiliateCode(code);
+      return await findUserByAffiliateCode(code);
     } catch (err: any) {
       console.error('[useAffiliateCode] Erro ao verificar código:', err);
       error.value = err.message || 'Erro ao verificar código de afiliado.';
@@ -277,6 +282,9 @@ export function useAffiliateCode() {
     error.value = null;
     
     try {
+      // Importação dinâmica
+      const { removeAffiliate: removeAffiliateService } = await import('../services/profile');
+      
       const result = await removeAffiliateService(currentUser.value.id, affiliateId);
       
       if (result.success) {
@@ -349,6 +357,9 @@ export function useAffiliateCode() {
           (!userAffiliate.affiliatedToId || userAffiliate.affiliatedToId !== currentUser.value.id)) {
         newRole = UserRole.USER;
       }
+      
+      // Importação dinâmica
+      const { updateAffiliateRole: updateAffiliateRoleService } = await import('../services/profile');
       
       const result = await updateAffiliateRoleService(currentUser.value.id, affiliateId, newRole);
       

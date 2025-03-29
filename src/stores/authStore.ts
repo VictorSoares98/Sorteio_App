@@ -15,7 +15,6 @@ import { doc, getDoc, setDoc, serverTimestamp, onSnapshot, updateDoc } from 'fir
 import { auth, db } from '../firebase';
 import { type User, UserRole } from '../types/user';
 import { convertTimestampsInObject, processFirestoreDocument } from '../utils/firebaseUtils';
-import { affiliateToUser } from '../services/profile';
 
 export const useAuthStore = defineStore('auth', () => {
   const currentUser = ref<User | null>(null);
@@ -97,6 +96,7 @@ export const useAuthStore = defineStore('auth', () => {
         if (pendingAffiliateCode) {
           console.log('[AuthStore] Processando afiliação para novo usuário Google com código:', pendingAffiliateCode);
           try {
+            const { affiliateToUser } = await import('../services/profile');
             await affiliateToUser(googleUser.uid, pendingAffiliateCode, false);
             localStorage.removeItem('pendingAffiliateCode');
           } catch (affiliateError) {
