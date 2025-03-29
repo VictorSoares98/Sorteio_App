@@ -121,51 +121,11 @@ const handleClick = (event: MouseEvent) => {
 </script>
 
 <template>
-  <!-- Renderizar como link se href estiver definido -->
-  <a 
-    v-if="isLink" 
-    :href="href" 
-    :target="target" 
-    :class="computedClasses" 
-    :aria-label="ariaLabel || undefined"
-    :aria-disabled="disabled || loading" 
-    :tabindex="disabled || loading ? -1 : 0"
-    @click="handleClick"
-  >
-    <!-- Estado de carregamento -->
-    <span v-if="loading" class="inline-block animate-spin h-4 w-4 border-2 rounded-full border-t-transparent mr-2"></span>
-    
-    <!-- Ícone à esquerda -->
-    <span v-else-if="iconLeft" class="mr-2" v-html="iconLeft"></span>
-    
-    <!-- Conteúdo principal -->
-    <slot></slot>
-    
-    <!-- Ícone à direita -->
-    <span v-if="iconRight && !loading" class="ml-2" v-html="iconRight"></span>
+  <a v-if="isLink" :href="href" :target="target" :class="computedClasses" :aria-label="ariaLabel" @click="handleClick">
+    <slot />
   </a>
-  
-  <!-- Renderizar como botão por padrão -->
-  <button 
-    v-else 
-    :type="type" 
-    :disabled="disabled || loading" 
-    :class="computedClasses" 
-    :aria-label="ariaLabel || undefined"
-    :aria-busy="loading"
-    @click="handleClick"
-  >
-    <!-- Estado de carregamento -->
-    <span v-if="loading" class="inline-block animate-spin h-4 w-4 border-2 rounded-full border-t-transparent mr-2"></span>
-    
-    <!-- Ícone à esquerda -->
-    <span v-else-if="iconLeft" class="mr-2" v-html="iconLeft"></span>
-    
-    <!-- Conteúdo principal -->
-    <slot></slot>
-    
-    <!-- Ícone à direita -->
-    <span v-if="iconRight && !loading" class="ml-2" v-html="iconRight"></span>
+  <button v-else :type="type" :class="computedClasses" :disabled="disabled || loading" :aria-label="ariaLabel" @click="handleClick">
+    <slot />
   </button>
 </template>
 
