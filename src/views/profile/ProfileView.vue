@@ -25,10 +25,18 @@ const showDashboard = computed(() => {
   return [UserRole.ADMIN, UserRole.TESOUREIRO, UserRole.SECRETARIA].includes(authStore.currentUser.role);
 });
 
-// Verificar se o usuário é afiliado a alguém para mostrar Ranking
+// Verificar se o usuário é afiliado a alguém OU tem papel administrativo para mostrar Ranking
 const showRanking = computed(() => {
   if (!authStore.currentUser) return false;
-  return !!authStore.currentUser.affiliatedTo;
+  
+  // Verifica se o usuário está afiliado a alguém
+  const isAffiliated = !!authStore.currentUser.affiliatedTo;
+  
+  // Verifica se o usuário tem papel administrativo
+  const isAdmin = [UserRole.ADMIN, UserRole.TESOUREIRO, UserRole.SECRETARIA].includes(authStore.currentUser.role);
+  
+  // Retorna true se qualquer uma das condições for verdadeira
+  return isAffiliated || isAdmin;
 });
 
 // Função para corrigir perfil administrativo manualmente
@@ -172,7 +180,7 @@ onMounted(async () => {
               </span>
             </button>
             
-            <!-- 3. Ranking (novo - apenas para afiliados) -->
+            <!-- 3. Ranking (novo - apenas para afiliados ou administradores) -->
             <button 
               v-if="showRanking"
               @click="switchTab('ranking')" 
