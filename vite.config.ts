@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite'
+import { defineConfig } from 'vitest/config'
 import vue from '@vitejs/plugin-vue'
 
 // https://vitejs.dev/config/
@@ -54,5 +54,9 @@ export default defineConfig({
   // Permite importações dinâmicas, ainda que com warnings em desenvolvimento
   esbuild: {
     logOverride: { 'dynamic-import-in-replicated-modules': 'silent' }
+  },
+  test: {
+    globals: true,
+    environment: 'jsdom',
   }
 })

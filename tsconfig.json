@@ -1,7 +1,9 @@
 {
   "compilerOptions": {
+    "baseUrl": ".",
     "paths": {
-      "vue-router": ["./node_modules/vue-router"]
+      "vue-router": ["./node_modules/vue-router"],
+      "types": ["jest"],
     }
   },
   "files": [],
