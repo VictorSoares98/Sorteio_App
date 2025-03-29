@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue';
+import { MAX_NUMBERS_PER_REQUEST } from '../../utils/constants';
 
 const props = defineProps<{
   modelValue: number;
@@ -34,6 +35,13 @@ const updateValue = (event: Event) => {
       target.value = numericValue;
       value = numericValue;
     }
+    
+    // Limitar a 100 números
+    const numberValue = parseInt(value, 10);
+    if (numberValue > MAX_NUMBERS_PER_REQUEST) {
+      value = MAX_NUMBERS_PER_REQUEST.toString();
+      target.value = value;
+    }
   }
   
   inputValue.value = value;
@@ -59,6 +67,11 @@ const clearValue = () => {
       Selecionar Quantidade de Números <span class="text-danger">*</span>
     </h3>
     
+    <!-- Mensagem informativa sobre o limite -->
+    <p class="text-sm text-gray-600 mb-2">
+      <span class="font-medium">Atenção:</span> O limite máximo por pedido é de 100 números.
+    </p>
+    
     <!-- Input para valor manual -->
     <div class="flex mb-3">
       <input
@@ -68,6 +81,7 @@ const clearValue = () => {
         placeholder="Inserir Valor"
         class="form-input flex-grow pr-10"
         :class="{'border-danger focus:border-danger focus:ring-danger': error}"
+        maxlength="3"
       />
       <button 
         type="button"
