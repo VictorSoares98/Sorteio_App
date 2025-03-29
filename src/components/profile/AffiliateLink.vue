@@ -49,6 +49,9 @@ const confirmAction = ref<{type: 'remove' | 'role'; id: string; role?: UserRole}
   id: ''
 });
 
+// Adicionar uma propriedade reativa para armazenar as posições calculadas
+const menuPositions = ref<Record<string, any>>({});
+
 // Termos mais intuitivos para os papéis (hierarquias)
 const roleLabels = {
   [UserRole.ADMIN]: 'Administrador',
@@ -473,16 +476,14 @@ const toggleRoleMenu = (userId: string, event: Event) => {
     showRoleMenu.value = null;
   } else {
     showRoleMenu.value = userId;
+    
+    // Calcular e armazenar a posição do menu imediatamente
+    menuPositions.value[userId] = calculatePositionForUser(userId);
   }
-  
-  // Pequeno delay para permitir que o DOM seja atualizado antes de calcular posições
-  setTimeout(() => {
-    calculateMenuPosition(userId);
-  }, 0);
 };
 
-// Calculando posição ideal do menu para garantir visibilidade na tela
-const calculateMenuPosition = (userId: string) => {
+// Função separada para calcular a posição
+const calculatePositionForUser = (userId: string): any => {
   // Em dispositivos móveis, posicionar abaixo em vez de ao lado
   if (window.innerWidth < 640) {
     return {
@@ -510,6 +511,38 @@ const calculateMenuPosition = (userId: string) => {
   return {
     left: '100%',
     right: 'auto'
+  };
+};
+
+// Adicione esta função após calculateMenuPosition
+const calculateSubmenuPosition = (userId: string): any => {
+  const triggerElement = document.querySelector(`[data-user-id="${userId}"]`);
+  if (!triggerElement) return { top: '0px', left: '0px' };
+  
+  const rect = triggerElement.getBoundingClientRect();
+  const windowWidth = window.innerWidth;
+  const windowHeight = window.innerHeight;
+  
+  // Altura estimada do submenu
+  const submenuHeight = Object.keys(roleLabels).length * 40 + 16;
+  
+  // Posicionamento horizontal
+  let left = rect.right + 8;
+  if (left + 224 > windowWidth) {
+    // Se não houver espaço à direita, posiciona à esquerda
+    left = rect.left - 232;
+  }
+  
+  // Posicionamento vertical
+  let top = rect.top;
+  if (top + submenuHeight > windowHeight) {
+    // Se o submenu for ultrapassar a parte inferior da tela, ajusta para cima
+    top = windowHeight - submenuHeight - 16;
+  }
+  
+  return {
+    top: `${Math.max(8, top)}px`,
+    left: `${Math.max(8, left)}px`
   };
 };
 
@@ -1059,7 +1092,7 @@ const handleChangeRole = async (userId: string, newRole: UserRole) => {
                     <div 
                       v-if="showRoleMenu === user.id" 
                       class="absolute sm:left-full right-full sm:right-auto top-0 w-56 bg-white rounded-md shadow-lg z-30 border border-gray-200"
-                      :style="calculateMenuPosition(user.id)"
+                      :style="menuPositions[user.id] || calculatePositionForUser(user.id)"
                     >
                       <div class="py-1">
                         <button 
@@ -1217,8 +1250,36 @@ const handleChangeRole = async (userId: string, newRole: UserRole) => {
       </div>
     </div>
   </div>
-</template>
 
+  <!-- Submenu de papéis, renderizado fora do fluxo normal -->
+  <div 
+    v-if="showRoleMenu" 
+    class="fixed z-50 bg-white rounded-md shadow-lg border border-gray-200 w-56"
+    :style="calculateSubmenuPosition(showRoleMenu)"
+  >
+      <div class="py-1">
+        <button 
+          v-for="(label, role) in roleLabels" 
+          :key="role"
+          @click="confirmChangeRole(showRoleMenu, role as UserRole, $event)"
+          class="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 transition-colors"
+          :class="[
+            affiliatedUsers.find(u => u.id === showRoleMenu)?.role === role 
+              ? 'text-primary font-medium' 
+              : 'text-gray-700 hover:text-primary',
+            !canAssignRole(affiliatedUsers.find(u => u.id === showRoleMenu), role as UserRole) 
+              ? 'opacity-50 cursor-not-allowed' 
+              : ''
+          ]"
+          :disabled="!canAssignRole(affiliatedUsers.find(u => u.id === showRoleMenu), role as UserRole)"
+        >
+          <span v-if="affiliatedUsers.find(u => u.id === showRoleMenu)?.role === role">✓ </span>
+          {{ label }}
+        </button>
+      </div>
+    </div>
+
+</template>
 <style scoped>
 /* Animações para feedback visual */
 .animate-success {
