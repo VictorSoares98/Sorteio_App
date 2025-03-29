@@ -34,16 +34,25 @@ const setupFallbackLoader = () => {
           retries++;
           console.log(`[App] Tentativa ${retries} de carregar: ${url}`);
           
-          // Usar comentário especial para evitar avisos do Vite durante o desenvolvimento
-          // @ts-ignore - Adicionar comentário especial para suprimir o aviso do TypeScript
-          /* @vite-ignore */ 
-          import(url)
+          // Usar formato que o Vite entende melhor
+          const importFn = () => {
+            // Detectar formato da URL para usar o padrão apropriado
+            if (url.startsWith('./') || url.startsWith('../')) {
+              return import(/* @vite-ignore */ url);
+            } else if (url.startsWith('/')) {
+              // URLs absolutas no site atual
+              return import(/* @vite-ignore */ `${window.location.origin}${url}`);
+            } else {
+              // URLs externas completas
+              throw new Error(`Importação não suportada: ${url}. Use importação relativa.`);
+            }
+          };
+          
+          importFn()
             .then(resolve)
             .catch(error => {
               console.warn(`[App] Erro ao carregar módulo: ${error.message}`);
-              
               if (retries < maxRetries) {
-                // Simples retry com delay
                 setTimeout(() => attemptImport(url), 500 * retries);
               } else {
                 reject(error);
