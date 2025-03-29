@@ -64,9 +64,11 @@ const pluralizedRole = computed(() => {
             </router-link>
           </div>
           
-          <div class="bg-red-50 p-4 rounded-lg">
-            <h4 class="font-medium text-red-800 mb-2">Ações Destrutivas</h4>
-            <ResetSalesButton variant="danger" />
+          <div class="bg-red-50 p-4 rounded-lg shadow-sm border border-red-200">
+            <h4 class="font-medium text-red-800 mb-2 flex items-center">
+              ⚠️ Ações Destrutivas
+            </h4>
+            <ResetSalesButton variant="danger" block />
           </div>
         </div>
       </div>
