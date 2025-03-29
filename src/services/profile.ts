@@ -234,7 +234,7 @@ export const generateTemporaryAffiliateCode = async (userId: string): Promise<st
 
 /**
  * Afilia um usuário a outro usando código ou email
- * Melhorado para validação mais rigorosa e processamento transacional
+ * Melhorado para validação mais rigorosa e verificação de expiração
  */
 export const affiliateToUser = async (
   userId: string,
@@ -251,7 +251,7 @@ export const affiliateToUser = async (
     if (!isEmail && !isValidCodeFormat(normalizedIdentifier)) {
       return {
         success: false,
-        message: 'Formato de código de afiliação inválido. Deve ter 6 caracteres alfanuméricos.'
+        message: 'Código de afiliado inválido. Deve ter 6 caracteres alfanuméricos.'
       };
     }
     
@@ -310,7 +310,9 @@ export const affiliateToUser = async (
       console.warn('[ProfileService] Usuário alvo não encontrado');
       return {
         success: false,
-        message: isEmail ? 'Email não encontrado.' : 'Código de afiliado inválido.'
+        message: isEmail 
+          ? 'Email não encontrado. Verifique e tente novamente.' 
+          : 'Código de afiliado não encontrado ou inválido.'
       };
     }
     
@@ -319,22 +321,27 @@ export const affiliateToUser = async (
     const targetUserId = targetUserDoc.id;
     const targetUserData = targetUserDoc.data() as User;
     
-    // Verificar se não está tentando se afiliar a si mesmo
-    if (targetUserId === userId) {
-      console.warn('[ProfileService] Tentativa de auto-afiliação');
-      return {
-        success: false,
-        message: 'Você não pode se afiliar a si mesmo.'
-      };
-    }
-    
-    // NOVA REGRA 3: Verificar se o alvo já está afiliado a alguém
-    if (targetUserData.affiliatedTo) {
-      console.warn('[ProfileService] Usuário alvo já afiliado a outro usuário e não pode receber afiliados');
-      return {
-        success: false,
-        message: 'Este usuário já está afiliado a outra pessoa e não pode receber afiliados.'
-      };
+    // ADICIONAR: Verificar expiração do código se não for email
+    if (!isEmail && targetUserData.affiliateCodeExpiry) {
+      const expiryTimestamp = targetUserData.affiliateCodeExpiry;
+      const expiryDate = expiryTimestamp && 'toDate' in expiryTimestamp 
+        ? expiryTimestamp.toDate() 
+        : new Date(expiryTimestamp);
+      
+      const now = new Date();
+      
+      if (expiryDate < now) {
+        console.log('[ProfileService] Tentativa de usar código expirado:', {
+          codigo: normalizedIdentifier,
+          expiracao: expiryDate,
+          agora: now
+        });
+        
+        return {
+          success: false,
+          message: 'Este código de afiliado expirou. Peça um novo código ao usuário ou use outro método.'
+        };
+      }
     }
     
     console.log('[ProfileService] Executando transação de afiliação');
@@ -657,22 +664,55 @@ export const updateProfile = async (
 
 /**
  * Busca um usuário pelo código de afiliado
+ * Melhorado para verificar expiração
  */
 export const findUserByAffiliateCode = async (code: string): Promise<User | null> => {
   try {
+    console.log('[ProfileService] Buscando usuário por código de afiliado:', code);
+    
+    // Normalizar o código para maiúsculas
+    const normalizedCode = code.toUpperCase();
+    
+    // Consultar usuários com o código de afiliado
     const usersRef = collection(db, 'users');
-    const q = query(usersRef, where('affiliateCode', '==', code));
+    const q = query(usersRef, where('affiliateCode', '==', normalizedCode));
     const querySnapshot = await getDocs(q);
     
     if (querySnapshot.empty) {
+      console.log('[ProfileService] Nenhum usuário encontrado com o código:', normalizedCode);
       return null;
     }
     
-    // Usar a função utilitária processFirestoreDocument
-    return processFirestoreDocument<User>(querySnapshot.docs[0]);
+    // Analisar o primeiro usuário encontrado
+    const userDoc = querySnapshot.docs[0];
+    const userData = userDoc.data() as User;
     
+    // Verificar se o código está expirado
+    if (userData.affiliateCodeExpiry) {
+      const expiryTimestamp = userData.affiliateCodeExpiry;
+      const expiryDate = expiryTimestamp && 'toDate' in expiryTimestamp 
+        ? expiryTimestamp.toDate() 
+        : new Date(expiryTimestamp);
+      
+      const now = new Date();
+      
+      if (expiryDate < now) {
+        console.log('[ProfileService] Código expirado:', {
+          codigo: normalizedCode,
+          expiracao: expiryDate,
+          agora: now
+        });
+        return null; // Retornar null para códigos expirados
+      }
+    }
+    
+    // Incluir o ID do documento
+    userData.id = userDoc.id;
+    
+    console.log('[ProfileService] Usuário encontrado:', userData.displayName);
+    return userData;
   } catch (error) {
-    console.error('Erro ao buscar usuário por código de afiliado:', error);
+    console.error('[ProfileService] Erro ao buscar usuário por código:', error);
     return null;
   }
 };

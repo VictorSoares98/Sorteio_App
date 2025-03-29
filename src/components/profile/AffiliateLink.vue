@@ -21,7 +21,10 @@ const {
   isGeneratingCode,
   checkCurrentCode,
   removeAffiliate,
-  updateAffiliateRole
+  updateAffiliateRole,
+  setTemporaryError,
+  setTemporarySuccess,
+  clearAllTimeouts
 } = useAffiliateCode();
 
 // Estados
@@ -67,7 +70,23 @@ const affiliateLink = computed(() => {
   return `${window.location.origin}/register?ref=${affiliateCode.value}`;
 });
 
-// Verificar regularmente se o código ainda é válido
+// Adicionar um ref para rastrear se já mostramos notificação para este código expirado
+const alreadyNotifiedCodes = ref<Set<string>>(new Set());
+
+// Verificar se já notificamos sobre este código específico
+const shouldShowExpiryAlert = computed(() => {
+  if (!currentUser.value?.affiliateCode || isCodeValid.value || error.value) return false;
+  
+  const currentCode = currentUser.value.affiliateCode;
+  // Se já notificamos sobre este código, não mostrar novamente
+  if (alreadyNotifiedCodes.value.has(currentCode)) return false;
+  
+  // Se chegamos aqui, devemos mostrar o alerta e marcar como notificado
+  alreadyNotifiedCodes.value.add(currentCode);
+  return true;
+});
+
+// Verificar regularmente se o código ainda é válido usando o sistema simplificado
 const startExpiryCheck = () => {
   if (checkingInterval.value) {
     clearInterval(checkingInterval.value);
@@ -181,12 +200,19 @@ const copyCodeToClipboard = () => {
 };
 
 // Observar mudanças no código e expiração
-watch(() => currentUser.value?.affiliateCode, (newVal) => {
-  if (newVal) {
-    startExpiryCheck();
-  } else if (checkingInterval.value) {
-    clearInterval(checkingInterval.value);
-    checkingInterval.value = null;
+watch(() => currentUser.value?.affiliateCode, (newCode, oldCode) => {
+  if (newCode && newCode !== oldCode) {
+    // Se um novo código foi gerado, podemos mostrar alertas para ele no futuro
+    if (alreadyNotifiedCodes.value.has(newCode)) {
+      alreadyNotifiedCodes.value.delete(newCode);
+    }
+    
+    if (newCode) {
+      startExpiryCheck();
+    } else if (checkingInterval.value) {
+      clearInterval(checkingInterval.value);
+      checkingInterval.value = null;
+    }
   }
 });
 
@@ -241,58 +267,13 @@ const requestAffiliation = async () => {
   confirmDialogVisible.value = true;
 };
 
-// Adicionar variável para controlar o tempo de exibição das mensagens
-const messageTimeout = ref<number | null>(null);
-
-// Função para limpar mensagens de erro/sucesso após um tempo
-const clearMessagesAfterDelay = (delay = 5000) => {
-  if (messageTimeout.value) {
-    clearTimeout(messageTimeout.value);
-  }
-  
-  messageTimeout.value = window.setTimeout(() => {
-    // Limpar apenas mensagens específicas
-    if (error.value && (
-      error.value.includes('Email não encontrado') ||
-      error.value.includes('não foi encontrado')
-    )) {
-      error.value = null;
-    }
-    
-    if (success.value && success.value.includes('sucesso')) {
-      success.value = null;
-    }
-    
-    messageTimeout.value = null;
-  }, delay);
-};
-
-// Função auxiliar para mostrar mensagens temporárias
-const showTemporaryMessage = (
-  type: 'error' | 'success',
-  message: string,
-  duration: number = 3000
-) => {
-  // Limpar mensagem existente do mesmo tipo
+// Método simplificado que delega para o composable
+const showMessage = (type: 'error' | 'success', message: string) => {
   if (type === 'error') {
-    error.value = message;
+    setTemporaryError(message);
   } else {
-    success.value = message;
+    setTemporarySuccess(message);
   }
-  
-  // Criar um timeout para limpar a mensagem
-  if (messageTimeout.value) {
-    clearTimeout(messageTimeout.value);
-  }
-  
-  messageTimeout.value = window.setTimeout(() => {
-    if (type === 'error') {
-      error.value = null;
-    } else {
-      success.value = null;
-    }
-    messageTimeout.value = null;
-  }, duration);
 };
 
 // Efetuar afiliação após confirmação
@@ -322,19 +303,8 @@ const confirmAffiliation = async () => {
       setTimeout(() => {
         animateSuccess.value = false;
       }, 2000);
-      
-      // Configurar mensagem para desaparecer após um tempo
-      clearMessagesAfterDelay(8000);
     } else {
       console.warn('[AffiliateLink] Afiliação falhou:', response?.message);
-      
-      // Se for um erro de email não encontrado, configurar para desaparecer
-      if (response?.message && (
-        response.message.includes('Email não encontrado') || 
-        response.message.includes('não foi encontrado')
-      )) {
-        clearMessagesAfterDelay();
-      }
     }
   } catch (err) {
     console.error('[AffiliateLink] Erro ao processar afiliação:', err);
@@ -436,10 +406,8 @@ const clearResources = () => {
     checkingInterval.value = null;
   }
   
-  if (messageTimeout.value) {
-    clearTimeout(messageTimeout.value);
-    messageTimeout.value = null;
-  }
+  // Limpar todos os timeouts de mensagens
+  clearAllTimeouts();
 };
 
 // Função para recarregar a lista de afiliados
@@ -452,7 +420,7 @@ const reloadAffiliates = async () => {
     console.log('[AffiliateLink] Lista de afiliados recarregada com sucesso');
   } catch (err) {
     console.error('[AffiliateLink] Erro ao recarregar afiliados:', err);
-    showTemporaryMessage('error', 'Não foi possível atualizar a lista de afiliados.');
+    showMessage('error', 'Não foi possível atualizar a lista de afiliados.');
   } finally {
     reloadingAffiliates.value = false;
   }
@@ -587,7 +555,7 @@ const confirmChangeRole = (userId: string, role: UserRole, event: Event) => {
   // Verifica se o papel pode ser atribuído ao usuário
   const user = affiliatedUsers.value.find(u => u.id === userId);
   if (user && !canAssignRole(user, role)) {
-    showTemporaryMessage('error', 'Não é possível atribuir este papel a um usuário sem afiliação válida.');
+    showMessage('error', 'Não é possível atribuir este papel a um usuário sem afiliação válida.');
     return;
   }
   
@@ -617,12 +585,12 @@ const handleRemoveAffiliate = async (userId: string) => {
   try {
     const result = await removeAffiliate(userId);
     if (result.success) {
-      showTemporaryMessage('success', 'Afiliado removido com sucesso!');
+      showMessage('success', 'Afiliado removido com sucesso!');
     } else {
-      showTemporaryMessage('error', result.message || 'Não foi possível remover o afiliado.');
+      showMessage('error', result.message || 'Não foi possível remover o afiliado.');
     }
   } catch (err: any) {
-    showTemporaryMessage('error', err.message || 'Erro ao processar a solicitação.');
+    showMessage('error', err.message || 'Erro ao processar a solicitação.');
   }
 };
 
@@ -632,14 +600,23 @@ const handleChangeRole = async (userId: string, newRole: UserRole) => {
   try {
     const result = await updateAffiliateRole(userId, newRole);
     if (result.success) {
-      showTemporaryMessage('success', `Papel alterado para ${roleLabels[newRole]} com sucesso!`);
+      showMessage('success', `Papel alterado para ${roleLabels[newRole]} com sucesso!`);
     } else {
-      showTemporaryMessage('error', result.message || 'Não foi possível alterar o papel do afiliado.');
+      showMessage('error', result.message || 'Não foi possível alterar o papel do afiliado.');
     }
   } catch (err: any) {
-    showTemporaryMessage('error', err.message || 'Erro ao alterar o papel do afiliado.');
+    showMessage('error', err.message || 'Erro ao alterar o papel do afiliado.');
   } finally {
     roleUpdateLoading.value = null;
+  }
+};
+
+// Função para lidar com dispensa de alerta de expiração
+const dismissExpiryAlert = () => {
+  // Já está marcado como notificado em shouldShowExpiryAlert
+  if (currentUser.value?.affiliateCode) {
+    // Manteremos o registro na memória para não mostrar novamente
+    console.log('[AffiliateLink] Alerta de expiração descartado para código:', currentUser.value.affiliateCode);
   }
 };
 
@@ -652,21 +629,35 @@ const handleChangeRole = async (userId: string, newRole: UserRole) => {
     class="mb-6"
   >
     <div class="p-4">
-      <!-- Apenas alertas GERAIS no topo -->
+      <!-- Sistema unificado de alertas - sem duplicação -->
+      <!-- Alerta de erro geral -->
       <Alert
         v-if="error && getErrorCategory === 'general'"
         type="error"
         :message="error"
         dismissible
-        class="mb-4"
+        class="mb-4 alert-with-timeout"
+        @dismiss="error = null"
       />
 
+      <!-- Alerta de sucesso -->
       <Alert
         v-if="success"
         type="success"
         :message="success"
         dismissible
+        class="mb-4 alert-with-timeout"
+        @dismiss="success = null"
+      />
+
+      <!-- Alerta para códigos expirados - modificado para aparecer apenas uma vez por código -->
+      <Alert
+        v-if="shouldShowExpiryAlert"
+        type="warning"
+        message="Seu código de afiliação expirou. Gere um novo código para continuar."
+        dismissible
         class="mb-4"
+        @dismiss="dismissExpiryAlert"
       />
 
       <!-- Painel de Informações sobre Regras de Afiliação - exibir apenas para usuários que podem se afiliar -->
@@ -805,7 +796,7 @@ const handleChangeRole = async (userId: string, newRole: UserRole) => {
             <div v-if="error && getErrorCategory === 'email'" 
                  class="mt-2 text-sm text-red-600 flex items-center">
               <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77-1.333.192 3 1.732 3z" />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
               </svg>
               {{ error }}
             </div>
