@@ -77,7 +77,7 @@ const toggleMenu = () => {
               @click="navigateTo('/admin')" 
               class="px-3 py-2 rounded hover:bg-primary-dark text-sm md:text-base transition-colors"
             >
-              Admin
+              Painel
             </button>
             <button @click="logout" class="px-3 py-2 rounded hover:bg-danger text-sm md:text-base transition-colors">
               Sair
