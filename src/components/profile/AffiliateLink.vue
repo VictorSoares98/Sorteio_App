@@ -451,7 +451,7 @@ const toggleRoleMenu = (userId: string, event: Event) => {
 };
 
 // Função separada para calcular a posição
-const calculatePositionForUser = (userId: string): any => {
+const calculatePositionForUser = (_userId: string): any => {
   // Em dispositivos móveis, posicionar abaixo em vez de ao lado
   if (window.innerWidth < 640) {
     return {
@@ -461,44 +461,36 @@ const calculatePositionForUser = (userId: string): any => {
     };
   }
   
-  // Verificar posição em relação à janela para decidir se abre à esquerda ou direita
-  const menuElement = document.querySelector(`[data-user-id="${userId}"]`);
-  if (menuElement) {
-    const rect = menuElement.getBoundingClientRect();
-    
-    // Se estiver perto da borda direita da tela, abrir à esquerda
-    if (rect.right + 240 > window.innerWidth) {
-      return {
-        left: 'auto',
-        right: '100%'
-      };
-    }
-  }
-  
-  // Padrão: abrir à direita (mais comum em telas amplas)
+  // Sempre abrir para a esquerda, nunca para a direita
   return {
-    left: '100%',
-    right: 'auto'
+    left: 'auto',
+    right: '100%'
   };
 };
 
-// Adicione esta função após calculateMenuPosition
+// Calcula a posição absoluta do submenu na tela
 const calculateSubmenuPosition = (userId: string): any => {
   const triggerElement = document.querySelector(`[data-user-id="${userId}"]`);
   if (!triggerElement) return { top: '0px', left: '0px' };
   
   const rect = triggerElement.getBoundingClientRect();
-  const windowWidth = window.innerWidth;
   const windowHeight = window.innerHeight;
   
   // Altura estimada do submenu
   const submenuHeight = Object.keys(roleLabels).length * 40 + 16;
+  const submenuWidth = 224; // Largura aproximada do submenu em pixels
   
-  // Posicionamento horizontal
-  let left = rect.right + 8;
-  if (left + 224 > windowWidth) {
-    // Se não houver espaço à direita, posiciona à esquerda
-    left = rect.left - 232;
+  // Posicionamento horizontal - sempre à esquerda
+  let left = rect.left - submenuWidth - 8; // 8px de espaço
+  
+  // Se não houver espaço à esquerda, posicionar abaixo do item
+  if (left < 0) {
+    left = Math.max(8, rect.left);
+    return {
+      top: `${rect.bottom + 8}px`,
+      left: `${left}px`,
+      right: 'auto'
+    };
   }
   
   // Posicionamento vertical
@@ -510,7 +502,8 @@ const calculateSubmenuPosition = (userId: string): any => {
   
   return {
     top: `${Math.max(8, top)}px`,
-    left: `${Math.max(8, left)}px`
+    left: `${Math.max(8, left)}px`,
+    right: 'auto'
   };
 };
 
@@ -1078,32 +1071,6 @@ const dismissExpiryAlert = () => {
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
                       </svg>
                     </button>
-                    
-                    <!-- Submenu de papéis (hierarquias) -->
-                    <div 
-                      v-if="showRoleMenu === user.id" 
-                      class="absolute sm:left-full right-full sm:right-auto top-0 w-56 bg-white rounded-md shadow-lg z-30 border border-gray-200"
-                      :style="menuPositions[user.id] || calculatePositionForUser(user.id)"
-                    >
-                      <div class="py-1">
-                        <button 
-                          v-for="(label, role) in roleLabels" 
-                          :key="role"
-                          @click="confirmChangeRole(user.id, role as UserRole, $event)"
-                          class="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 transition-colors"
-                          :class="[
-                            user.role === role 
-                              ? 'text-primary font-medium' 
-                              : 'text-gray-700 hover:text-primary',
-                            !canAssignRole(user, role as UserRole) ? 'opacity-50 cursor-not-allowed' : ''
-                          ]"
-                          :disabled="!canAssignRole(user, role as UserRole)"
-                        >
-                          <span v-if="user.role === role">✓ </span>
-                          {{ label }}
-                        </button>
-                      </div>
-                    </div>
                   </div>
                   
                   <!-- Separador - só mostrar se tiver a opção de alterar hierarquia -->
