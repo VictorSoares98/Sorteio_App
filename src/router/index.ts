@@ -171,11 +171,15 @@ router.beforeEach(async (to, from, next) => {
   // garantir que os dados de usuário estejam atualizados
   if (to.path === '/' && (sessionStorage.getItem('newAffiliation') === 'true' || from.path === '/register' || from.path === '/login')) {
     console.log('[Router] Detectada possível nova afiliação, atualizando dados do usuário');
+    console.log('[Router] Estado newAffiliation:', sessionStorage.getItem('newAffiliation'));
+    console.log('[Router] Origem da navegação:', from.path);
+    
     const authStore = useAuthStore();
     if (authStore.isAuthenticated) {
       try {
         // Forçar atualização dos dados do usuário
         await authStore.fetchUserData(true);
+        console.log('[Router] Dados do usuário atualizados com sucesso');
       } catch (err) {
         console.error('[Router] Erro ao atualizar dados de usuário:', err);
       }

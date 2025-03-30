@@ -97,7 +97,15 @@ export const useAuthStore = defineStore('auth', () => {
           console.log('[AuthStore] Processando afiliação para novo usuário Google com código:', pendingAffiliateCode);
           try {
             const { affiliateToUser } = await import('../services/profile');
-            await affiliateToUser(googleUser.uid, pendingAffiliateCode, false);
+            const affiliationResult = await affiliateToUser(googleUser.uid, pendingAffiliateCode, false);
+            
+            // Adicionar verificação de sucesso e definir flag newAffiliation
+            if (affiliationResult.success) {
+              console.log('[AuthStore] Afiliação Google processada com sucesso:', affiliationResult);
+              // Definir flag para exibir notificação
+              sessionStorage.setItem('newAffiliation', 'true');
+            }
+            
             localStorage.removeItem('pendingAffiliateCode');
           } catch (affiliateError) {
             console.error('[AuthStore] Erro ao processar afiliação:', affiliateError);
