@@ -64,7 +64,10 @@ const toggleMenu = () => {
         <div class="hidden md:flex items-center space-x-4">
           <template v-if="authStore.isAuthenticated">
             <span v-if="authStore.currentUser" class="font-medium text-sm md:text-base">
-              Olá, {{ authStore.currentUser.displayName }}
+              <span>{{ authStore.currentUser.displayName }}</span>
+              <span class="text-xs text-secondary-light ml-1" v-if="authStore.currentUser.username">
+                (@{{ authStore.currentUser.username }})
+              </span>
             </span>
             <button @click="navigateTo('/')" class="px-3 py-2 rounded hover:bg-primary-dark text-sm md:text-base transition-colors">
               Início
@@ -122,7 +125,10 @@ const toggleMenu = () => {
         <div class="px-2 pt-2 pb-3 space-y-1 border-t border-primary-light">
           <template v-if="authStore.isAuthenticated">
             <div v-if="authStore.currentUser" class="px-3 py-2 font-medium border-b border-primary-light mb-2">
-              Olá, {{ authStore.currentUser.displayName }}
+              <div>{{ authStore.currentUser.displayName }}</div>
+              <div class="text-xs text-secondary-light" v-if="authStore.currentUser.username">
+                @{{ authStore.currentUser.username }}
+              </div>
             </div>
             <button @click="navigateTo('/')" class="block w-full text-left px-3 py-2 rounded hover:bg-primary-dark transition-colors">
               Início
