@@ -14,16 +14,45 @@ const {
   error, 
   updateSuccess, 
   updateUserProfile, 
-  initProfileForm 
+  initProfileForm,
+  
+  // Funcionalidades para foto de perfil
+  photoPreview,
+  photoFile,
+  photoLoading,
+  photoError,
+  handleFileSelection,
+  clearPhoto,
+  cancelPhotoChange,
+  removePhoto,
+  
+  // Informações de compressão
+  compressedSize,
+  compressionRatio
 } = useProfileUpdate();
 
 const validationErrors = ref<Record<string, string>>({});
 const isEditMode = ref(false); // Novo estado para controlar o modo de edição
+const fileInputRef = ref<HTMLInputElement | null>(null);
+
+// Função para gerar avatar padrão baseado no nome do usuário
+const getDefaultAvatar = (name: string) => {
+  // Usando Dicebear como serviço de avatar padrão
+  const seed = encodeURIComponent(name || 'user');
+  return `https://api.dicebear.com/7.x/initials/svg?seed=${seed}&backgroundColor=FF8C00`;
+};
 
 // Inicializar dados do formulário quando o componente for montado
 onMounted(() => {
   initProfileForm();
 });
+
+// Ativar seleção de arquivo
+const triggerFileInput = () => {
+  if (fileInputRef.value) {
+    fileInputRef.value.click();
+  }
+};
 
 // Envio do formulário
 const submitForm = async () => {
@@ -68,6 +97,7 @@ const cancelEdit = () => {
   isEditMode.value = false;
   initProfileForm(); // Restaurar os dados originais
   validationErrors.value = {}; // Limpar erros de validação
+  cancelPhotoChange(); // Resetar mudanças na foto
 };
 </script>
 
@@ -106,6 +136,17 @@ const cancelEdit = () => {
             </Button>
           </div>
         </div>
+        
+        <!-- Foto de perfil -->
+        <div class="flex flex-col items-center mb-6">
+          <div class="w-24 h-24 rounded-full overflow-hidden border-2 border-primary mb-2">
+            <img 
+              :src="currentUser.photoURL || getDefaultAvatar(currentUser.displayName)" 
+              :alt="currentUser.displayName"
+              class="w-full h-full object-cover"
+            />
+          </div>
+        </div>
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
@@ -141,6 +182,101 @@ const cancelEdit = () => {
           <div class="flex justify-between items-center">
             <h3 class="text-lg font-medium text-primary">Editar Perfil</h3>
           </div>
+        </div>
+        
+        <!-- Foto de perfil (Modo de edição) -->
+        <div class="flex flex-col items-center mb-6">
+          <!-- Prévia ou foto atual -->
+          <div class="w-32 h-32 rounded-full overflow-hidden border-2 border-primary mb-4">
+            <img 
+              v-if="photoPreview"
+              :src="photoPreview" 
+              alt="Prévia da foto"
+              class="w-full h-full object-cover"
+            />
+            <img 
+              v-else-if="!removePhoto && currentUser?.photoURL"
+              :src="currentUser.photoURL" 
+              alt="Foto atual"
+              class="w-full h-full object-cover"
+            />
+            <img 
+              v-else
+              :src="getDefaultAvatar(profileFormData.displayName)" 
+              alt="Avatar padrão"
+              class="w-full h-full object-cover"
+            />
+          </div>
+          
+          <!-- Informações de compressão -->
+          <div v-if="compressedSize && compressionRatio" class="text-xs text-gray-600 mb-2 text-center">
+            <p>Imagem comprimida: {{ compressedSize }}</p>
+            <p>Redução de tamanho: {{ compressionRatio }}%</p>
+          </div>
+          
+          <!-- Alertas para foto -->
+          <Alert
+            v-if="photoError"
+            type="error"
+            :message="photoError"
+            dismissible
+            class="mb-4 w-full max-w-md"
+            @dismiss="photoError = null"
+          />
+          
+          <!-- Mensagem de carregando -->
+          <div v-if="photoLoading" class="flex items-center justify-center mb-2">
+            <div class="inline-block animate-spin rounded-full h-4 w-4 border-b-2 border-primary mr-2"></div>
+            <span class="text-sm text-gray-600">Comprimindo imagem...</span>
+          </div>
+          
+          <!-- Input de arquivo oculto -->
+          <input
+            ref="fileInputRef"
+            type="file"
+            accept="image/*"
+            class="hidden"
+            @change="handleFileSelection"
+          />
+          
+          <!-- Botões de ação para foto -->
+          <div class="flex space-x-2">
+            <Button 
+              type="button" 
+              variant="outline" 
+              size="sm" 
+              @click="triggerFileInput"
+              :disabled="photoLoading"
+            >
+              {{ photoFile ? 'Trocar foto' : 'Enviar foto' }}
+            </Button>
+            
+            <Button 
+              v-if="photoFile || currentUser?.photoURL"
+              type="button" 
+              variant="outline" 
+              size="sm" 
+              @click="clearPhoto"
+              :disabled="photoLoading"
+            >
+              Remover foto
+            </Button>
+            
+            <Button 
+              v-if="photoFile || removePhoto"
+              type="button" 
+              variant="outline" 
+              size="sm" 
+              @click="cancelPhotoChange"
+              :disabled="photoLoading"
+            >
+              Cancelar
+            </Button>
+          </div>
+          
+          <p class="text-xs text-gray-500 mt-2">
+            A imagem será otimizada automaticamente para garantir o melhor desempenho.
+          </p>
         </div>
 
         <Input
@@ -192,3 +328,29 @@ const cancelEdit = () => {
     </div>
   </Card>
 </template>
+
+<style scoped>
+.photo-preview-container {
+  position: relative;
+  transition: all 0.3s ease;
+}
+
+.photo-preview-container:hover .photo-overlay {
+  opacity: 1;
+}
+
+.photo-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  border-radius: 9999px;
+}
+</style>

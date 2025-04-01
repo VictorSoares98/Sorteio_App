@@ -49,6 +49,25 @@ const logout = async () => {
 const toggleMenu = () => {
   isMenuOpen.value = !isMenuOpen.value;
 };
+
+// Função para gerar avatar padrão baseado no nome do usuário
+const getDefaultAvatar = (name: string) => {
+  // Usando Dicebear como serviço de avatar padrão (não requer o Firebase Storage)
+  const seed = encodeURIComponent(name || 'user');
+  return `https://api.dicebear.com/7.x/initials/svg?seed=${seed}&backgroundColor=FF8C00`;
+};
+
+// Função para obter a URL da foto de perfil
+const getProfilePicture = (user: any) => {
+  // Se o usuário tiver photoURL no objeto de dados (que vem do Firestore)
+  // isso será a imagem base64 ou URL completa
+  if (user?.photoURL) {
+    return user.photoURL;
+  }
+  
+  // Fallback para avatar gerado
+  return getDefaultAvatar(user?.displayName || '');
+};
 </script>
 
 <template>
@@ -63,12 +82,22 @@ const toggleMenu = () => {
         <!-- Menu Desktop -->
         <div class="hidden md:flex items-center space-x-4">
           <template v-if="authStore.isAuthenticated">
-            <span v-if="authStore.currentUser" class="font-medium text-sm md:text-base">
-              <span>{{ authStore.currentUser.displayName }}</span>
-              <span class="text-xs text-secondary-light ml-1" v-if="authStore.currentUser.username">
-                (@{{ authStore.currentUser.username }})
+            <div class="flex items-center space-x-3">
+              <!-- Foto de perfil (desktop) -->
+              <div class="w-8 h-8 rounded-full overflow-hidden bg-white flex-shrink-0 border-2 border-white">
+                <img 
+                  :src="getProfilePicture(authStore.currentUser)" 
+                  :alt="authStore.currentUser?.displayName || 'Usuário'"
+                  class="w-full h-full object-cover"
+                />
+              </div>
+              <span v-if="authStore.currentUser" class="font-medium text-sm md:text-base">
+                <span>{{ authStore.currentUser.displayName }}</span>
+                <span class="text-xs text-secondary-light ml-1" v-if="authStore.currentUser.username">
+                  (@{{ authStore.currentUser.username }})
+                </span>
               </span>
-            </span>
+            </div>
             <button @click="navigateTo('/')" class="px-3 py-2 rounded hover:bg-primary-dark text-sm md:text-base transition-colors">
               Início
             </button>
@@ -124,10 +153,20 @@ const toggleMenu = () => {
       >
         <div class="px-2 pt-2 pb-3 space-y-1 border-t border-primary-light">
           <template v-if="authStore.isAuthenticated">
-            <div v-if="authStore.currentUser" class="px-3 py-2 font-medium border-b border-primary-light mb-2">
-              <div>{{ authStore.currentUser.displayName }}</div>
-              <div class="text-xs text-secondary-light" v-if="authStore.currentUser.username">
-                @{{ authStore.currentUser.username }}
+            <div v-if="authStore.currentUser" class="px-3 py-2 font-medium border-b border-primary-light mb-2 flex items-center space-x-3">
+              <!-- Foto de perfil (mobile) -->
+              <div class="w-10 h-10 rounded-full overflow-hidden bg-white flex-shrink-0 border-2 border-white">
+                <img 
+                  :src="getProfilePicture(authStore.currentUser)" 
+                  :alt="authStore.currentUser.displayName"
+                  class="w-full h-full object-cover"
+                />
+              </div>
+              <div>
+                <div>{{ authStore.currentUser.displayName }}</div>
+                <div class="text-xs text-secondary-light" v-if="authStore.currentUser.username">
+                  @{{ authStore.currentUser.username }}
+                </div>
               </div>
             </div>
             <button @click="navigateTo('/')" class="block w-full text-left px-3 py-2 rounded hover:bg-primary-dark transition-colors">
