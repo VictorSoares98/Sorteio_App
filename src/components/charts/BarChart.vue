@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, onMounted, onUnmounted } from 'vue';
 import { Bar } from 'vue-chartjs';
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, 
          Title, Tooltip, Legend } from 'chart.js';
@@ -42,22 +42,65 @@ const props = defineProps({
   }
 });
 
-// Configurações padrão com cores da UMADRIMC
-const defaultOptions = computed(() => ({
-  responsive: true,
-  maintainAspectRatio: false,
-  scales: {
-    y: {
-      beginAtZero: true
-    }
-  },
-  plugins: {
-    legend: {
-      position: 'top',
-    }
-  },
-  ...props.options
-}));
+// Configurações padrão com cores da UMADRIMC e responsividade
+const defaultOptions = computed(() => {
+  // Detecção melhorada de tamanhos de tela
+  const screenWidth = window.innerWidth;
+  const isMobile = screenWidth < 640;
+  const isTablet = screenWidth >= 640 && screenWidth < 1024;
+  
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    scales: {
+      y: {
+        beginAtZero: true,
+        ticks: {
+          font: {
+            size: isMobile ? 10 : isTablet ? 11 : 12
+          }
+        }
+      },
+      x: {
+        ticks: {
+          font: {
+            size: isMobile ? 10 : isTablet ? 11 : 12
+          }
+        }
+      }
+    },
+    plugins: {
+      legend: {
+        position: 'top' as const,
+        labels: {
+          boxWidth: isMobile ? 8 : isTablet ? 10 : 12,
+          font: {
+            size: isMobile ? 10 : isTablet ? 11 : 12
+          },
+          padding: isMobile ? 5 : isTablet ? 8 : 10
+        }
+      }
+    },
+    ...props.options
+  };
+});
+
+// Referência para o handler para poder removê-lo corretamente
+const handleResize = () => {
+  const chart = ChartJS.getChart(props.chartId);
+  if (chart) {
+    chart.options = defaultOptions.value;
+    chart.update();
+  }
+};
+
+onMounted(() => {
+  window.addEventListener('resize', handleResize);
+});
+
+onUnmounted(() => {
+  window.removeEventListener('resize', handleResize);
+});
 </script>
 
 <template>

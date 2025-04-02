@@ -234,8 +234,10 @@ onMounted(() => {
         <!-- Sales Trend Chart -->
         <Card title="Tendência de Vendas">
           <div class="p-4">
-            <div class="h-64">
-              <LineChart :chart-data="salesByMonthData" />
+            <div class="h-40 sm:h-48 md:h-56 lg:h-64 w-full flex items-center justify-center">
+              <div class="w-full">
+                <LineChart :chart-data="salesByMonthData" />
+              </div>
             </div>
           </div>
         </Card>
@@ -243,8 +245,10 @@ onMounted(() => {
         <!-- Top Sellers Chart -->
         <Card title="Top Vendedores">
           <div class="p-4">
-            <div class="h-64">
-              <BarChart :chart-data="topSellersData" />
+            <div class="h-40 sm:h-48 md:h-56 lg:h-64 w-full flex items-center justify-center">
+              <div class="w-full">
+                <BarChart :chart-data="topSellersData" />
+              </div>
             </div>
           </div>
         </Card>
@@ -255,8 +259,10 @@ onMounted(() => {
         <!-- Numbers Distribution -->
         <Card title="Distribuição de Números" class="h-full">
           <div class="p-4 h-full">
-            <div class="h-64">
-              <DoughnutChart :chart-data="numberDistributionData" />
+            <div class="h-40 sm:h-48 md:h-56 lg:h-64 w-full flex items-center justify-center">
+              <div class="max-w-[200px] sm:max-w-[250px] md:max-w-[220px] lg:max-w-none w-full">
+                <DoughnutChart :chart-data="numberDistributionData" />
+              </div>
             </div>
           </div>
         </Card>
