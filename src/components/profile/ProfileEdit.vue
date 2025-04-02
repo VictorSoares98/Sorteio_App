@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
 import { useProfileUpdate } from '../../composables/useProfileUpdate';
+import { useAuthStore } from '../../stores/authStore';
 import Input from '../ui/Input.vue';
 import Button from '../ui/Button.vue';
 import Alert from '../ui/Alert.vue';
 import Card from '../ui/Card.vue';
-import { validateName, validatePhone } from '../../utils/validation';
+import { validateName, validatePhone, validatePassword } from '../../utils/validation';
 
 const { 
   currentUser,
@@ -98,6 +99,87 @@ const cancelEdit = () => {
   initProfileForm(); // Restaurar os dados originais
   validationErrors.value = {}; // Limpar erros de validação
   cancelPhotoChange(); // Resetar mudanças na foto
+};
+
+// Estado para alteração de senha
+const authStore = useAuthStore();
+const showPasswordSection = ref(false);
+const currentPassword = ref('');
+const newPassword = ref('');
+const confirmNewPassword = ref('');
+const passwordLoading = ref(false);
+const passwordError = ref('');
+const passwordSuccess = ref(false);
+const showPasswords = ref(false); // Único estado para controlar visibilidade de todas as senhas
+
+// Toggle de visibilidade de todas as senhas juntas
+const togglePasswordVisibility = () => {
+  showPasswords.value = !showPasswords.value;
+};
+
+// Alternar exibição da seção de senha
+const togglePasswordSection = () => {
+  showPasswordSection.value = !showPasswordSection.value;
+  
+  // Limpar campos ao esconder a seção
+  if (!showPasswordSection.value) {
+    currentPassword.value = '';
+    newPassword.value = '';
+    confirmNewPassword.value = '';
+    passwordError.value = '';
+    passwordSuccess.value = false;
+    showPasswords.value = false; // Resetar também o estado de visibilidade
+  }
+};
+
+// Validar e atualizar senha
+const updateUserPassword = async () => {
+  passwordError.value = '';
+  passwordSuccess.value = false;
+  
+  // Validar campos de senha
+  if (!currentPassword.value) {
+    passwordError.value = 'Por favor, insira sua senha atual';
+    return;
+  }
+  
+  if (!validatePassword(newPassword.value)) {
+    passwordError.value = 'A nova senha deve ter pelo menos 6 caracteres';
+    return;
+  }
+  
+  if (newPassword.value !== confirmNewPassword.value) {
+    passwordError.value = 'As senhas não correspondem';
+    return;
+  }
+  
+  passwordLoading.value = true;
+  
+  try {
+    // Primeiro, reautenticar o usuário
+    await authStore.reauthenticateUser(currentPassword.value);
+    
+    // Depois, atualizar a senha
+    await authStore.updatePasswordAction(newPassword.value);
+    
+    // Sucesso
+    passwordSuccess.value = true;
+    currentPassword.value = '';
+    newPassword.value = '';
+    confirmNewPassword.value = '';
+    
+    // Fechar a seção após 3 segundos
+    setTimeout(() => {
+      if (passwordSuccess.value) {
+        showPasswordSection.value = false;
+        passwordSuccess.value = false;
+      }
+    }, 3000);
+  } catch (error: any) {
+    passwordError.value = error.message || 'Erro ao atualizar senha';
+  } finally {
+    passwordLoading.value = false;
+  }
 };
 </script>
 
@@ -325,6 +407,156 @@ const cancelEdit = () => {
           </Button>
         </div>
       </form>
+    </div>
+  </Card>
+
+  <!-- Password Change Section -->
+  <Card title="Segurança da Conta" class="mt-6" v-if="!isEditMode && currentUser">
+    <div class="p-4">
+      <div class="border-b pb-2 mb-4">
+        <div class="flex justify-between items-center">
+          <h3 class="text-lg font-medium text-primary">Alterar Senha</h3>
+          <Button 
+            @click="togglePasswordSection" 
+            variant="outline" 
+            size="sm"
+          >
+            {{ showPasswordSection ? 'Cancelar' : 'Atualizar Senha' }}
+          </Button>
+        </div>
+      </div>
+      
+      <!-- Alertas de senha -->
+      <Alert
+        v-if="passwordSuccess"
+        type="success"
+        message="Senha atualizada com sucesso!"
+        dismissible
+        autoClose
+        class="mb-4"
+      />
+      
+      <Alert
+        v-if="passwordError"
+        type="error"
+        :message="passwordError"
+        dismissible
+        class="mb-4"
+        @dismiss="passwordError = ''"
+      />
+      
+      <div v-if="showPasswordSection" class="space-y-4">
+        <!-- Senha atual -->
+        <div class="mb-4">
+          <label class="block text-gray-700 text-sm font-medium mb-2" for="currentPassword">
+            Senha Atual
+          </label>
+          <div class="relative">
+            <input
+              id="currentPassword"
+              v-model="currentPassword"
+              :type="showPasswords ? 'text' : 'password'"
+              class="w-full px-3 py-2 pr-10 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
+              placeholder="Digite sua senha atual"
+            />
+            <button 
+              type="button" 
+              @click="togglePasswordVisibility" 
+              class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-600 focus:outline-none"
+              tabindex="-1"
+            >
+              <svg v-if="showPasswords" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+              </svg>
+              <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+              </svg>
+            </button>
+          </div>
+        </div>
+        
+        <!-- Nova senha -->
+        <div class="mb-4">
+          <label class="block text-gray-700 text-sm font-medium mb-2" for="newPassword">
+            Nova Senha
+          </label>
+          <div class="relative">
+            <input
+              id="newPassword"
+              v-model="newPassword"
+              :type="showPasswords ? 'text' : 'password'"
+              class="w-full px-3 py-2 pr-10 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
+              placeholder="Digite sua nova senha"
+            />
+            <button 
+              type="button" 
+              @click="togglePasswordVisibility" 
+              class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-600 focus:outline-none"
+              tabindex="-1"
+            >
+              <svg v-if="showPasswords" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+              </svg>
+              <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+              </svg>
+            </button>
+          </div>
+        </div>
+        
+        <!-- Confirmar nova senha -->
+        <div class="mb-4">
+          <label class="block text-gray-700 text-sm font-medium mb-2" for="confirmNewPassword">
+            Confirmar Nova Senha
+          </label>
+          <div class="relative">
+            <input
+              id="confirmNewPassword"
+              v-model="confirmNewPassword"
+              :type="showPasswords ? 'text' : 'password'"
+              class="w-full px-3 py-2 pr-10 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
+              placeholder="Confirme sua nova senha"
+            />
+            <button 
+              type="button" 
+              @click="togglePasswordVisibility" 
+              class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-600 focus:outline-none"
+              tabindex="-1"
+            >
+              <svg v-if="showPasswords" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+              </svg>
+              <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+              </svg>
+            </button>
+          </div>
+        </div>
+        
+        <div class="mt-6">
+          <Button
+            type="button"
+            variant="primary"
+            :disabled="passwordLoading"
+            @click="updateUserPassword"
+          >
+            <span v-if="passwordLoading">Atualizando...</span>
+            <span v-else>Atualizar Senha</span>
+          </Button>
+          
+          <p class="text-xs text-gray-500 mt-2">
+            A senha deve ter pelo menos 6 caracteres.
+          </p>
+        </div>
+      </div>
+      
+      <div v-else class="text-gray-600 text-sm">
+        <p>Aqui você pode atualizar sua senha para manter sua conta segura.</p>
+        <p class="mt-2">Recomendamos alterar sua senha periodicamente e usar uma senha forte.</p>
+      </div>
     </div>
   </Card>
 </template>

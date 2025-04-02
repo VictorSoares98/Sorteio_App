@@ -9,7 +9,11 @@ import {
   createUserWithEmailAndPassword,
   updateProfile,
   GoogleAuthProvider,
-  signInWithPopup
+  signInWithPopup,
+  sendPasswordResetEmail,
+  updatePassword,
+  reauthenticateWithCredential,
+  EmailAuthProvider
 } from 'firebase/auth';
 import { doc, getDoc, setDoc, serverTimestamp, onSnapshot, updateDoc } from 'firebase/firestore';
 import { auth, db } from '../firebase';
@@ -358,6 +362,90 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  /**
+   * Envia um email de recuperação de senha
+   */
+  const sendPasswordResetEmailAction = async (email: string): Promise<boolean> => {
+    try {
+      await sendPasswordResetEmail(auth, email);
+      return true;
+    } catch (error: any) {
+      console.error('Erro ao enviar email de recuperação:', error);
+      
+      let errorMessage = 'Falha ao enviar email de recuperação. Tente novamente.';
+      
+      if (error.code === 'auth/user-not-found') {
+        errorMessage = 'Não existe uma conta associada a este email.';
+      } else if (error.code === 'auth/invalid-email') {
+        errorMessage = 'O formato do email é inválido.';
+      } else if (error.code === 'auth/missing-email') {
+        errorMessage = 'Por favor, insira seu email.';
+      }
+      
+      error.value = errorMessage;
+      throw new Error(errorMessage);
+    }
+  };
+
+  /**
+   * Reautentica o usuário atual (necessário para operações sensíveis)
+   */
+  const reauthenticateUser = async (password: string): Promise<boolean> => {
+    try {
+      const user = auth.currentUser;
+      if (!user || !user.email) {
+        throw new Error('Usuário não encontrado ou sem email associado');
+      }
+      
+      const credential = EmailAuthProvider.credential(user.email, password);
+      await reauthenticateWithCredential(user, credential);
+      return true;
+    } catch (error: any) {
+      console.error('Erro ao reautenticar usuário:', error);
+      
+      let errorMessage = 'Falha na autenticação. Verifique sua senha e tente novamente.';
+      
+      if (error.code === 'auth/wrong-password') {
+        errorMessage = 'Senha incorreta.';
+      } else if (error.code === 'auth/too-many-requests') {
+        errorMessage = 'Muitas tentativas incorretas. Tente novamente mais tarde.';
+      } else if (error.code === 'auth/user-mismatch') {
+        errorMessage = 'As credenciais não correspondem ao usuário atualmente conectado.';
+      }
+      
+      error.value = errorMessage;
+      throw new Error(errorMessage);
+    }
+  };
+
+  /**
+   * Atualiza a senha do usuário atual
+   */
+  const updatePasswordAction = async (newPassword: string): Promise<boolean> => {
+    try {
+      const user = auth.currentUser;
+      if (!user) {
+        throw new Error('Usuário não encontrado');
+      }
+      
+      await updatePassword(user, newPassword);
+      return true;
+    } catch (error: any) {
+      console.error('Erro ao atualizar senha:', error);
+      
+      let errorMessage = 'Falha ao atualizar senha. Tente novamente.';
+      
+      if (error.code === 'auth/weak-password') {
+        errorMessage = 'A senha deve ter pelo menos 6 caracteres.';
+      } else if (error.code === 'auth/requires-recent-login') {
+        errorMessage = 'Esta operação é sensível e requer autenticação recente. Faça login novamente antes de tentar novamente.';
+      }
+      
+      error.value = errorMessage;
+      throw new Error(errorMessage);
+    }
+  };
+
   return {
     currentUser,
     loading,
@@ -372,6 +460,9 @@ export const useAuthStore = defineStore('auth', () => {
     initAuthListener,
     init,
     cleanup,
-    loginWithGoogle
+    loginWithGoogle,
+    sendPasswordResetEmailAction,
+    reauthenticateUser,
+    updatePasswordAction
   };
 });

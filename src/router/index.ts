@@ -7,12 +7,14 @@ import { isAdmin } from '../utils/permissions';
 import { onAuthStateChanged } from 'firebase/auth';
 import type { User } from 'firebase/auth';
 import { useAuthStore } from '../stores/authStore'; // Importação necessária para o novo guard
+import ForgotPasswordView from '../views/auth/ForgotPasswordView.vue';
 
 // Interface para metadados de rota personalizados
 interface RouteMeta {
   requiresAuth?: boolean;
   requiresAdmin?: boolean;
   title?: string;
+  requiresGuest?: boolean;
 }
 
 // Estender RouteRecordRaw para incluir nossos metadados personalizados
@@ -34,13 +36,19 @@ const routes: AppRouteRecordRaw[] = [
     path: '/login',
     name: 'login',
     component: () => import(/* webpackChunkName: "auth" */ '../views/auth/LoginView.vue'),
-    meta: { title: 'Login' }
+    meta: { title: 'Login', requiresGuest: true }
   },
   {
     path: '/register',
     name: 'register',
     component: () => import(/* webpackChunkName: "auth" */ '../views/auth/RegisterView.vue'),
-    meta: { title: 'Cadastro' }
+    meta: { title: 'Cadastro', requiresGuest: true }
+  },
+  {
+    path: '/forgot-password',
+    name: 'forgot-password',
+    component: ForgotPasswordView,
+    meta: { requiresGuest: true }
   },
   
   // Rotas de Perfil
