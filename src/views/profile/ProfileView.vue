@@ -107,6 +107,12 @@ onMounted(async () => {
     }
   }
 });
+
+// Adicionar função para gerar avatar padrão com a inicial do usuário
+const getDefaultAvatar = (name: string) => {
+  const seed = encodeURIComponent(name || 'user');
+  return `https://api.dicebear.com/7.x/initials/svg?seed=${seed}&backgroundColor=FF8C00`;
+};
 </script>
 
 <template>
@@ -137,6 +143,17 @@ onMounted(async () => {
       <!-- Navegação lateral -->
       <div class="md:col-span-1">
         <div class="bg-white p-6 rounded-lg shadow-md">
+          <!-- Placeholder de foto de perfil - Ajustado -->
+          <div class="mb-6 flex flex-col items-center justify-center">
+            <div class="w-40 h-40 rounded-full overflow-hidden border-2 border-primary shadow-md">
+              <img 
+                :src="authStore.currentUser?.photoURL || getDefaultAvatar(authStore.currentUser?.displayName || '')" 
+                :alt="authStore.currentUser?.displayName || 'Avatar'"
+                class="w-full h-full object-cover"
+              />
+            </div>
+          </div>
+          
           <!-- Nome do usuário para contexto -->
           <div class="mb-6 pb-4 border-b border-gray-200">
             <h2 class="text-xl font-semibold text-primary mb-1">{{ authStore.currentUser.displayName }}</h2>
