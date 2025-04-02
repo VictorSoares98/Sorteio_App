@@ -220,9 +220,9 @@ onMounted(async () => {
                 </div>
                 
                 <div>
-                  <p class="text-xs text-gray-500 mb-2">Números</p>
+                  <p class="text-xs text-gray-500 mb-2 text-center">Números</p>
                   <div v-if="Array.isArray(order.generatedNumbers) && order.generatedNumbers.length > 0" 
-                       class="flex flex-wrap gap-1">
+                       class="flex flex-wrap gap-1 justify-center mt-2">
                     <span 
                       v-for="number in order.generatedNumbers" 
                       :key="number"
@@ -231,7 +231,7 @@ onMounted(async () => {
                       {{ number }}
                     </span>
                   </div>
-                  <p v-else class="text-sm text-gray-500 italic">
+                  <p v-else class="text-sm text-gray-500 italic text-center">
                     Nenhum número encontrado para este pedido.
                   </p>
                 </div>
