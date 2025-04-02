@@ -3,6 +3,18 @@ import { ref, computed } from 'vue';
 import { useAuthStore } from './authStore';
 import { type Order, type OrderFormData } from '../types/order';
 import * as orderService from '../services/orders';
+import { collection, getDocs } from 'firebase/firestore';
+import { db } from '../firebase';
+
+// Utility function to process Firestore document
+const processFirestoreDocument = <T>(doc: any): T => {
+  const data = doc.data();
+  return {
+    id: doc.id,
+    ...data,
+    createdAt: data.createdAt?.toDate() || new Date()
+  } as T;
+};
 
 export const useOrderStore = defineStore('order', () => {
   const orders = ref<Order[]>([]);
@@ -72,6 +84,57 @@ export const useOrderStore = defineStore('order', () => {
     }
   };
 
+  // Buscar todos os pedidos (para administradores)
+  const fetchAllOrders = async () => {
+    if (!authStore.isAdmin) {
+      console.warn('[OrderStore] Tentativa de acesso não autorizado a todos os pedidos');
+      error.value = 'Permissão negada. Apenas administradores podem acessar todos os pedidos.';
+      return [];
+    }
+    
+    loading.value = true;
+    error.value = null;
+    
+    try {
+      console.log('[OrderStore] Buscando todos os pedidos');
+      
+      // Buscar todos os pedidos do sistema
+      const ordersRef = collection(db, 'orders');
+      const ordersSnapshot = await getDocs(ordersRef);
+      
+      const allOrders: Order[] = [];
+      
+      ordersSnapshot.forEach((doc) => {
+        // Usar função utilitária para processar documentos
+        const order = processFirestoreDocument<Order>(doc);
+        
+        // Validar datas
+        if (!(order.createdAt instanceof Date) || isNaN(order.createdAt.getTime())) {
+          order.createdAt = new Date();
+        }
+        
+        // Validar array de números
+        if (!Array.isArray(order.generatedNumbers)) {
+          order.generatedNumbers = [];
+        }
+        
+        allOrders.push(order);
+      });
+      
+      // Ordenar por data mais recente primeiro
+      orders.value = allOrders.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+      
+      console.log(`[OrderStore] ${orders.value.length} pedidos carregados`);
+      return orders.value;
+    } catch (err: any) {
+      console.error('[OrderStore] Erro ao buscar todos os pedidos:', err);
+      error.value = 'Não foi possível carregar os pedidos.';
+      return [];
+    } finally {
+      loading.value = false;
+    }
+  };
+
   // Criar novo pedido - removida confirmação em lote
   const createOrder = async (orderData: OrderFormData, generatedNumbers: string[]) => {
     if (!authStore.currentUser) throw new Error('Usuário não autenticado');
@@ -111,6 +174,7 @@ export const useOrderStore = defineStore('order', () => {
     loading,
     error,
     fetchUserOrders,
+    fetchAllOrders,
     createOrder
   };
 });

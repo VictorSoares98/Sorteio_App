@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import Card from '../ui/Card.vue';
 import { useAuthStore } from '../../stores/authStore';
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { formatUserRole } from '../../utils/formatters';
 import ResetSalesButton from '../admin/ResetSalesButton.vue';
+import AdminDashboard from '../dashboard/AdminDashboard.vue';
 
 const authStore = useAuthStore();
+const showDashboard = ref(false);
 
 // Função para pluralizar corretamente os nomes dos papéis em português
 const pluralizedRole = computed(() => {
@@ -24,10 +26,21 @@ const pluralizedRole = computed(() => {
     return roleName + 's';
   }
 });
+
+// Método para alternar entre visualização de placeholder e dashboard real
+const toggleDashboard = () => {
+  showDashboard.value = !showDashboard.value;
+};
 </script>
 
 <template>
-  <Card title="Painel de Controle">
+  <!-- Mostrar o dashboard completo quando showDashboard for verdadeiro -->
+  <div v-if="showDashboard">
+    <AdminDashboard />
+  </div>
+  
+  <!-- Caso contrário, mostrar o placeholder com botão para acessar o dashboard -->
+  <Card v-else title="Painel de Controle">
     <div class="p-6">
       <div class="text-center mb-6">
         <h2 class="text-xl font-bold text-primary mb-2">Bem-vindo ao Painel de Controle</h2>
@@ -42,11 +55,19 @@ const pluralizedRole = computed(() => {
         <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mx-auto text-primary opacity-50 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
         </svg>
-        <h3 class="text-lg font-medium text-gray-800 mb-2">Conteúdo em Desenvolvimento</h3>
+        <h3 class="text-lg font-medium text-gray-800 mb-2">Dashboard em Desenvolvimento</h3>
         <p class="text-gray-600">
           O Painel de Controle está sendo preparado com recursos avançados para ajudar na sua gestão.
           Novas funcionalidades serão disponibilizadas em breve!
         </p>
+        
+        <!-- Botão para acessar o dashboard novo -->
+        <button 
+          @click="toggleDashboard" 
+          class="mt-4 bg-primary hover:bg-primary-dark text-white py-2 px-4 rounded transition-colors"
+        >
+          Acessar Dashboard
+        </button>
       </div>
 
       <!-- Ações Administrativas -->
@@ -65,10 +86,8 @@ const pluralizedRole = computed(() => {
           </div>
           
           <div class="bg-red-50 p-4 rounded-lg shadow-sm border border-red-200">
-            <h4 class="font-medium text-red-800 mb-2 flex items-center">
-              ⚠️ Ações Destrutivas
-            </h4>
-            <ResetSalesButton variant="danger" block />
+            <h4 class="font-medium text-red-800 mb-2">Ações de Manutenção</h4>
+            <ResetSalesButton showHelpText />
           </div>
         </div>
       </div>
