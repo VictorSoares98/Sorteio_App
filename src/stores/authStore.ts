@@ -100,8 +100,8 @@ export const useAuthStore = defineStore('auth', () => {
         if (pendingAffiliateCode) {
           console.log('[AuthStore] Processando afiliação para novo usuário Google com código:', pendingAffiliateCode);
           try {
-            const { affiliateToUser } = await import('../services/profile');
-            const affiliationResult = await affiliateToUser(googleUser.uid, pendingAffiliateCode, false);
+            const profileModule = await import('../services/profile');
+            const affiliationResult = await profileModule.affiliateToUser(googleUser.uid, pendingAffiliateCode, false);
             
             // Adicionar verificação de sucesso e definir flag newAffiliation
             if (affiliationResult.success) {
@@ -207,8 +207,8 @@ export const useAuthStore = defineStore('auth', () => {
         console.log('[AuthStore] Processando código de afiliado pendente:', pendingAffiliateCode);
         try {
           // Importar função de afiliação sob demanda para não sobrecarregar o bundle inicial
-          const { affiliateToUser } = await import('../services/profile');
-          const affiliationResult = await affiliateToUser(user.uid, pendingAffiliateCode, false);
+          const profileModule = await import('../services/profile');
+          const affiliationResult = await profileModule.affiliateToUser(user.uid, pendingAffiliateCode, false);
           
           if (affiliationResult.success) {
             console.log('[AuthStore] Afiliação processada com sucesso:', affiliationResult);

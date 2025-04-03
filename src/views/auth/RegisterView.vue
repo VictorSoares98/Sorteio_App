@@ -3,6 +3,7 @@ import { ref, onBeforeMount, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
 import RegisterForm from '../../components/auth/RegisterForm.vue';
 import { useAffiliateCode } from '../../composables/useAffiliateCode';
+// Removida a importação estática de profile.ts
 import Alert from '../../components/ui/Alert.vue';
 
 const route = useRoute();
@@ -12,8 +13,8 @@ const isCodeValid = ref<boolean>(true);
 const isCheckingCode = ref<boolean>(false);
 const errorMessage = ref<string | null>(null);
 
-// Usar o composable para verificar a validade do código
-const { checkAffiliateCode } = useAffiliateCode();
+// Usar o composable apenas para as funcionalidades disponíveis
+const { } = useAffiliateCode(); // No longer extracting unused currentUser
 
 // Verificar se o código é válido
 const validateAffiliateCode = async (code: string) => {
@@ -21,8 +22,11 @@ const validateAffiliateCode = async (code: string) => {
   
   isCheckingCode.value = true;
   try {
-    // Utilizar a função que já verifica expiração
-    const user = await checkAffiliateCode(code);
+    // Importação dinâmica do módulo profile.ts
+    const profileService = await import('../../services/profile');
+    
+    // Utilizar a função do serviço que verifica se o código existe e retorna o usuário
+    const user = await profileService.findUserByAffiliateCode(code);
     
     if (user) {
       isCodeValid.value = true;

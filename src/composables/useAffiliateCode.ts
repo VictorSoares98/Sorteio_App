@@ -1,14 +1,6 @@
 import { ref, computed } from 'vue';
 import { useAuthStore } from '../stores/authStore';
 import { useOrderStore } from '../stores/orderStore';
-import { 
-  generateTemporaryAffiliateCode as generateTempCode,
-  affiliateToUser as affiliate,
-  getAffiliatedUsers as fetchUsers,
-  removeAffiliate as removeAff,
-  updateAffiliateRole as updateRole,
-  findUserByAffiliateCode
-} from '../services/profile';
 import { UserRole, type User } from '../types/user';
 
 // Interface para métricas de afiliados
@@ -126,8 +118,9 @@ export function useAffiliateCode() {
     if (!currentUser.value?.affiliateCode) return;
     
     try {
-      // Verificar se o código ainda é válido usando o serviço de perfil
-      const userWithCode = await findUserByAffiliateCode(currentUser.value.affiliateCode);
+      // Importação dinâmica
+      const profileModule = await import('../services/profile');
+      const userWithCode = await profileModule.findUserByAffiliateCode(currentUser.value.affiliateCode);
       
       // Se o código não estiver associado a nenhum usuário ou não retornar o usuário atual, está inválido
       if (!userWithCode || userWithCode.id !== currentUser.value.id) {
@@ -148,11 +141,9 @@ export function useAffiliateCode() {
     
     loading.value = true;
     try {
-      // Redefinir o estado de erro
-      error.value = null;
-      
-      // Buscar afiliados usando o serviço
-      const users = await fetchUsers(currentUser.value.id);
+      // Importação dinâmica
+      const profileModule = await import('../services/profile');
+      const users = await profileModule.getAffiliatedUsers(currentUser.value.id);
       affiliatedUsers.value = users;
       
       // Após buscar afiliados, buscar métricas para cada um
@@ -178,11 +169,14 @@ export function useAffiliateCode() {
     isGeneratingCode.value = true;
     
     try {
+      // Importação dinâmica
+      const profileModule = await import('../services/profile');
+      
       // Redefinir estado de erro
       error.value = null;
       
       // Gerar código utilizando o serviço
-      const code = await generateTempCode(currentUser.value.id);
+      const code = await profileModule.generateTemporaryAffiliateCode(currentUser.value.id);
       
       // Recarregar dados do usuário para atualizar o código no estado
       await authStore.fetchUserData(true);
@@ -214,11 +208,14 @@ export function useAffiliateCode() {
     }
     
     try {
+      // Importação dinâmica
+      const profileModule = await import('../services/profile');
+      
       // Redefinir estado de erro
       error.value = null;
       
       // Processar afiliação
-      const result = await affiliate(currentUser.value.id, targetIdentifier, isEmail);
+      const result = await profileModule.affiliateToUser(currentUser.value.id, targetIdentifier, isEmail);
       
       if (result.success) {
         // Recarregar dados do usuário para atualizar informações de afiliação
@@ -247,11 +244,14 @@ export function useAffiliateCode() {
     }
     
     try {
+      // Importação dinâmica
+      const profileModule = await import('../services/profile');
+      
       // Redefinir estado de erro
       error.value = null;
       
       // Processar remoção
-      const result = await removeAff(currentUser.value.id, affiliateId);
+      const result = await profileModule.removeAffiliate(currentUser.value.id, affiliateId);
       
       if (result.success) {
         // Recarregar dados do usuário e lista de afiliados
@@ -281,11 +281,14 @@ export function useAffiliateCode() {
     }
     
     try {
+      // Importação dinâmica
+      const profileModule = await import('../services/profile');
+      
       // Redefinir estado de erro
       error.value = null;
       
       // Processar atualização
-      const result = await updateRole(currentUser.value.id, affiliateId, newRole);
+      const result = await profileModule.updateAffiliateRole(currentUser.value.id, affiliateId, newRole);
       
       if (result.success) {
         // Recarregar dados do usuário e lista de afiliados
