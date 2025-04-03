@@ -4,6 +4,7 @@ import App from './App.vue'
 import router from './router'
 import './style.css'
 import { useAuthStore } from './stores/authStore'
+import { initConnectivityService } from './services/connectivity'
 
 // Declare Vite-specific properties on the Window interface
 declare global {
@@ -87,6 +88,9 @@ window.addEventListener('unhandledrejection', (event) => {
 window.addEventListener('error', (event) => {
   console.error('[App Error]', event.error);
 });
+
+// Inicializar serviço de conectividade
+initConnectivityService();
 
 // Inicializar aplicação
 try {

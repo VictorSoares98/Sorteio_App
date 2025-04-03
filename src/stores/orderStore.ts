@@ -1,10 +1,17 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import { useAuthStore } from './authStore';
-import { type Order, type OrderFormData } from '../types/order';
+import { type Order, type OrderFormData, PaymentMethod } from '../types/order';
 import * as orderService from '../services/orders';
 import { collection, getDocs } from 'firebase/firestore';
 import { db } from '../firebase';
+import { 
+  saveOrderOffline, 
+  getOfflineOrders, 
+  hasUnsyncedOrders 
+} from '../services/offlineStorage';
+import { useConnectionStatus } from '../services/connectivity';
+import { syncOfflineOrders } from '../services/syncService';
 
 // Utility function to process Firestore document
 const processFirestoreDocument = <T>(doc: any): T => {
@@ -22,6 +29,12 @@ export const useOrderStore = defineStore('order', () => {
   const error = ref<string | null>(null);
   const authStore = useAuthStore();
 
+  // Adicionar novos estados para modo offline
+  const unsyncedOrdersCount = ref(0);
+  const { isOnline, connectionStatus } = useConnectionStatus();
+  const syncInProgress = ref(false);
+  const lastSyncResult = ref<any>(null);
+
   // Computar os pedidos do usuário atual
   const userOrders = computed(() => {
     if (!authStore.currentUser) return [];
@@ -37,7 +50,22 @@ export const useOrderStore = defineStore('order', () => {
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
   });
 
-  // Buscar todos os pedidos do usuário
+  // Verificar se há pedidos não sincronizados ao iniciar
+  const checkUnsyncedOrders = async () => {
+    try {
+      const hasUnsynced = await hasUnsyncedOrders();
+      if (hasUnsynced) {
+        const offlineOrders = await getOfflineOrders();
+        unsyncedOrdersCount.value = offlineOrders.filter(o => o.syncStatus === 'pending').length;
+      } else {
+        unsyncedOrdersCount.value = 0;
+      }
+    } catch (err) {
+      console.error('[OrderStore] Erro ao verificar pedidos não sincronizados:', err);
+    }
+  };
+
+  // Buscar todos os pedidos do usuário, incluindo offline
   const fetchUserOrders = async () => {
     if (!authStore.currentUser) return;
     
@@ -48,16 +76,30 @@ export const useOrderStore = defineStore('order', () => {
       const userId = authStore.currentUser.id;
       console.log(`[OrderStore] Buscando pedidos para usuário: ${userId}`);
       
-      // Garantir que estamos usando o serviço correto para buscar pedidos
-      const fetchedOrders = await orderService.fetchUserOrders(userId);
-      console.log(`[OrderStore] ${fetchedOrders.length} pedidos encontrados no Firebase`);
+      // Buscar pedidos do Firebase
+      let fetchedOrders: Order[] = [];
       
-      // Validar que todos os pedidos têm o formato correto antes de armazenar
-      orders.value = fetchedOrders.map(order => {
+      if (isOnline.value) {
+        fetchedOrders = await orderService.fetchUserOrders(userId);
+        console.log(`[OrderStore] ${fetchedOrders.length} pedidos encontrados no Firebase`);
+      }
+      
+      // Buscar pedidos offline
+      const offlineOrders = await getOfflineOrders();
+      console.log(`[OrderStore] ${offlineOrders.length} pedidos encontrados offline`);
+      
+      // Combinar pedidos online e offline, evitando duplicatas
+      const onlineOrderIds = new Set(fetchedOrders.map(o => o.id));
+      const filteredOfflineOrders = offlineOrders.filter(o => !onlineOrderIds.has(o.id));
+      
+      const allOrders = [...fetchedOrders, ...filteredOfflineOrders];
+      
+      // Validar todos os pedidos
+      orders.value = allOrders.map(order => {
         // Garantir que createdAt é um objeto Date válido
         if (!(order.createdAt instanceof Date) || isNaN(order.createdAt.getTime())) {
           console.warn('[OrderStore] Data inválida detectada em pedido, corrigindo:', order.id);
-          order.createdAt = new Date();
+          order.createdAt = new Date(order.offlineCreatedAt || Date.now());
         }
         
         // Garantir que generatedNumbers é sempre um array
@@ -74,8 +116,13 @@ export const useOrderStore = defineStore('order', () => {
         return order;
       });
       
+      // Ordenar por data mais recente
+      orders.value.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+      
+      // Atualizar contagem de pedidos não sincronizados
+      unsyncedOrdersCount.value = offlineOrders.filter(o => o.syncStatus === 'pending').length;
+      
       console.log(`[OrderStore] ${orders.value.length} pedidos carregados para o usuário ${userId}`);
-      console.log(`[OrderStore] ${userOrders.value.length} pedidos filtrados para o usuário atual`);
     } catch (err: any) {
       console.error('[OrderStore] Erro ao buscar pedidos:', err);
       error.value = 'Não foi possível carregar seus pedidos.';
@@ -135,7 +182,7 @@ export const useOrderStore = defineStore('order', () => {
     }
   };
 
-  // Criar novo pedido - removida confirmação em lote
+  // Modificar a função createOrder para suportar modo offline
   const createOrder = async (orderData: OrderFormData, generatedNumbers: string[]) => {
     if (!authStore.currentUser) throw new Error('Usuário não autenticado');
     
@@ -146,27 +193,93 @@ export const useOrderStore = defineStore('order', () => {
       // Verificar se o username está disponível
       const username = authStore.currentUser.username || authStore.currentUser.displayName.toLowerCase().replace(/\s+/g, "_");
       
-      // Criar pedido no Firebase
-      const newOrderId = await orderService.createOrder(
-        orderData,
-        generatedNumbers,
-        authStore.currentUser.id,
-        authStore.currentUser.displayName,
-        username
-      );
+      // Preparar dados do pedido
+      const newOrderId = generateDocumentId('order', username);
+      const timestamp = Date.now();
       
-      // Atualizar a store após criar o pedido
-      await fetchUserOrders();
+      const orderToCreate = {
+        id: newOrderId,
+        buyerName: orderData.buyerName,
+        paymentMethod: orderData.paymentMethod || PaymentMethod.DINHEIRO,
+        contactNumber: orderData.contactNumber,
+        addressOrCongregation: orderData.addressOrCongregation,
+        observations: orderData.observations,
+        numTickets: orderData.numTickets,
+        generatedNumbers,
+        sellerName: authStore.currentUser.displayName,
+        sellerId: authStore.currentUser.id,
+        originalSellerId: authStore.currentUser.id,
+        sellerUsername: username,
+        createdAt: new Date(),
+        
+        // Campos para modo offline
+        offlineCreatedAt: timestamp
+      };
+      
+      // Se estiver online, criar diretamente no Firebase
+      if (isOnline.value) {
+        await orderService.createOrder(
+          orderData,
+          generatedNumbers,
+          authStore.currentUser.id,
+          authStore.currentUser.displayName,
+          username
+        );
+        
+        // Atualizar a store após criar o pedido
+        await fetchUserOrders();
+      } else {
+        // Modo offline: salvar localmente
+        console.log('[OrderStore] Modo offline ativo. Salvando pedido localmente.');
+        await saveOrderOffline(orderToCreate as Order);
+        
+        // Adicionar ao estado local para exibição imediata
+        const ordersWithNew = [orderToCreate as Order, ...orders.value];
+        orders.value = ordersWithNew;
+        
+        // Atualizar contagem de pedidos não sincronizados
+        unsyncedOrdersCount.value += 1;
+      }
       
       return newOrderId;
     } catch (err: any) {
-      console.error('Erro ao criar pedido:', err);
+      console.error('[OrderStore] Erro ao criar pedido:', err);
       error.value = err.message || 'Erro ao criar pedido. Tente novamente.';
       throw err;
     } finally {
       loading.value = false;
     }
   };
+
+  // Iniciar sincronização manual
+  const syncOrders = async () => {
+    if (!isOnline.value) {
+      error.value = 'Você está offline. A sincronização será realizada automaticamente quando a conexão for restaurada.';
+      return false;
+    }
+    
+    syncInProgress.value = true;
+    error.value = null;
+    
+    try {
+      const result = await syncOfflineOrders();
+      lastSyncResult.value = result;
+      
+      // Recarregar os pedidos após sincronização
+      await fetchUserOrders();
+      
+      return result.success;
+    } catch (err: any) {
+      console.error('[OrderStore] Erro ao sincronizar pedidos:', err);
+      error.value = err.message || 'Não foi possível sincronizar os pedidos.';
+      return false;
+    } finally {
+      syncInProgress.value = false;
+    }
+  };
+
+  // Inicializar verificação de pedidos offline
+  checkUnsyncedOrders();
 
   return {
     orders,
@@ -175,6 +288,18 @@ export const useOrderStore = defineStore('order', () => {
     error,
     fetchUserOrders,
     fetchAllOrders,
-    createOrder
+    createOrder,
+    unsyncedOrdersCount,
+    connectionStatus,
+    syncInProgress,
+    lastSyncResult,
+    syncOrders,
+    checkUnsyncedOrders
   };
 });
+function generateDocumentId(prefix: string, username: string): string {
+  const timestamp = Date.now();
+  const randomStr = Math.random().toString(36).substring(2, 8);
+  return `${prefix}_${username}_${timestamp}_${randomStr}`;
+}
+

@@ -10,6 +10,7 @@ import Button from '../ui/Button.vue';
 import ConfirmationModal from '../modals/ConfirmationModal.vue';
 import { useOrderStore } from '../../stores/orderStore';
 import OrderFormFields from './OrderFormFields.vue';
+import { useConnectionStatus } from '../../services/connectivity';
 
 // Form data
 const formData = ref<OrderFormData>({
@@ -37,6 +38,7 @@ const {
 } = useRaffleNumbers();
 const authStore = useAuthStore();
 const orderStore = useOrderStore();
+const { isOnline } = useConnectionStatus();
 
 // Referência ao pedido criado para o modal de confirmação
 const createdOrder = ref<any>(null);
@@ -129,6 +131,11 @@ const submitForm = async () => {
       createdAt: new Date()
     };
     
+    // Adicionar alerta se estiver offline
+    if (!isOnline.value) {
+      errors.value.submit = "Pedido salvo localmente. Será sincronizado automaticamente quando a conexão for restaurada.";
+    }
+    
     // 4. Mostrar confirmação e resetar formulário
     orderId.value = newOrderId;
     showConfirmation.value = true;
@@ -161,6 +168,19 @@ const closeConfirmation = () => {
 </script>
 
 <template>
+  <!-- Alerta de modo offline -->
+  <div v-if="!isOnline" class="mb-4 bg-yellow-50 border border-yellow-200 p-3 rounded-lg">
+    <div class="flex items-center">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-yellow-600 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+      <span class="text-yellow-700 font-medium">Modo Offline Ativo</span>
+    </div>
+    <p class="text-sm text-yellow-600 mt-1">
+      Seus pedidos serão salvos localmente e sincronizados automaticamente quando a conexão for restaurada.
+    </p>
+  </div>
+
   <form @submit.prevent="submitForm" class="form-container">
     <!-- Form Title -->
     <h2 class="form-title">Novo Pedido</h2>

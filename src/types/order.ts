@@ -27,6 +27,12 @@ export interface Order {
   sellerUsername: string; 
   createdAt: Date;
   numTickets?: number;
+  
+  // Campos adicionados para suporte offline
+  syncStatus?: 'pending' | 'synced' | 'conflict';
+  offlineCreatedAt?: number;
+  originalNumbers?: string[]; // Números originais em caso de conflito
+  conflictResolved?: boolean;
 }
 
 export interface OrderFormData {
@@ -74,3 +80,6 @@ export const DEFAULT_LOTTERY_SETTINGS: LotterySettings = {
   ticketNumberPrefix: TICKET_NUMBER_PREFIX,
   formatWithLeadingZeros: FORMAT_WITH_LEADING_ZEROS
 };
+
+// Novo tipo para status de conexão
+export type ConnectionStatus = 'online' | 'offline' | 'reconnecting';

@@ -10,6 +10,7 @@ import SalesAccordion from '../../components/profile/SalesAccordion.vue';
 import DashboardPlaceholder from '../../components/profile/DashboardPlaceholder.vue';
 import RankingPlaceholder from '../../components/profile/RankingPlaceholder.vue';
 import Alert from '../../components/ui/Alert.vue';
+import OfflineSyncStatus from '../../components/offline/OfflineSyncStatus.vue';
 
 const authStore = useAuthStore();
 const orderStore = useOrderStore();
@@ -276,6 +277,11 @@ const getDefaultAvatar = (name: string) => {
           <RankingPlaceholder />
         </div>
       </div>
+    </div>
+    
+    <!-- Adicionar componente OfflineSyncStatus em local apropriado -->
+    <div class="mb-6">
+      <OfflineSyncStatus />
     </div>
   </div>
 </template>
