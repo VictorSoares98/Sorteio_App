@@ -24,7 +24,8 @@ const {
   updateAffiliateRole,
   setTemporaryError,
   setTemporarySuccess,
-  clearAllTimeouts
+  clearAllTimeouts,
+  affiliateSalesMetrics
 } = useAffiliateCode();
 
 // Estados
@@ -54,6 +55,9 @@ const confirmAction = ref<{type: 'remove' | 'role'; id: string; role?: UserRole}
 
 // Adicionar uma propriedade reativa para armazenar as posições calculadas
 const menuPositions = ref<Record<string, any>>({});
+
+// Novo estado para controlar quais métricas estão expandidas
+const expandedMetrics = ref<Set<string>>(new Set());
 
 // Termos mais intuitivos para os papéis (hierarquias)
 const roleLabels = {
@@ -304,7 +308,7 @@ const confirmAffiliation = async () => {
         animateSuccess.value = false;
       }, 2000);
     } else {
-      console.warn('[AffiliateLink] Afiliação falhou:', response?.message);
+      console.warn('[AffiliateLink] Afiliação falhou:', 'message' in response ? response.message : 'Erro desconhecido');
     }
   } catch (err) {
     console.error('[AffiliateLink] Erro ao processar afiliação:', err);
@@ -426,89 +430,172 @@ const reloadAffiliates = async () => {
   }
 };
 
-// Toggle do menu dropdown
-const toggleDropdown = (userId: string) => {
+// Função para alternar o menu dropdown - simplificada para maior confiabilidade
+const toggleDropdown = (userId: string, event?: MouseEvent) => {
+  event?.stopPropagation(); // Prevenir propagação do evento para evitar fechamento imediato
+  
+  // Se estamos fechando este menu, apenas limpe o estado
   if (activeDropdownId.value === userId) {
     activeDropdownId.value = null;
+    return;
+  }
+  
+  // Fechamos todos os outros menus
+  activeDropdownId.value = userId;
+  showRoleMenu.value = null; // Fechar submenu de papéis
+  
+  // Calcular posição do menu dropdown com base no evento
+  if (event && event.currentTarget) {
+    const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+    calculateAndStoreDropdownPosition(userId, rect);
   } else {
-    activeDropdownId.value = userId;
-    showRoleMenu.value = null; // Fechar submenu de papéis
+    // Buscar o elemento pelo ID como fallback
+    const element = document.querySelector(`[data-dropdown-trigger="${userId}"]`);
+    if (element) {
+      const rect = element.getBoundingClientRect();
+      calculateAndStoreDropdownPosition(userId, rect);
+    }
   }
 };
 
-// Toggle do submenu de papéis
+// Função para alternar menu de papel/função com melhor tratamento de eventos
 const toggleRoleMenu = (userId: string, event: Event) => {
-  event.stopPropagation(); // Evitar que feche o dropdown principal
+  event.stopPropagation();
+  event.preventDefault();
   
+  // Se já estamos mostrando este menu, fechamos
   if (showRoleMenu.value === userId) {
     showRoleMenu.value = null;
-  } else {
-    showRoleMenu.value = userId;
-    
-    // Calcular e armazenar a posição do menu imediatamente
-    menuPositions.value[userId] = calculatePositionForUser(userId);
-  }
-};
-
-// Função separada para calcular a posição
-const calculatePositionForUser = (_userId: string): any => {
-  // Em dispositivos móveis, posicionar abaixo em vez de ao lado
-  if (window.innerWidth < 640) {
-    return {
-      right: 'auto',
-      left: '0',
-      top: '2rem'
-    };
+    return;
   }
   
-  // Sempre abrir para a esquerda, nunca para a direita
-  return {
-    left: 'auto',
-    right: '100%'
-  };
+  // Mostramos o menu de papéis para este usuário
+  showRoleMenu.value = userId;
+  
+  // Para garantir que o menu de papéis seja posicionado corretamente
+  setTimeout(() => {
+    const button = event.currentTarget as HTMLElement;
+    if (button) {
+      const rect = button.getBoundingClientRect();
+      // Posicionamento mais simples e confiável
+      menuPositions.value[userId] = {
+        top: `${rect.bottom + window.scrollY + 5}px`,
+        left: `${rect.left + window.scrollX}px`,
+      };
+    }
+  }, 10);
 };
 
-// Calcula a posição absoluta do submenu na tela
-const calculateSubmenuPosition = (userId: string): any => {
-  const triggerElement = document.querySelector(`[data-user-id="${userId}"]`);
-  if (!triggerElement) return { top: '0px', left: '0px' };
-  
-  const rect = triggerElement.getBoundingClientRect();
+// Nova função para calcular e armazenar a posição do dropdown
+const calculateAndStoreDropdownPosition = (userId: string, rect: DOMRect) => {
+  const windowWidth = window.innerWidth;
   const windowHeight = window.innerHeight;
   
-  // Altura estimada do submenu
-  const submenuHeight = Object.keys(roleLabels).length * 40 + 16;
-  const submenuWidth = 224; // Largura aproximada do submenu em pixels
+  // Dimensões aproximadas do menu
+  const menuWidth = 224; // largura em pixels
+  const menuHeight = 100; // altura aproximada
   
-  // Posicionamento horizontal - sempre à esquerda
-  let left = rect.left - submenuWidth - 8; // 8px de espaço
+  // Posição padrão (à direita do botão)
+  let position = {
+    top: `${rect.top}px`,
+    left: `${rect.right + 5}px`,
+    right: 'auto'
+  };
   
-  // Se não houver espaço à esquerda, posicionar abaixo do item
-  if (left < 0) {
-    left = Math.max(8, rect.left);
-    return {
-      top: `${rect.bottom + 8}px`,
-      left: `${left}px`,
-      right: 'auto'
+  // Verificar se vai caber à direita ou se precisa ir para a esquerda
+  if (rect.right + menuWidth > windowWidth) {
+    position = {
+      top: `${rect.top}px`,
+      right: `${windowWidth - rect.left + 5}px`,
+      left: 'auto'
     };
   }
   
-  // Posicionamento vertical
-  let top = rect.top;
-  if (top + submenuHeight > windowHeight) {
-    // Se o submenu for ultrapassar a parte inferior da tela, ajusta para cima
-    top = windowHeight - submenuHeight - 16;
+  // Verificar se vai caber para baixo ou se precisa ir para cima
+  if (rect.bottom + menuHeight > windowHeight) {
+    position.top = `${rect.top - menuHeight + rect.height}px`;
   }
   
-  return {
-    top: `${Math.max(8, top)}px`,
-    left: `${Math.max(8, left)}px`,
-    right: 'auto'
-  };
+  // Armazenar a posição calculada
+  menuPositions.value[userId] = position;
+};
+
+// Função melhorada para calcular a posição do submenu
+const calculateSubmenuPosition = (userId: string) => {
+  // Se não tivermos a posição do menu pai, retornamos um valor padrão
+  if (!menuPositions.value[userId]) {
+    return { top: '0px', left: '0px' };
+  }
+  
+  const menuPosition = menuPositions.value[userId];
+  const windowWidth = window.innerWidth;
+  const windowHeight = window.innerHeight;
+  
+  // Converter posições de string para número
+  const menuTop = parseInt(menuPosition.top) || 0;
+  const menuLeft = parseInt(menuPosition.left) || 0;
+  const menuRight = menuPosition.right !== 'auto' ? parseInt(menuPosition.right) || 0 : 0;
+  
+  // Dimensões aproximadas do submenu
+  const submenuWidth = 224; // largura em pixels
+  const submenuHeight = Object.keys(roleLabels).length * 40 + 16; // altura com base no número de opções
+  
+  // Determinar se o menu está à direita ou à esquerda
+  const isMenuOnLeft = menuPosition.right !== 'auto';
+  
+  let position = {};
+  
+  if (isMenuOnLeft) {
+    // Menu está à esquerda do gatilho, submenu vai para a esquerda
+    position = {
+      top: `${menuTop}px`,
+      right: `${menuRight + 224}px`, // 224px é aproximadamente a largura do menu
+      left: 'auto'
+    };
+  } else {
+    // Menu está à direita do gatilho, submenu vai para a direita
+    position = {
+      top: `${menuTop}px`,
+      left: `${menuLeft + 224}px`,
+      right: 'auto'
+    };
+    
+    // Se não couber à direita, coloca à esquerda do menu
+    if (menuLeft + 224 + submenuWidth > windowWidth) {
+      position = {
+        top: `${menuTop}px`,
+        right: `${windowWidth - menuLeft + 5}px`,
+        left: 'auto'
+      };
+    }
+  }
+  
+  // Verificar se vai caber para baixo ou se precisa ir para cima
+  if (menuTop + submenuHeight > windowHeight) {
+    position = {
+      ...position,
+      top: `${windowHeight - submenuHeight - 10}px` // 10px de margem do fundo
+    };
+  }
+  
+  return position;
 };
 
 // Fechar todos os menus quando clicar fora
-const closeAllMenus = () => {
+const closeAllMenus = (event?: MouseEvent) => {
+  // Não fechar se o clique foi dentro de um menu ou submenu
+  if (event) {
+    const isClickInsideDropdown = event.target && 
+      (event.target as Element).closest('[data-user-id]') !== null;
+    
+    const isClickInsideRoleMenu = event.target && 
+      (event.target as Element).closest('[data-role-menu]') !== null;
+    
+    if (isClickInsideDropdown || isClickInsideRoleMenu) {
+      return;
+    }
+  }
+  
   activeDropdownId.value = null;
   showRoleMenu.value = null;
 };
@@ -580,7 +667,9 @@ const handleRemoveAffiliate = async (userId: string) => {
     if (result.success) {
       showMessage('success', 'Afiliado removido com sucesso!');
     } else {
-      showMessage('error', result.message || 'Não foi possível remover o afiliado.');
+      // Use 'in' operator to check if message property exists
+      const errorMsg = 'message' in result ? result.message : 'Não foi possível remover o afiliado.';
+      showMessage('error', errorMsg);
     }
   } catch (err: any) {
     showMessage('error', err.message || 'Erro ao processar a solicitação.');
@@ -595,7 +684,9 @@ const handleChangeRole = async (userId: string, newRole: UserRole) => {
     if (result.success) {
       showMessage('success', `Papel alterado para ${roleLabels[newRole]} com sucesso!`);
     } else {
-      showMessage('error', result.message || 'Não foi possível alterar o papel do afiliado.');
+      // Use 'in' operator to check if message property exists
+      const errorMsg = 'message' in result ? result.message : 'Não foi possível alterar o papel do afiliado.';
+      showMessage('error', errorMsg);
     }
   } catch (err: any) {
     showMessage('error', err.message || 'Erro ao alterar o papel do afiliado.');
@@ -611,6 +702,30 @@ const dismissExpiryAlert = () => {
     // Manteremos o registro na memória para não mostrar novamente
     console.log('[AffiliateLink] Alerta de expiração descartado para código:', currentUser.value.affiliateCode);
   }
+};
+
+// Calcular avatar padrão baseado no nome do usuário
+const getDefaultAvatar = (name: string) => {
+  // Usando Dicebear como serviço de avatar padrão
+  const seed = encodeURIComponent(name || 'user');
+  return `https://api.dicebear.com/7.x/initials/svg?seed=${seed}&backgroundColor=FF8C00`;
+};
+
+// Função para alternar a exibição das métricas de um afiliado
+const toggleMetrics = (userId: string, event: Event) => {
+  // Prevenir propagação para não acionar outros handlers
+  event.stopPropagation();
+  
+  if (expandedMetrics.value.has(userId)) {
+    expandedMetrics.value.delete(userId);
+  } else {
+    expandedMetrics.value.add(userId);
+  }
+};
+
+// Verificar se as métricas de um afiliado estão expandidas
+const isMetricsExpanded = (userId: string) => {
+  return expandedMetrics.value.has(userId);
 };
 
 </script>
@@ -1030,60 +1145,172 @@ const dismissExpiryAlert = () => {
         
         <!-- Lista de afiliados - exibida apenas se houver afiliados -->
         <ul v-if="affiliatedUsers.length > 0" class="divide-y divide-gray-200">
-          <li v-for="user in affiliatedUsers" :key="user.id" class="py-2 relative">
-            <div class="flex justify-between items-center">
-              <div>
-                <p class="font-medium">{{ user.displayName }}</p>
-                <p class="text-xs text-gray-500">{{ user.email }}</p>
-                <div class="mt-1">
+          <li v-for="user in affiliatedUsers" :key="user.id" class="py-3 relative">
+            <!-- Cartão de afiliado redesenhado com foto de perfil e métricas -->
+            <div class="flex items-start space-x-3">
+              <!-- Avatar do afiliado -->
+              <div class="flex-shrink-0">
+                <img 
+                  :src="user.photoURL || getDefaultAvatar(user.displayName)" 
+                  :alt="user.displayName"
+                  class="w-12 h-12 rounded-full object-cover border border-gray-200"
+                />
+              </div>
+              
+              <div class="flex-grow min-w-0">
+                <p class="font-medium truncate">{{ user.displayName }}</p>
+                <p class="text-xs text-gray-500 truncate">{{ user.email }}</p>
+                <div class="mt-1 flex flex-wrap gap-1">
                   <span class="px-2 py-0.5 rounded-full text-xs bg-blue-100 text-blue-800">
                     {{ roleLabels[user.role || UserRole.USER] }}
+                  </span>
+                  
+                  <!-- Indicador de métricas se disponível -->
+                  <span v-if="affiliateSalesMetrics[user.id]" class="px-2 py-0.5 rounded-full text-xs bg-green-100 text-green-800">
+                    {{ affiliateSalesMetrics[user.id].totalSales }} vendas
                   </span>
                 </div>
               </div>
               
+              <!-- Botão para exibir/esconder métricas -->
+              <button 
+                v-if="affiliateSalesMetrics[user.id]"
+                @click="toggleMetrics(user.id, $event)" 
+                class="text-gray-500 hover:text-primary p-2 rounded-full hover:bg-gray-100 transition-colors flex-shrink-0 mr-2"
+                :class="{'bg-primary bg-opacity-10 text-primary': isMetricsExpanded(user.id)}"
+                :title="isMetricsExpanded(user.id) ? 'Esconder métricas' : 'Ver métricas'"
+              >
+                <svg v-if="!isMetricsExpanded(user.id)" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+                <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+              
               <!-- Menu de ações -->
               <button 
-                @click.stop="toggleDropdown(user.id)" 
-                class="text-gray-500 hover:text-primary p-2 rounded-full hover:bg-gray-100 transition-colors"
+                @click="toggleDropdown(user.id, $event)" 
+                :data-dropdown-trigger="user.id"
+                class="text-gray-500 hover:text-primary p-2 rounded-full hover:bg-gray-100 transition-colors flex-shrink-0"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
                 </svg>
               </button>
-              
-              <!-- Dropdown do menu de ações -->
+            </div>
+            
+            <!-- Métricas de desempenho expansíveis -->
+            <transition
+              name="metrics-expand"
+              @enter="(el) => (el as HTMLElement).style.height = (el as HTMLElement).scrollHeight + 'px'"
+              @leave="(el) => (el as HTMLElement).style.height = '0px'"
+            >
               <div 
-                v-if="activeDropdownId === user.id" 
-                class="absolute right-0 mt-1 w-56 bg-white rounded-md shadow-lg z-10 border border-gray-200"
-                :data-user-id="user.id"
-                @click.stop
+                v-if="affiliateSalesMetrics[user.id] && isMetricsExpanded(user.id)" 
+                class="mt-3 bg-gray-50 rounded-lg border border-gray-100 overflow-hidden metrics-container"
               >
-                <div class="py-1">
-                  <!-- Opção: Alterar Hierarquia - só mostrar se o usuário puder ter a hierarquia alterada -->
-                  <div class="relative" v-if="canChangeUserRole(user)">
-                    <button 
-                      @click="toggleRoleMenu(user.id, $event)"
-                      class="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 hover:text-primary flex justify-between items-center"
-                    >
-                      <span>Alterar Hierarquia</span>
-                      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                <!-- Cabeçalho de métricas com resumo -->
+                <div class="flex items-center justify-between px-3 py-2 bg-primary bg-opacity-5 border-b border-gray-200">
+                  <h4 class="text-sm font-medium text-primary">Métricas de Desempenho</h4>
+                  <div class="flex items-center">
+                    <span class="text-xs font-medium px-2 py-0.5 rounded-full"
+                          :class="affiliateSalesMetrics[user.id].growthRate >= 0 
+                                ? 'bg-green-100 text-green-800' 
+                                : 'bg-red-100 text-red-800'">
+                      {{ affiliateSalesMetrics[user.id].growthRate >= 0 ? '+' : '' }}{{ affiliateSalesMetrics[user.id].growthRate }}%
+                    </span>
+                  </div>
+                </div>
+                
+                <!-- Cards de métricas -->
+                <div class="p-3 grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  <!-- Card: Total de Vendas -->
+                  <div class="bg-white rounded-lg p-2 shadow-sm border border-gray-100 flex flex-col justify-between">
+                    <p class="text-xs text-gray-500">Total de Vendas</p>
+                    <div class="flex items-end justify-between mt-1">
+                      <p class="text-lg font-bold text-primary">{{ affiliateSalesMetrics[user.id].totalSales }}</p>
+                      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-primary opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
                       </svg>
-                    </button>
+                    </div>
                   </div>
                   
-                  <!-- Separador - só mostrar se tiver a opção de alterar hierarquia -->
-                  <hr v-if="canChangeUserRole(user)" class="my-1 border-gray-200">
+                  <!-- Card: Valor Total -->
+                  <div class="bg-white rounded-lg p-2 shadow-sm border border-gray-100 flex flex-col justify-between">
+                    <p class="text-xs text-gray-500">Valor Total</p>
+                    <div class="flex items-end justify-between mt-1">
+                      <p class="text-lg font-bold text-primary">R$ {{ affiliateSalesMetrics[user.id].totalValue }}</p>
+                      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-primary opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </div>
+                  </div>
                   
-                  <!-- Opção: Remover afiliado -->
+                  <!-- Card: Vendas do Mês -->
+                  <div class="bg-white rounded-lg p-2 shadow-sm border border-gray-100 flex flex-col justify-between">
+                    <p class="text-xs text-gray-500">Este Mês</p>
+                    <div class="flex items-end justify-between mt-1">
+                      <p class="text-lg font-bold text-primary">{{ affiliateSalesMetrics[user.id].salesThisMonth }}</p>
+                      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-primary opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+                
+                <!-- Detalhes adicionais -->
+                <div class="px-3 py-2 border-t border-gray-200 flex justify-between items-center text-xs text-gray-500">
+                  <div v-if="affiliateSalesMetrics[user.id].lastSaleDate" class="flex items-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    Última venda: {{ new Date(affiliateSalesMetrics[user.id].lastSaleDate as string | number | Date).toLocaleDateString('pt-BR') }}
+                  </div>
+                  <div class="flex items-center">
+                    <span v-if="affiliateSalesMetrics[user.id].salesLastMonth > 0" class="flex items-center">
+                      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                      </svg>
+                      Mês anterior: {{ affiliateSalesMetrics[user.id].salesLastMonth }}
+                    </span>
+                    <span v-else>Sem vendas no mês anterior</span>
+                  </div>
+                </div>
+              </div>
+            </transition>
+            
+            <!-- Dropdown do menu de ações (simplificado) -->
+            <div 
+              v-if="activeDropdownId === user.id" 
+              class="absolute right-0 top-0 mt-8 w-56 bg-white rounded-md shadow-lg z-30 border border-gray-200"
+              :data-user-id="user.id"
+              @click.stop
+            >
+              <div class="py-1">
+                <!-- Opção: Alterar Hierarquia - só mostrar se o usuário puder ter a hierarquia alterada -->
+                <div class="relative" v-if="canChangeUserRole(user)">
                   <button 
-                    @click="confirmRemoveAffiliate(user.id, $event)"
-                    class="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50"
+                    @click="toggleRoleMenu(user.id, $event)"
+                    class="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 hover:text-primary flex justify-between items-center"
                   >
-                    Remover Afiliado
+                    <span>Alterar Hierarquia</span>
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                    </svg>
                   </button>
                 </div>
+                
+                <!-- Separador - só mostrar se tiver a opção de alterar hierarquia -->
+                <hr v-if="canChangeUserRole(user)" class="my-1 border-gray-200">
+                
+                <!-- Opção: Remover afiliado -->
+                <button 
+                  @click="confirmRemoveAffiliate(user.id, $event)"
+                  class="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50"
+                >
+                  Remover Afiliado
+                </button>
               </div>
             </div>
           </li>
@@ -1209,12 +1436,14 @@ const dismissExpiryAlert = () => {
     </div>
   </div>
 
-  <!-- Submenu de papéis, renderizado fora do fluxo normal -->
-  <div 
-    v-if="showRoleMenu" 
-    class="fixed z-50 bg-white rounded-md shadow-lg border border-gray-200 w-56"
-    :style="calculateSubmenuPosition(showRoleMenu)"
-  >
+  <!-- Submenu de papéis, renderizado com teleport -->
+  <teleport to="body">
+    <div 
+      v-if="showRoleMenu" 
+      class="fixed z-50 bg-white rounded-md shadow-lg border border-gray-200 w-56"
+      :style="calculateSubmenuPosition(showRoleMenu)"
+      data-role-menu="true"
+    >
       <div class="py-1">
         <button 
           v-for="(label, role) in roleLabels" 
@@ -1236,6 +1465,7 @@ const dismissExpiryAlert = () => {
         </button>
       </div>
     </div>
+  </teleport>
 
 </template>
 <style scoped>
@@ -1302,5 +1532,39 @@ const dismissExpiryAlert = () => {
 
 .shake-animation {
   animation: shake 0.5s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+
+/* Transição para métricas expansíveis */
+.metrics-expand-enter-active,
+.metrics-expand-leave-active {
+  transition: height 0.3s ease;
+}
+
+.metrics-expand-enter-from,
+.metrics-expand-leave-to {
+  height: 0;
+}
+
+.metrics-container {
+  overflow: hidden;
+  transition: height 0.3s ease-in-out, opacity 0.3s ease-in-out, transform 0.3s ease-in-out;
+}
+
+.metrics-expand-enter-from,
+.metrics-expand-leave-to {
+  opacity: 0;
+  transform: translateY(-10px);
+}
+
+.metrics-expand-enter-active,
+.metrics-expand-leave-active {
+  transition: all 0.3s ease-out;
+  overflow: hidden;
+}
+
+.metrics-expand-enter-to,
+.metrics-expand-leave-from {
+  opacity: 1;
+  transform: translateY(0);
 }
 </style>

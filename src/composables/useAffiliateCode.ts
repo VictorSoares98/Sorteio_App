@@ -1,437 +1,402 @@
 import { ref, computed } from 'vue';
 import { useAuthStore } from '../stores/authStore';
-import type { User, AffiliationResponse } from '../types/user';
-import { timestampToDate } from '../utils/firebaseUtils';
-import { UserRole } from '../types/user';
+import { useOrderStore } from '../stores/orderStore';
+import { 
+  generateTemporaryAffiliateCode as generateTempCode,
+  affiliateToUser as affiliate,
+  getAffiliatedUsers as fetchUsers,
+  removeAffiliate as removeAff,
+  updateAffiliateRole as updateRole,
+  findUserByAffiliateCode
+} from '../services/profile';
+import { UserRole, type User } from '../types/user';
+
+// Interface para métricas de afiliados
+export interface AffiliateSalesMetrics {
+  totalSales: number;
+  totalValue: number;
+  lastSaleDate: Date | null;
+  salesThisMonth: number;
+  salesLastMonth: number;
+  growthRate: number; // Percentual de crescimento
+}
 
 export function useAffiliateCode() {
   const authStore = useAuthStore();
+  const orderStore = useOrderStore();
+  const currentUser = computed(() => authStore.currentUser);
+  
+  // Estado para códigos de afiliação
   const loading = ref(false);
   const error = ref<string | null>(null);
   const success = ref<string | null>(null);
-  const affiliatedUsers = ref<User[]>([]);
-  const affiliatedToUser = ref<User | null>(null);
-  
-  // Estados para código de afiliação
   const isGeneratingCode = ref(false);
-  const isCodeValid = ref(false);
+  const affiliatedUsers = ref<User[]>([]);
+  const affiliateSalesMetrics = ref<Record<string, AffiliateSalesMetrics>>({});
   
-  const currentUser = computed<User | null>(() => authStore.currentUser);
+  // Gerenciamento de estado de timeouts para limpeza automática de mensagens
+  const timeoutIds = ref<number[]>([]);
   
-  // Computar validade do código
-  const codeExpiry = computed(() => {
-    if (!currentUser.value?.affiliateCodeExpiry) return null;
-    
-    // Usando a função utilitária para converter timestamp
-    return timestampToDate(currentUser.value.affiliateCodeExpiry);
-  });
-  
-  // Computar tempo restante de forma mais legível
-  const timeRemaining = computed(() => {
-    if (!codeExpiry.value) return '';
-    
-    const now = new Date();
-    const diffMs = codeExpiry.value.getTime() - now.getTime();
-    
-    // Se expirado
-    if (diffMs <= 0) return 'Expirado';
-    
-    const diffMinutes = Math.floor(diffMs / 60000);
-    const diffSeconds = Math.floor((diffMs % 60000) / 1000);
-    
-    // Formatar como MM:SS se menos de 10 minutos
-    if (diffMinutes < 10) {
-      return `${diffMinutes}:${diffSeconds.toString().padStart(2, '0')} restantes`;
-    }
-    // Caso contrário, mostrar apenas minutos
-    return `${diffMinutes} min restantes`;
-  });
-  
-  // Variável para controlar os timeouts de mensagens
-  const messageTimeouts = ref<Record<string, number>>({});
-
-  // Verificar código atual com melhor tratamento de expiração
-  const checkCurrentCode = () => {
-    if (!currentUser.value?.affiliateCode) {
-      isCodeValid.value = false;
-      return;
-    }
-    
-    if (codeExpiry.value) {
-      const now = new Date();
-      const isExpired = codeExpiry.value < now;
-      
-      isCodeValid.value = !isExpired;
-    } else {
-      // Se não tem expiração, o código é permanente
-      isCodeValid.value = true;
-    }
+  // Limpar todos os timeouts ao desmontar o componente
+  const clearAllTimeouts = () => {
+    timeoutIds.value.forEach(id => window.clearTimeout(id));
+    timeoutIds.value = [];
   };
-
-  // Funções centralizadas para gerenciar mensagens temporárias
-  const setTemporaryError = (message: string, duration: number = 8000) => {
+  
+  // Definir mensagem de erro temporária
+  const setTemporaryError = (message: string, duration = 5000) => {
     error.value = message;
     
-    // Limpar timeout anterior se existir
-    if (messageTimeouts.value['error']) {
-      clearTimeout(messageTimeouts.value['error']);
-    }
-    
-    // Definir novo timeout
-    messageTimeouts.value['error'] = window.setTimeout(() => {
-      if (error.value === message) {
-        error.value = null;
-      }
-      messageTimeouts.value['error'] = 0;
+    const timeoutId = window.setTimeout(() => {
+      error.value = null;
     }, duration);
+    
+    timeoutIds.value.push(timeoutId);
   };
-
-  const setTemporarySuccess = (message: string, duration: number = 8000) => {
+  
+  // Definir mensagem de sucesso temporária
+  const setTemporarySuccess = (message: string, duration = 5000) => {
     success.value = message;
     
-    // Limpar timeout anterior se existir
-    if (messageTimeouts.value['success']) {
-      clearTimeout(messageTimeouts.value['success']);
+    const timeoutId = window.setTimeout(() => {
+      success.value = null;
+    }, duration);
+    
+    timeoutIds.value.push(timeoutId);
+  };
+  
+  // Verificar se um código é válido com base em sua data de expiração
+  const isCodeValid = computed(() => {
+    if (!currentUser.value?.affiliateCode) return false;
+    if (!currentUser.value.affiliateCodeExpiry) return true;
+    
+    // Converter Timestamp para Date
+    const expiryTimestamp = currentUser.value.affiliateCodeExpiry;
+    let expiryDate: Date;
+    
+    if (expiryTimestamp && typeof expiryTimestamp === 'object' && 'toDate' in expiryTimestamp) {
+      expiryDate = expiryTimestamp.toDate();
+    } else if (expiryTimestamp instanceof Date) {
+      expiryDate = expiryTimestamp;
+    } else {
+      // Falback: Se não conseguir converter, considerar expirado
+      return false;
     }
     
-    // Definir novo timeout
-    messageTimeouts.value['success'] = window.setTimeout(() => {
-      if (success.value === message) {
-        success.value = null;
-      }
-      messageTimeouts.value['success'] = 0;
-    }, duration);
-  };
-
-  // Verificar código de afiliado com validação aprimorada
-  const checkAffiliateCode = async (code: string): Promise<User | null> => {
-    if (!code) return null;
+    return expiryDate > new Date();
+  });
+  
+  // Calcular tempo restante para expiração do código
+  const timeRemaining = computed(() => {
+    if (!currentUser.value?.affiliateCode || !currentUser.value.affiliateCodeExpiry) {
+      return 'Código permanente';
+    }
     
-    loading.value = true;
-    error.value = null;
+    // Converter o timestamp para Date
+    const expiryTimestamp = currentUser.value.affiliateCodeExpiry;
+    let expiryDate: Date;
+    
+    if (expiryTimestamp && typeof expiryTimestamp === 'object' && 'toDate' in expiryTimestamp) {
+      expiryDate = expiryTimestamp.toDate();
+    } else if (expiryTimestamp instanceof Date) {
+      expiryDate = expiryTimestamp;
+    } else {
+      return 'Expiração desconhecida';
+    }
+    
+    const now = new Date();
+    if (expiryDate <= now) {
+      return 'Expirado';
+    }
+    
+    // Calcular a diferença
+    const diffMs = expiryDate.getTime() - now.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffSecs = Math.floor((diffMs % 60000) / 1000);
+    
+    if (diffMins <= 0) {
+      return `${diffSecs}s restantes`;
+    }
+    
+    return `${diffMins}m ${diffSecs}s restantes`;
+  });
+  
+  // Verificar o código atual
+  const checkCurrentCode = async () => {
+    if (!currentUser.value?.affiliateCode) return;
     
     try {
-      // Importação dinâmica
-      const { findUserByAffiliateCode } = await import('../services/profile');
+      // Verificar se o código ainda é válido usando o serviço de perfil
+      const userWithCode = await findUserByAffiliateCode(currentUser.value.affiliateCode);
       
-      // Primeiro, verificar se o código é válido em termos de formato
-      if (!/^[A-Za-z0-9]{6}$/.test(code)) {
-        setTemporaryError('Código de afiliado inválido. Deve ter 6 caracteres alfanuméricos.');
-        return null;
+      // Se o código não estiver associado a nenhum usuário ou não retornar o usuário atual, está inválido
+      if (!userWithCode || userWithCode.id !== currentUser.value.id) {
+        console.log('[useAffiliateCode] Código não encontrado ou associado a outro usuário');
+        return false;
       }
       
-      // Buscar usuário pelo código
-      const user = await findUserByAffiliateCode(code);
-      
-      // Se não encontrou usuário, código não existe
-      if (!user) {
-        setTemporaryError('Código de afiliado não encontrado ou inválido.');
-        return null;
-      }
-      
-      // Verificar se o código está expirado
-      if (user.affiliateCodeExpiry) {
-        const expiryDate = timestampToDate(user.affiliateCodeExpiry);
-        const now = new Date();
-        
-        if (expiryDate < now) {
-          setTemporaryError('Este código de afiliado expirou. Peça um novo código para o usuário.');
-          return null;
-        }
-      }
-      
-      return user;
-    } catch (err: any) {
+      return isCodeValid.value;
+    } catch (err) {
       console.error('[useAffiliateCode] Erro ao verificar código:', err);
-      setTemporaryError(err.message || 'Erro ao verificar código de afiliado.');
-      return null;
+      return false;
+    }
+  };
+  
+  // Buscar afiliados
+  const fetchAffiliatedUsers = async () => {
+    if (!currentUser.value) return;
+    
+    loading.value = true;
+    try {
+      // Redefinir o estado de erro
+      error.value = null;
+      
+      // Buscar afiliados usando o serviço
+      const users = await fetchUsers(currentUser.value.id);
+      affiliatedUsers.value = users;
+      
+      // Após buscar afiliados, buscar métricas para cada um
+      await fetchAffiliatesMetrics();
+      
+      return users;
+    } catch (err: any) {
+      console.error('[useAffiliateCode] Erro ao buscar afiliados:', err);
+      setTemporaryError('Não foi possível carregar os afiliados. Tente novamente mais tarde.');
+      return [];
     } finally {
       loading.value = false;
     }
   };
-
-  // Gerar código temporário de afiliado com retentativas e feedback temporário
+  
+  // Gerar código temporário
   const generateTemporaryAffiliateCode = async () => {
     if (!currentUser.value) {
-      setTemporaryError('Usuário não está autenticado.');
+      setTemporaryError('Você precisa estar autenticado para gerar um código.');
       return null;
     }
     
-    loading.value = true;
-    error.value = null;
-    success.value = null;
     isGeneratingCode.value = true;
     
     try {
-      console.log('[useAffiliateCode] Gerando código temporário');
+      // Redefinir estado de erro
+      error.value = null;
       
-      // Importação dinâmica
-      const { generateTemporaryAffiliateCode } = await import('../services/profile');
+      // Gerar código utilizando o serviço
+      const code = await generateTempCode(currentUser.value.id);
       
-      // Usar diretamente o serviço sem reimplementar a lógica
-      const code = await generateTemporaryAffiliateCode(currentUser.value.id);
+      // Recarregar dados do usuário para atualizar o código no estado
+      await authStore.fetchUserData(true);
       
-      if (!code) {
-        throw new Error('Não foi possível gerar o código temporário.');
-      }
-      
-      // Atualização com timeout para permitir propagação dos dados
-      setTimeout(async () => {
-        try {
-          await authStore.fetchUserData();
-          // Verificar validade do código após atualização
-          checkCurrentCode();
-          console.log('[useAffiliateCode] Dados atualizados após geração do código');
-        } catch (refreshError) {
-          console.error('[useAffiliateCode] Erro ao atualizar dados após gerar código:', refreshError);
-        }
-      }, 500);
-      
-      setTemporarySuccess('Código temporário gerado com sucesso! Este código expira em 30 minutos.');
+      // Mostrar mensagem de sucesso
+      setTemporarySuccess('Código de afiliação gerado com sucesso!');
       
       return code;
     } catch (err: any) {
-      console.error('[useAffiliateCode] Erro ao gerar código temporário:', err);
-      setTemporaryError(err.message || 'Erro ao gerar código temporário.');
+      console.error('[useAffiliateCode] Erro ao gerar código:', err);
+      setTemporaryError(err.message || 'Não foi possível gerar o código de afiliação.');
       return null;
     } finally {
-      loading.value = false;
       isGeneratingCode.value = false;
     }
   };
-
-  // Afiliar-se a outro usuário com validação melhorada e feedback temporário
-  const affiliateToUserMethod = async (targetIdentifier: string, isEmail: boolean = false): Promise<AffiliationResponse | null> => {
+  
+  // Afiliar-se a outro usuário
+  const affiliateToUser = async (targetIdentifier: string, isEmail: boolean = false) => {
     if (!currentUser.value) {
-      setTemporaryError('Usuário não está autenticado.');
-      return null;
+      setTemporaryError('Você precisa estar autenticado para se afiliar.');
+      return { success: false };
     }
     
-    // NOVAS REGRAS - Verificar restrições antes de prosseguir
-    if (currentUser.value.affiliatedTo) {
-      setTemporaryError('Você já está afiliado a outro usuário e não pode mudar sua afiliação.');
-      return {
-        success: false,
-        message: error.value || 'Erro desconhecido'
-      };
+    // Verificar auto-afiliação
+    if (isEmail && currentUser.value.email === targetIdentifier) {
+      setTemporaryError('Você não pode se afiliar a si mesmo.');
+      return { success: false };
     }
-    
-    if (currentUser.value.affiliates && currentUser.value.affiliates.length > 0) {
-      setTemporaryError('Como você já possui afiliados, não é possível se afiliar a outro usuário.');
-      return {
-        success: false,
-        message: error.value || 'Erro desconhecido'
-      };
-    }
-    
-    const normalizedIdentifier = isEmail ? targetIdentifier : targetIdentifier.toUpperCase();
-    
-    if (!isEmail && !/^[A-Za-z0-9]{6}$/.test(normalizedIdentifier)) {
-      setTemporaryError('Código de afiliado deve ter 6 caracteres alfanuméricos.');
-      return null;
-    }
-    
-    if (isEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedIdentifier)) {
-      setTemporaryError('Por favor, informe um email válido.');
-      return null;
-    }
-    
-    loading.value = true;
-    error.value = null;
-    success.value = null;
     
     try {
-      console.log('[useAffiliateCode] Iniciando processo de afiliação');
-      const { affiliateToUser } = await import('../services/profile');
+      // Redefinir estado de erro
+      error.value = null;
       
-      let response = await affiliateToUser(
-        currentUser.value.id,
-        normalizedIdentifier,
-        isEmail
-      );
-      
-      if (!response.success && 
-          (response.message.includes('transação') || 
-           response.message.includes('temporariamente'))) {
-        
-        console.log('[useAffiliateCode] Primeira tentativa falhou, tentando novamente...');
-        
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        
-        response = await affiliateToUser(
-          currentUser.value.id,
-          targetIdentifier,
-          isEmail
-        );
-      }
-      
-      if (response.success) {
-        console.log('[useAffiliateCode] Afiliação bem-sucedida');
-        sessionStorage.setItem('newAffiliation', 'true');
-        
-        setTimeout(async () => {
-          await authStore.fetchUserData();
-          await fetchAffiliatedUsers();
-        }, 500);
-        
-        setTemporarySuccess(response.message);
-      } else {
-        setTemporaryError(response.message);
-      }
-      
-      return response;
-    } catch (err: any) {
-      console.error('[useAffiliateCode] Erro ao afiliar-se:', err);
-      setTemporaryError(err.message || 'Erro ao processar a afiliação.');
-      return null;
-    } finally {
-      loading.value = false;
-    }
-  };
-
-  // Função para buscar usuários afiliados com paginação
-  const fetchAffiliatedUsers = async () => {
-    if (!currentUser.value) {
-      setTemporaryError('Usuário não está autenticado.');
-      return;
-    }
-    
-    loading.value = true;
-    error.value = null;
-    
-    try {
-      console.log('[useAffiliateCode] Buscando afiliados');
-      const { getAffiliatedUsers } = await import('../services/profile');
-      
-      affiliatedUsers.value = await getAffiliatedUsers(currentUser.value.id);
-      
-      if (authStore.currentUser && affiliatedUsers.value.length > 0) {
-        setTimeout(() => {
-          checkCurrentCode();
-        }, 500);
-      }
-    } catch (err: any) {
-      console.error('[useAffiliateCode] Erro ao buscar afiliados:', err);
-      setTemporaryError(err.message || 'Erro ao buscar usuários afiliados.');
-    } finally {
-      loading.value = false;
-    }
-  };
-
-  // Modificar o removeAffiliate para usar as funções de mensagens temporárias
-  const removeAffiliate = async (affiliateId: string): Promise<AffiliationResponse> => {
-    if (!currentUser.value) {
-      setTemporaryError('Usuário não está autenticado.');
-      return {
-        success: false,
-        message: 'Usuário não está autenticado.'
-      };
-    }
-    
-    loading.value = true;
-    error.value = null;
-    
-    try {
-      const { removeAffiliate: removeAffiliateService } = await import('../services/profile');
-      
-      const result = await removeAffiliateService(currentUser.value.id, affiliateId);
+      // Processar afiliação
+      const result = await affiliate(currentUser.value.id, targetIdentifier, isEmail);
       
       if (result.success) {
-        await fetchAffiliatedUsers();
-        setTemporarySuccess(result.message);
+        // Recarregar dados do usuário para atualizar informações de afiliação
+        await authStore.fetchUserData(true);
+        
+        // Mostrar mensagem de sucesso
+        setTemporarySuccess('Afiliação realizada com sucesso!');
       } else {
-        setTemporaryError(result.message);
+        // Mostrar mensagem de erro
+        setTemporaryError(result.message || 'Não foi possível realizar a afiliação.');
+      }
+      
+      return result;
+    } catch (err: any) {
+      console.error('[useAffiliateCode] Erro ao processar afiliação:', err);
+      setTemporaryError(err.message || 'Ocorreu um erro ao processar a afiliação.');
+      return { success: false };
+    }
+  };
+  
+  // Remover um afiliado
+  const removeAffiliate = async (affiliateId: string) => {
+    if (!currentUser.value) {
+      setTemporaryError('Você precisa estar autenticado para remover um afiliado.');
+      return { success: false };
+    }
+    
+    try {
+      // Redefinir estado de erro
+      error.value = null;
+      
+      // Processar remoção
+      const result = await removeAff(currentUser.value.id, affiliateId);
+      
+      if (result.success) {
+        // Recarregar dados do usuário e lista de afiliados
+        await authStore.fetchUserData(true);
+        await fetchAffiliatedUsers();
+        
+        // Mostrar mensagem de sucesso
+        setTemporarySuccess('Afiliado removido com sucesso!');
+      } else {
+        // Mostrar mensagem de erro
+        setTemporaryError(result.message || 'Não foi possível remover o afiliado.');
       }
       
       return result;
     } catch (err: any) {
       console.error('[useAffiliateCode] Erro ao remover afiliado:', err);
-      setTemporaryError(err.message || 'Erro ao remover afiliado.');
-      return {
-        success: false,
-        message: err.message || 'Erro desconhecido'
-      };
-    } finally {
-      loading.value = false;
+      setTemporaryError(err.message || 'Ocorreu um erro ao remover o afiliado.');
+      return { success: false };
     }
   };
-
-  // Modificar o updateAffiliateRole para usar as funções de mensagens temporárias
-  const updateAffiliateRole = async (
-    affiliateId: string, 
-    newRole: UserRole
-  ): Promise<AffiliationResponse> => {
+  
+  // Atualizar papel de um afiliado
+  const updateAffiliateRole = async (affiliateId: string, newRole: UserRole) => {
     if (!currentUser.value) {
-      setTemporaryError('Usuário não está autenticado.');
-      return {
-        success: false,
-        message: 'Usuário não está autenticado.'
-      };
+      setTemporaryError('Você precisa estar autenticado para atualizar um papel.');
+      return { success: false };
     }
     
-    loading.value = true;
-    error.value = null;
-    
     try {
-      const userAffiliate = affiliatedUsers.value.find(user => user.id === affiliateId);
-      if (!userAffiliate) {
-        setTemporaryError('Este usuário não é mais seu afiliado ou a relação foi rompida.');
-        return {
-          success: false,
-          message: error.value || 'Este usuário não é mais seu afiliado ou a relação foi rompida.'
-        };
-      }
+      // Redefinir estado de erro
+      error.value = null;
       
-      if ((newRole === UserRole.ADMIN || 
-           newRole === UserRole.SECRETARIA || 
-           newRole === UserRole.TESOUREIRO) && 
-          (!userAffiliate.affiliatedToId || userAffiliate.affiliatedToId !== currentUser.value.id)) {
-        setTemporaryError('Não é possível atribuir papel administrativo a um usuário sem afiliação válida.');
-        return {
-          success: false,
-          message: error.value || 'Não é possível atribuir papel administrativo a um usuário sem afiliação válida.'
-        };
-      }
-      
-      if ((userAffiliate.role === UserRole.ADMIN || 
-           userAffiliate.role === UserRole.SECRETARIA || 
-           userAffiliate.role === UserRole.TESOUREIRO) && 
-          (!userAffiliate.affiliatedToId || userAffiliate.affiliatedToId !== currentUser.value.id)) {
-        newRole = UserRole.USER;
-      }
-      
-      const { updateAffiliateRole: updateAffiliateRoleService } = await import('../services/profile');
-      
-      const result = await updateAffiliateRoleService(currentUser.value.id, affiliateId, newRole);
+      // Processar atualização
+      const result = await updateRole(currentUser.value.id, affiliateId, newRole);
       
       if (result.success) {
+        // Recarregar dados do usuário e lista de afiliados
         await fetchAffiliatedUsers();
-        setTemporarySuccess(result.message);
+        
+        // Mostrar mensagem de sucesso
+        setTemporarySuccess('Papel atualizado com sucesso!');
       } else {
-        setTemporaryError(result.message);
+        // Mostrar mensagem de erro
+        setTemporaryError(result.message || 'Não foi possível atualizar o papel.');
       }
       
       return result;
     } catch (err: any) {
-      console.error('[useAffiliateCode] Erro ao atualizar papel do afiliado:', err);
-      setTemporaryError(err.message || 'Erro ao atualizar papel do afiliado.');
-      return {
-        success: false,
-        message: err.message || 'Erro desconhecido'
-      };
-    } finally {
-      loading.value = false;
+      console.error('[useAffiliateCode] Erro ao atualizar papel:', err);
+      setTemporaryError(err.message || 'Ocorreu um erro ao atualizar o papel.');
+      return { success: false };
     }
   };
 
-  // Limpar todos os timeouts ao desmontar o componente
-  const clearAllTimeouts = () => {
-    Object.keys(messageTimeouts.value).forEach(key => {
-      if (messageTimeouts.value[key]) {
-        clearTimeout(messageTimeouts.value[key]);
-        messageTimeouts.value[key] = 0;
+  // NOVA FUNCIONALIDADE: Métricas de desempenho para afiliados
+  const fetchAffiliatesMetrics = async () => {
+    if (!currentUser.value || affiliatedUsers.value.length === 0) return;
+    
+    try {
+      // Carregar todos os pedidos para análise
+      await orderStore.fetchAllOrders();
+      const allOrders = orderStore.orders;
+      
+      // Preparar métricas para cada afiliado
+      const metrics: Record<string, AffiliateSalesMetrics> = {};
+      
+      // Data atual e cálculo de meses
+      const now = new Date();
+      const currentMonth = now.getMonth();
+      const currentYear = now.getFullYear();
+      const lastMonth = currentMonth === 0 ? 11 : currentMonth - 1;
+      const lastMonthYear = currentMonth === 0 ? currentYear - 1 : currentYear;
+      
+      // Para cada afiliado, calcular métricas
+      for (const affiliate of affiliatedUsers.value) {
+        // Filtrar pedidos do afiliado (usando sellerId)
+        const affiliateOrders = allOrders.filter(order => 
+          order.sellerId === affiliate.id || 
+          order.originalSellerId === affiliate.id
+        );
+        
+        if (affiliateOrders.length === 0) {
+          // Afiliado sem vendas ainda
+          metrics[affiliate.id] = {
+            totalSales: 0,
+            totalValue: 0,
+            lastSaleDate: null,
+            salesThisMonth: 0,
+            salesLastMonth: 0,
+            growthRate: 0
+          };
+          continue;
+        }
+        
+        // Ordenar pedidos por data (mais recente primeiro)
+        const sortedOrders = [...affiliateOrders].sort(
+          (a, b) => b.createdAt.getTime() - a.createdAt.getTime()
+        );
+        
+        // Data da última venda
+        const lastSaleDate = sortedOrders[0].createdAt;
+        
+        // Calcular valor total
+        const totalValue = affiliateOrders.reduce((sum, order) => {
+          return sum + (order.generatedNumbers?.length || 0);
+        }, 0);
+        
+        // Calcular vendas por mês
+        const salesThisMonth = affiliateOrders.filter(order => {
+          const orderDate = order.createdAt;
+          return orderDate.getMonth() === currentMonth && 
+                 orderDate.getFullYear() === currentYear;
+        }).length;
+        
+        const salesLastMonth = affiliateOrders.filter(order => {
+          const orderDate = order.createdAt;
+          return orderDate.getMonth() === lastMonth && 
+                 orderDate.getFullYear() === lastMonthYear;
+        }).length;
+        
+        // Calcular taxa de crescimento
+        let growthRate = 0;
+        if (salesLastMonth > 0) {
+          growthRate = Math.round(((salesThisMonth - salesLastMonth) / salesLastMonth) * 100);
+        } else if (salesThisMonth > 0) {
+          growthRate = 100; // Crescimento de 100% se não havia vendas no mês anterior
+        }
+        
+        // Armazenar métricas
+        metrics[affiliate.id] = {
+          totalSales: affiliateOrders.length,
+          totalValue,
+          lastSaleDate,
+          salesThisMonth,
+          salesLastMonth,
+          growthRate
+        };
       }
-    });
+      
+      // Atualizar o estado
+      affiliateSalesMetrics.value = metrics;
+      
+    } catch (err) {
+      console.error('[useAffiliateCode] Erro ao calcular métricas de afiliados:', err);
+    }
   };
 
   // Inicializar verificação de código
@@ -443,16 +408,14 @@ export function useAffiliateCode() {
     error,
     success,
     affiliatedUsers,
-    affiliatedToUser,
+    affiliateSalesMetrics, // Exportar métricas
     generateTemporaryAffiliateCode,
-    affiliateToUser: affiliateToUserMethod,
+    affiliateToUser,
     fetchAffiliatedUsers,
-    codeExpiry,
     timeRemaining,
     isCodeValid,
     isGeneratingCode,
     checkCurrentCode,
-    checkAffiliateCode,
     removeAffiliate,
     updateAffiliateRole,
     setTemporaryError,
