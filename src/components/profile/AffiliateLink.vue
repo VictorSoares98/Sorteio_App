@@ -239,6 +239,9 @@ onMounted(async () => {
   // Adicionar evento de clique global para fechar menus
   document.addEventListener('click', closeAllMenus);
   
+  // Adicionar evento de rolagem para fechar menus ao rolar
+  window.addEventListener('scroll', handleScroll);
+  
   // Enviar evento para armazenar status de novas afiliações
   if (sessionStorage.getItem('newAffiliation') === 'true') {
     sessionStorage.removeItem('newAffiliation');
@@ -250,6 +253,8 @@ onUnmounted(() => {
   clearResources();
   // Remover evento de clique global
   document.removeEventListener('click', closeAllMenus);
+  // Remover evento de rolagem
+  window.removeEventListener('scroll', handleScroll);
 });
 
 // Processar afiliação com confirmação
@@ -430,161 +435,189 @@ const reloadAffiliates = async () => {
   }
 };
 
-// Função para alternar o menu dropdown - simplificada para maior confiabilidade
-const toggleDropdown = (userId: string, event?: MouseEvent) => {
-  event?.stopPropagation(); // Prevenir propagação do evento para evitar fechamento imediato
+// Função unificada para controlar todos os tipos de menus
+const toggleMenu = (
+  userId: string, 
+  menuType: 'dropdown' | 'roleMenu', 
+  event: Event,
+  options: { isSubmenu?: boolean; itemCount?: number; width?: number } = {}
+) => {
+  // Prevenção robusta de eventos
+  event.stopPropagation();
+  if ('preventDefault' in event) event.preventDefault();
   
-  // Se estamos fechando este menu, apenas limpe o estado
-  if (activeDropdownId.value === userId) {
-    activeDropdownId.value = null;
+  // Determinar qual referência reativa usar com base no tipo
+  const stateRef = menuType === 'dropdown' ? activeDropdownId : showRoleMenu;
+  
+  // Lógica de toggle consistente
+  if (stateRef.value === userId) {
+    stateRef.value = null;
     return;
   }
   
-  // Fechamos todos os outros menus
-  activeDropdownId.value = userId;
-  showRoleMenu.value = null; // Fechar submenu de papéis
-  
-  // Calcular posição do menu dropdown com base no evento
-  if (event && event.currentTarget) {
-    const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
-    calculateAndStoreDropdownPosition(userId, rect);
+  // Comportamentos específicos por tipo
+  if (menuType === 'dropdown') {
+    activeDropdownId.value = userId;
+    showRoleMenu.value = null; // Fechar submenu ao abrir dropdown
   } else {
-    // Buscar o elemento pelo ID como fallback
-    const element = document.querySelector(`[data-dropdown-trigger="${userId}"]`);
+    showRoleMenu.value = userId;
+  }
+  
+  // Usar setTimeout para todos os casos garante consistência
+  setTimeout(() => {
+    let element: HTMLElement | null = null;
+    
+    if (event.currentTarget) {
+      element = event.currentTarget as HTMLElement;
+    } else if (menuType === 'dropdown') {
+      // Fallback para buscar pelo seletor se o evento não tiver currentTarget
+      element = document.querySelector(`[data-dropdown-trigger="${userId}"]`);
+    }
+    
     if (element) {
       const rect = element.getBoundingClientRect();
-      calculateAndStoreDropdownPosition(userId, rect);
+      calculateMenuPosition(userId, rect, { 
+        isSubmenu: menuType === 'roleMenu',
+        ...options 
+      });
     }
-  }
+  }, 10); // Usar um pequeno timeout para garantir que o DOM tenha sido atualizado
 };
 
-// Função para alternar menu de papel/função com melhor tratamento de eventos
-const toggleRoleMenu = (userId: string, event: Event) => {
-  event.stopPropagation();
-  event.preventDefault();
-  
-  // Se já estamos mostrando este menu, fechamos
-  if (showRoleMenu.value === userId) {
-    showRoleMenu.value = null;
-    return;
-  }
-  
-  // Mostramos o menu de papéis para este usuário
-  showRoleMenu.value = userId;
-  
-  // Para garantir que o menu de papéis seja posicionado corretamente
-  setTimeout(() => {
-    const button = event.currentTarget as HTMLElement;
-    if (button) {
-      const rect = button.getBoundingClientRect();
-      // Posicionamento mais simples e confiável
-      menuPositions.value[userId] = {
-        top: `${rect.bottom + window.scrollY + 5}px`,
-        left: `${rect.left + window.scrollX}px`,
-      };
-    }
-  }, 10);
-};
-
-// Nova função para calcular e armazenar a posição do dropdown
-const calculateAndStoreDropdownPosition = (userId: string, rect: DOMRect) => {
+// Função unificada para calcular e posicionar menus e submenus
+const calculateMenuPosition = (userId: string, rect?: DOMRect, options: { 
+  isSubmenu?: boolean;
+  itemCount?: number;
+  width?: number;
+} = {}) => {
   const windowWidth = window.innerWidth;
   const windowHeight = window.innerHeight;
   
-  // Dimensões aproximadas do menu
-  const menuWidth = 224; // largura em pixels
-  const menuHeight = 100; // altura aproximada
-  
-  // Posição padrão (à direita do botão)
-  let position = {
-    top: `${rect.top}px`,
-    left: `${rect.right + 5}px`,
-    right: 'auto'
+  // Configurações padrão
+  const defaults = {
+    isSubmenu: false,
+    itemCount: options.isSubmenu ? Object.keys(roleLabels).length : 3,
+    width: 224 // largura padrão em pixels
   };
   
-  // Verificar se vai caber à direita ou se precisa ir para a esquerda
-  if (rect.right + menuWidth > windowWidth) {
-    position = {
-      top: `${rect.top}px`,
-      right: `${windowWidth - rect.left + 5}px`,
-      left: 'auto'
-    };
+  // Mesclar opções fornecidas com padrões
+  const config = { ...defaults, ...options };
+  const { isSubmenu, itemCount, width } = config;
+  
+  // Cálculo de altura dinâmica baseado no número de itens
+  const menuHeight = isSubmenu ? itemCount * 40 + 16 : 100;
+  
+  // Se for um submenu e não tivermos a posição do menu pai, usamos posição existente ou padrão
+  if (isSubmenu && !menuPositions.value[userId]) {
+    return menuPositions.value[userId] || { top: '0px', left: '0px' };
   }
   
-  // Verificar se vai caber para baixo ou se precisa ir para cima
-  if (rect.bottom + menuHeight > windowHeight) {
-    position.top = `${rect.top - menuHeight + rect.height}px`;
+  // Se for submenu, recuperamos a posição do menu pai
+  const parentMenuPosition = isSubmenu ? menuPositions.value[userId] : null;
+  
+  let position = {};
+  
+  if (rect) {
+    // Calculamos com base no retângulo (elemento acionador)
+    if (isSubmenu && parentMenuPosition) {
+      // Para submenu, usamos a posição do menu pai
+      const menuTop = parseInt(parentMenuPosition.top) || 0;
+      const menuLeft = parseInt(parentMenuPosition.left) || 0;
+      const menuRight = parentMenuPosition.right !== 'auto' ? 
+        parseInt(parentMenuPosition.right) || 0 : 0;
+      
+      // Determinar se o menu pai está à direita ou à esquerda
+      const isMenuOnLeft = parentMenuPosition.right !== 'auto';
+      
+      if (isMenuOnLeft) {
+        // Menu está à esquerda do gatilho, submenu vai para a esquerda
+        position = {
+          top: `${menuTop}px`,
+          right: `${menuRight + width}px`,
+          left: 'auto'
+        };
+      } else {
+        // Menu está à direita do gatilho, submenu vai para a direita
+        position = {
+          top: `${menuTop}px`,
+          left: `${menuLeft + width}px`,
+          right: 'auto'
+        };
+        
+        // Se não couber à direita, coloca à esquerda do menu
+        if (menuLeft + width + width > windowWidth) {
+          position = {
+            top: `${menuTop}px`,
+            right: `${windowWidth - menuLeft + 5}px`,
+            left: 'auto'
+          };
+        }
+      }
+      
+      // Verificar se vai caber para baixo ou se precisa ir para cima
+      if (menuTop + menuHeight > windowHeight) {
+        position = {
+          ...position,
+          top: `${windowHeight - menuHeight - 10}px` // 10px de margem do fundo
+        };
+      }
+    } else {
+      // Menu principal - posicionamento padrão à direita do botão
+      position = {
+        top: `${rect.top}px`,
+        left: `${rect.right + 5}px`,
+        right: 'auto'
+      };
+      
+      // Verificar se vai caber à direita ou se precisa ir para a esquerda
+      if (rect.right + width > windowWidth) {
+        position = {
+          top: `${rect.top}px`,
+          right: `${windowWidth - rect.left + 5}px`,
+          left: 'auto'
+        };
+      }
+      
+      // Verificar se vai caber para baixo ou se precisa ir para cima
+      if (rect.bottom + menuHeight > windowHeight) {
+        position = {
+          ...position,
+          top: `${rect.top - menuHeight + rect.height}px`
+        };
+      }
+    }
+  } else if (isSubmenu && parentMenuPosition) {
+    // Sem retângulo, mas temos a posição do menu pai
+    return calculateMenuPosition(userId, undefined, { 
+      ...options, 
+      isSubmenu: true 
+    });
+  } else {
+    // Fallback - sem retângulo, sem posição do menu pai
+    position = { top: '0px', left: '0px' };
   }
   
   // Armazenar a posição calculada
   menuPositions.value[userId] = position;
-};
-
-// Função melhorada para calcular a posição do submenu
-const calculateSubmenuPosition = (userId: string) => {
-  // Se não tivermos a posição do menu pai, retornamos um valor padrão
-  if (!menuPositions.value[userId]) {
-    return { top: '0px', left: '0px' };
-  }
   
-  const menuPosition = menuPositions.value[userId];
-  const windowWidth = window.innerWidth;
-  const windowHeight = window.innerHeight;
-  
-  // Converter posições de string para número
-  const menuTop = parseInt(menuPosition.top) || 0;
-  const menuLeft = parseInt(menuPosition.left) || 0;
-  const menuRight = menuPosition.right !== 'auto' ? parseInt(menuPosition.right) || 0 : 0;
-  
-  // Dimensões aproximadas do submenu
-  const submenuWidth = 224; // largura em pixels
-  const submenuHeight = Object.keys(roleLabels).length * 40 + 16; // altura com base no número de opções
-  
-  // Determinar se o menu está à direita ou à esquerda
-  const isMenuOnLeft = menuPosition.right !== 'auto';
-  
-  let position = {};
-  
-  if (isMenuOnLeft) {
-    // Menu está à esquerda do gatilho, submenu vai para a esquerda
-    position = {
-      top: `${menuTop}px`,
-      right: `${menuRight + 224}px`, // 224px é aproximadamente a largura do menu
-      left: 'auto'
-    };
-  } else {
-    // Menu está à direita do gatilho, submenu vai para a direita
-    position = {
-      top: `${menuTop}px`,
-      left: `${menuLeft + 224}px`,
-      right: 'auto'
-    };
-    
-    // Se não couber à direita, coloca à esquerda do menu
-    if (menuLeft + 224 + submenuWidth > windowWidth) {
-      position = {
-        top: `${menuTop}px`,
-        right: `${windowWidth - menuLeft + 5}px`,
-        left: 'auto'
-      };
-    }
-  }
-  
-  // Verificar se vai caber para baixo ou se precisa ir para cima
-  if (menuTop + submenuHeight > windowHeight) {
-    position = {
-      ...position,
-      top: `${windowHeight - submenuHeight - 10}px` // 10px de margem do fundo
-    };
-  }
-  
+  // Retornar a posição para uso direto (necessário para submenus)
   return position;
 };
 
+// NOVA FUNÇÃO: apenas recupera uma posição previamente calculada
+// Sem efeitos colaterais, segura para uso em bindings
+const getSubmenuPosition = (userId: string) => {
+  // Simplesmente retorna a posição armazenada, ou um fallback seguro
+  if (!menuPositions.value[userId]) {
+    return { top: '0px', left: '0px' };
+  }
+  return menuPositions.value[userId];
+};
+
 // Fechar todos os menus quando clicar fora
-const closeAllMenus = (event?: MouseEvent) => {
-  // Não fechar se o clique foi dentro de um menu ou submenu
-  if (event) {
+const closeAllMenus = (event?: MouseEvent, fromScroll: boolean = false) => {
+  // Não fechar se o clique foi dentro de um menu ou submenu (ignore este check se for chamado por scroll)
+  if (event && !fromScroll) {
     const isClickInsideDropdown = event.target && 
       (event.target as Element).closest('[data-user-id]') !== null;
     
@@ -598,6 +631,14 @@ const closeAllMenus = (event?: MouseEvent) => {
   
   activeDropdownId.value = null;
   showRoleMenu.value = null;
+};
+
+// Novo manipulador para fechar menus ao rolar a página
+const handleScroll = () => {
+  // Fechar apenas se algum menu estiver aberto para evitar chamadas desnecessárias
+  if (activeDropdownId.value !== null || showRoleMenu.value !== null) {
+    closeAllMenus(undefined, true);
+  }
 };
 
 // Abrir diálogo de confirmação para remover afiliado
@@ -1190,7 +1231,7 @@ const isMetricsExpanded = (userId: string) => {
               
               <!-- Menu de ações -->
               <button 
-                @click="toggleDropdown(user.id, $event)" 
+                @click="toggleMenu(user.id, 'dropdown', $event)" 
                 :data-dropdown-trigger="user.id"
                 class="text-gray-500 hover:text-primary p-2 rounded-full hover:bg-gray-100 transition-colors flex-shrink-0"
               >
@@ -1291,7 +1332,7 @@ const isMetricsExpanded = (userId: string) => {
                 <!-- Opção: Alterar Hierarquia - só mostrar se o usuário puder ter a hierarquia alterada -->
                 <div class="relative" v-if="canChangeUserRole(user)">
                   <button 
-                    @click="toggleRoleMenu(user.id, $event)"
+                    @click="toggleMenu(user.id, 'roleMenu', $event)"
                     class="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 hover:text-primary flex justify-between items-center"
                   >
                     <span>Alterar Hierarquia</span>
@@ -1441,7 +1482,7 @@ const isMetricsExpanded = (userId: string) => {
     <div 
       v-if="showRoleMenu" 
       class="fixed z-50 bg-white rounded-md shadow-lg border border-gray-200 w-56"
-      :style="calculateSubmenuPosition(showRoleMenu)"
+      :style="getSubmenuPosition(showRoleMenu)"
       data-role-menu="true"
     >
       <div class="py-1">
