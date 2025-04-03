@@ -1,10 +1,15 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref, onMounted, onUnmounted } from 'vue';
 import Card from '../ui/Card.vue';
 import { useAuthStore } from '../../stores/authStore';
 import { UserRole } from '../../types/user';
+import { collection, query, onSnapshot, getDocs, where } from 'firebase/firestore';
+import { db } from '../../firebase';
 
 const authStore = useAuthStore();
+const rankingUsers = ref<any[]>([]);
+const isLoading = ref(true);
+const unsubscribe = ref<(() => void) | null>(null);
 
 // Melhorado para garantir que todos os cenários são tratados corretamente
 const affiliatorInfo = computed(() => {
@@ -58,6 +63,205 @@ const hasRankingAccess = computed(() => {
   const isAdminRole = [UserRole.ADMIN, UserRole.TESOUREIRO, UserRole.SECRETARIA].includes(user.role);
   
   return hasAffiliation || isAdminRole;
+});
+
+// Verificar se o usuário tem acesso administrativo para ver todas as vendas
+const hasAdminAccess = computed(() => {
+  const user = authStore.currentUser;
+  if (!user) return false;
+  
+  return [UserRole.ADMIN, UserRole.TESOUREIRO, UserRole.SECRETARIA].includes(user.role);
+});
+
+// Determinar se deve mostrar o número exato de vendas
+const shouldShowExactSales = (user: any) => {
+  // Sempre mostrar se tiver até 25 vendas
+  if (user.totalSales <= 25) return true;
+  
+  // Acima de 25, mostrar apenas para administradores
+  return hasAdminAccess.value;
+};
+
+// Calcular avatar padrão baseado no nome
+const getDefaultAvatar = (name: string) => {
+  const seed = encodeURIComponent(name || 'user');
+  return `https://api.dicebear.com/7.x/initials/svg?seed=${seed}&backgroundColor=FF8C00`;
+};
+
+// Função para exibir troféus ou medalhas conforme a posição e vendas
+const getTrophyEmoji = (position: number, totalSales: number) => {
+  if (totalSales <= 0) return position;
+  if (position === 1) return '🏆';
+  if (position === 2) return '🥈';
+  if (position === 3) return '🥉';
+  return position;
+};
+
+// Formatar contagem de vendas conforme as regras
+const formatSalesCount = (user: any) => {
+  if (shouldShowExactSales(user)) {
+    return `${user.totalSales} ${user.totalSales === 1 ? 'venda' : 'vendas'}`;
+  }
+  
+  return '25+ vendas';
+};
+
+// Função corrigida para buscar dados de ranking sem causar loop infinito
+const fetchRankingData = async () => {
+  try {
+    isLoading.value = true;
+    
+    // Obter todos os usuários primeiro
+    const usersCollection = collection(db, 'users');
+    const usersSnapshot = await getDocs(usersCollection);
+    const usersData: any[] = [];
+    
+    // Para cada usuário, processar seus dados
+    for (const userDoc of usersSnapshot.docs) {
+      const userData = userDoc.data();
+      
+      // Buscar pedidos do usuário para calcular total de vendas
+      const totalSales = await processOrdersForUser(userDoc.id);
+      
+      // Adicionar usuário ao array com suas vendas calculadas
+      usersData.push({
+        id: userDoc.id,
+        displayName: userData.displayName || 'Usuário',
+        photoURL: userData.photoURL,
+        email: userData.email,
+        role: userData.role,
+        congregation: userData.congregation,
+        totalSales: totalSales
+      });
+    }
+    
+    // Ordenar usuários por total de vendas (decrescente)
+    usersData.sort((a, b) => b.totalSales - a.totalSales);
+    
+    // Adicionar posição no ranking
+    usersData.forEach((user, index) => {
+      user.position = index + 1;
+    });
+    
+    rankingUsers.value = usersData;
+    isLoading.value = false;
+    
+    // Configurar listener apenas para atualizações
+    setupRealTimeUpdates();
+  } catch (error) {
+    console.error("Erro ao buscar dados de ranking:", error);
+    isLoading.value = false;
+  }
+};
+
+// Extraindo a lógica de processamento de pedidos para reutilização
+const processOrdersForUser = async (userId: string): Promise<number> => {
+  const ordersCollection = collection(db, 'orders');
+  
+  // Criar duas queries para buscar por sellerId ou originalSellerId
+  const query1 = query(ordersCollection, where('sellerId', '==', userId));
+  const query2 = query(ordersCollection, where('originalSellerId', '==', userId));
+  
+  const [snapshot1, snapshot2] = await Promise.all([getDocs(query1), getDocs(query2)]);
+  
+  // Mesclar os resultados das duas queries, evitando duplicatas
+  const processedOrderIds = new Set<string>();
+  let totalSales = 0;
+  
+  // Processar primeira query
+  snapshot1.forEach(orderDoc => {
+    if (processedOrderIds.has(orderDoc.id)) return;
+    processedOrderIds.add(orderDoc.id);
+    
+    const orderData = orderDoc.data();
+    // Filtrar pedidos válidos
+    if (
+      orderData.generatedNumbers && 
+      Array.isArray(orderData.generatedNumbers) &&
+      (!orderData.status || (orderData.status !== 'pending' && orderData.status !== 'cancelled'))
+    ) {
+      totalSales += orderData.generatedNumbers.length;
+    }
+  });
+  
+  // Processar segunda query
+  snapshot2.forEach(orderDoc => {
+    if (processedOrderIds.has(orderDoc.id)) return;
+    processedOrderIds.add(orderDoc.id);
+    
+    const orderData = orderDoc.data();
+    if (
+      orderData.generatedNumbers && 
+      Array.isArray(orderData.generatedNumbers) &&
+      (!orderData.status || (orderData.status !== 'pending' && orderData.status !== 'cancelled'))
+    ) {
+      totalSales += orderData.generatedNumbers.length;
+    }
+  });
+  
+  return totalSales;
+};
+
+// Nova função para configurar atualizações em tempo real após a carga inicial
+const setupRealTimeUpdates = () => {
+  // Limpar qualquer listener anterior
+  if (unsubscribe.value) {
+    unsubscribe.value();
+  }
+  
+  // Configurar listener para a coleção de orders para detectar novas vendas
+  const ordersCollection = collection(db, 'orders');
+  unsubscribe.value = onSnapshot(ordersCollection, () => {
+    console.log("Detectada alteração em pedidos, atualizando ranking...");
+    refreshRankingData();
+  });
+};
+
+// Função otimizada para atualizar dados sem reconfigurar listeners
+const refreshRankingData = async () => {
+  try {
+    const usersCollection = collection(db, 'users');
+    const usersSnapshot = await getDocs(usersCollection);
+    const usersData: any[] = [];
+    
+    // Para cada usuário, buscar suas vendas utilizando a função de utilidade
+    for (const userDoc of usersSnapshot.docs) {
+      const userData = userDoc.data();
+      const totalSales = await processOrdersForUser(userDoc.id);
+      
+      usersData.push({
+        id: userDoc.id,
+        displayName: userData.displayName || 'Usuário',
+        photoURL: userData.photoURL,
+        email: userData.email,
+        role: userData.role,
+        congregation: userData.congregation,
+        totalSales: totalSales
+      });
+    }
+    
+    // Ordenar e atualizar posições
+    usersData.sort((a, b) => b.totalSales - a.totalSales);
+    usersData.forEach((user, index) => {
+      user.position = index + 1;
+    });
+    
+    rankingUsers.value = usersData;
+  } catch (error) {
+    console.error("Erro ao atualizar dados de ranking:", error);
+  }
+};
+
+// Buscar dados quando o componente for montado
+onMounted(() => {
+  fetchRankingData();
+});
+
+// Limpar listener quando o componente for desmontado
+onUnmounted(() => {
+  if (unsubscribe.value) {
+    unsubscribe.value();
+  }
 });
 </script>
 
@@ -116,17 +320,119 @@ const hasRankingAccess = computed(() => {
         </div>
       </div>
       
-      <!-- Placeholder para o ranking futuro -->
-            <div v-if="hasRankingAccess" class="bg-gray-50 border border-gray-200 p-6 rounded-lg text-center">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mx-auto text-primary opacity-50 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-        </svg>
-        <h3 class="text-lg font-medium text-gray-800 mb-2">Ranking em Desenvolvimento</h3>
-        <p class="text-gray-600">
-          O sistema de ranking está sendo implementado para mostrar estatísticas de vendas e sua posição
-          em relação aos demais vendedores. Em breve você poderá ver seu desempenho!
-        </p>
+      <!-- Exibição do ranking -->
+      <div v-if="hasRankingAccess">
+        <!-- Loading state -->
+        <div v-if="isLoading" class="flex justify-center items-center p-8">
+          <svg class="animate-spin h-8 w-8 text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+          <span class="ml-2 text-gray-600">Carregando ranking...</span>
+        </div>
+        
+        <!-- Ranking list -->
+        <div v-else-if="rankingUsers.length > 0" class="space-y-3">
+          <div v-for="user in rankingUsers" :key="user.id" 
+               class="flex items-center p-3 rounded-lg border transition-all"
+               :class="[
+                 user.totalSales <= 25
+                   ? 'bg-red-100 border-red-300' 
+                   : 'bg-gray-50 border-gray-200',
+                 user.id === authStore.currentUser?.id 
+                   ? 'ring-2 ring-primary ring-opacity-50' 
+                   : ''
+               ]">
+            <!-- Posição no ranking e troféu - corrigido para mostrar medalha apenas se tiver vendas -->
+            <div class="flex-shrink-0 w-10 text-center font-bold">
+              <span :class="{ 'text-xl': user.position <= 3 && user.totalSales > 0 }">
+                {{ getTrophyEmoji(user.position, user.totalSales) }}
+              </span>
+            </div>
+            
+            <!-- Avatar do usuário -->
+            <div class="flex-shrink-0 ml-2">
+              <img :src="user.photoURL || getDefaultAvatar(user.displayName)" alt="Avatar"
+                   class="w-10 h-10 rounded-full object-cover border border-gray-200">
+            </div>
+            
+            <!-- Informações do usuário -->
+            <div class="ml-4 flex-grow">
+              <div class="flex flex-col sm:flex-row sm:justify-between">
+                <div>
+                  <p class="font-medium text-gray-800">{{ user.displayName }}</p>
+                  <p class="text-xs text-gray-500">{{ user.email }}</p>
+                </div>
+                
+                <!-- Contagem de vendas -->
+                <div class="mt-1 sm:mt-0">
+                  <span :class="[
+                    'px-2 py-1 rounded-full text-xs font-medium',
+                    user.totalSales === 0
+                      ? 'bg-gray-100 text-gray-600'
+                      : user.totalSales <= 25 
+                        ? 'bg-red-100 text-red-800' 
+                        : 'bg-blue-100 text-blue-800'
+                  ]">
+                    {{ formatSalesCount(user) }}
+                  </span>
+                </div>
+              </div>
+              
+              <!-- Informações adicionais (congregação e papel) - cores personalizadas por papel -->
+              <div class="mt-1 flex flex-wrap gap-1">
+                <span v-if="user.congregation" class="px-2 py-0.5 text-xs rounded-full bg-gray-100 text-gray-600">
+                  {{ user.congregation }}
+                </span>
+                
+                <!-- Cores personalizadas para cada tipo de usuário - CORRIGIDO -->
+                <span class="px-2 py-0.5 text-xs rounded-full font-medium" 
+                      :class="{
+                        'bg-orange-100 text-orange-800': user.role === UserRole.USER,
+                        'bg-blue-100 text-blue-800': user.role === UserRole.ADMIN,
+                        'bg-green-100 text-green-800': user.role === UserRole.SECRETARIA,
+                        'bg-yellow-100 text-yellow-800': user.role === UserRole.TESOUREIRO
+                      }">
+                  {{ 
+                    user.role === UserRole.ADMIN ? 'Administrador' : 
+                    user.role === UserRole.SECRETARIA ? 'Secretário' :
+                    user.role === UserRole.TESOUREIRO ? 'Tesoureiro' : 'Usuário'
+                  }}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Empty state -->
+        <div v-else class="bg-gray-50 border border-gray-200 p-6 rounded-lg text-center">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mx-auto text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+          </svg>
+          <h3 class="text-lg font-medium text-gray-800 mb-2">Nenhum dado de ranking disponível</h3>
+          <p class="text-gray-600">
+            Não encontramos nenhuma venda registrada no sistema. O ranking será atualizado automaticamente
+            quando houver vendas.
+          </p>
+        </div>
       </div>
     </div>
   </Card>
 </template>
+
+<style scoped>
+/* Estilos para destacar o usuário atual */
+.current-user {
+  box-shadow: 0 0 0 2px theme('colors.primary');
+}
+
+/* Animação para loading */
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.animate-pulse {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+</style>
