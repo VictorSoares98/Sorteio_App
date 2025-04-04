@@ -1192,7 +1192,9 @@ const isMetricsExpanded = (userId: string) => {
               <!-- Avatar do afiliado -->
               <div class="flex-shrink-0">
                 <img 
-                  :src="user.photoURL || getDefaultAvatar(user.displayName)" 
+                  :src="user.photoURL && user.photoURL.trim() !== '' 
+                    ? user.photoURL 
+                    : getDefaultAvatar(user.displayName)" 
                   :alt="user.displayName"
                   class="w-12 h-12 rounded-full object-cover border border-gray-200"
                 />
@@ -1381,13 +1383,22 @@ const isMetricsExpanded = (userId: string) => {
       <div v-if="currentUser?.affiliatedTo" class="mt-6 pt-2 border-t">
         <h3 class="text-lg font-medium text-primary mb-2">Você está afiliado a:</h3>
         <div class="bg-gray-50 p-3 rounded-lg">
-          <p class="font-medium">{{ currentUser.affiliatedTo }}</p>
-          <p v-if="currentUser.affiliatedToEmail" class="text-xs text-gray-500">
-            {{ currentUser.affiliatedToEmail }}
-          </p>
-          <p v-if="currentUser.affiliatedToInfo?.congregation" class="text-xs text-gray-400">
-            {{ currentUser.affiliatedToInfo.congregation }}
-          </p>
+          <div class="flex flex-col items-center mb-2">
+            <img 
+              :src="(currentUser.affiliatedToInfo?.photoURL && currentUser.affiliatedToInfo.photoURL.trim() !== '') 
+                ? currentUser.affiliatedToInfo.photoURL 
+                : getDefaultAvatar(currentUser.affiliatedTo)" 
+              alt="Avatar do afiliador"
+              class="w-16 h-16 rounded-full object-cover border-2 border-primary mb-2"
+            >
+            <p class="font-medium">{{ currentUser.affiliatedTo }}</p>
+            <p v-if="currentUser.affiliatedToEmail" class="text-xs text-gray-500">
+              {{ currentUser.affiliatedToEmail }}
+            </p>
+            <p v-if="currentUser.affiliatedToInfo?.congregation" class="text-xs text-gray-400">
+              {{ currentUser.affiliatedToInfo.congregation }}
+            </p>
+          </div>
         </div>
       </div>
     </div>

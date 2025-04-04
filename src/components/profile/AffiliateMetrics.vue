@@ -115,7 +115,9 @@ const selectAffiliate = (id: string) => {
                 <div class="flex items-center space-x-3">
                   <div class="flex-shrink-0 relative">
                     <img 
-                      :src="affiliate.photoURL || getDefaultAvatar(affiliate.displayName)" 
+                      :src="affiliate.photoURL && affiliate.photoURL.trim() !== '' 
+                        ? affiliate.photoURL 
+                        : getDefaultAvatar(affiliate.displayName)" 
                       :alt="affiliate.displayName"
                       class="w-12 h-12 rounded-full object-cover border-2"
                       :class="selectedAffiliateId === affiliate.id ? 'border-primary' : 'border-gray-200'"
@@ -168,7 +170,9 @@ const selectAffiliate = (id: string) => {
               <div class="flex items-center space-x-4">
                 <div class="bg-white p-1 rounded-full">
                   <img 
-                    :src="selectedAffiliate.photoURL || getDefaultAvatar(selectedAffiliate.displayName)" 
+                    :src="selectedAffiliate.photoURL && selectedAffiliate.photoURL.trim() !== '' 
+                      ? selectedAffiliate.photoURL 
+                      : getDefaultAvatar(selectedAffiliate.displayName)" 
                     :alt="selectedAffiliate.displayName"
                     class="w-16 h-16 rounded-full object-cover border-2 border-white"
                   />

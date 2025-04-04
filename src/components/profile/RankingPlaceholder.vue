@@ -97,8 +97,20 @@ const getTrophyEmoji = (position: number, totalSales: number) => {
   return position;
 };
 
+// Definir interface para o usuário do ranking
+interface RankingUser {
+  id: string;
+  displayName: string;
+  photoURL?: string;
+  email: string;
+  role: UserRole;
+  congregation?: string;
+  totalSales: number;
+  position: number;
+}
+
 // Formatar contagem de vendas conforme as regras
-const formatSalesCount = (user: any) => {
+const formatSalesCount = (user: RankingUser) => {
   if (shouldShowExactSales(user)) {
     return `${user.totalSales} ${user.totalSales === 1 ? 'venda' : 'vendas'}`;
   }
@@ -267,54 +279,72 @@ onUnmounted(() => {
 
 <template>
   <Card title="Ranking de Desempenho">
-    <div class="p-6">
-      <div class="text-center mb-6">
-        <h2 class="text-xl font-bold text-primary mb-2">Acompanhe seu Desempenho</h2>
+    <div class="p-2 md:p-6">
+      <div class="text-center mb-3 md:mb-6">
+        <h2 class="text-lg md:text-xl font-bold text-primary mb-2">Acompanhe seu Desempenho</h2>
         
         <!-- Para Afiliados Comuns -->
-        <div v-if="isRegularAffiliate" class="bg-gray-50 p-3 rounded-lg mb-4">
-          <p class="text-gray-700 font-medium">Você está afiliado a:</p>
-          <p class="text-primary font-bold">{{ affiliatorInfo.name }}</p>
-          <p v-if="affiliatorInfo.email" class="text-gray-600 text-sm">{{ affiliatorInfo.email }}</p>
-          <p v-if="affiliatorInfo.congregation" class="text-gray-500 text-xs">{{ affiliatorInfo.congregation }}</p>
+        <div v-if="isRegularAffiliate" class="bg-gray-50 p-2 md:p-3 rounded-lg mb-3">
+          <div class="flex flex-col items-center mb-2 md:mb-3">
+            <img 
+              :src="(authStore.currentUser?.affiliatedToInfo?.photoURL && authStore.currentUser?.affiliatedToInfo.photoURL.trim() !== '') 
+                ? authStore.currentUser.affiliatedToInfo.photoURL 
+                : getDefaultAvatar(affiliatorInfo.name)" 
+              alt="Avatar do afiliador"
+              class="w-12 h-12 md:w-16 md:h-16 rounded-full object-cover border-2 border-primary mb-2"
+            >
+            <p class="text-gray-700 font-medium text-sm md:text-base">Você está afiliado a:</p>
+            <p class="text-primary font-bold text-sm md:text-base">{{ affiliatorInfo.name }}</p>
+            <p v-if="affiliatorInfo.email" class="text-gray-600 text-xs md:text-sm">{{ affiliatorInfo.email }}</p>
+            <p v-if="affiliatorInfo.congregation" class="text-gray-500 text-xs">{{ affiliatorInfo.congregation }}</p>
+          </div>
           
-          <p class="text-gray-600 mt-2">
+          <p class="text-gray-600 text-xs md:text-sm mt-1 md:mt-2">
             Como afiliado, você pode acompanhar seu desempenho e comparar com outros vendedores.
           </p>
         </div>
         
         <!-- Para Tesoureiro e Secretaria -->
-        <div v-else-if="isAdministrativeRole && authStore.currentUser?.affiliatedTo" class="bg-gray-50 p-3 rounded-lg mb-4">
-          <p class="text-gray-700 font-medium">Você está afiliado a:</p>
-          <p class="text-primary font-bold">{{ affiliatorInfo.name }}</p>
-          <p v-if="affiliatorInfo.email" class="text-gray-600 text-sm">{{ affiliatorInfo.email }}</p>
-          <p v-if="affiliatorInfo.congregation" class="text-gray-500 text-xs">{{ affiliatorInfo.congregation }}</p>
+        <div v-else-if="isAdministrativeRole && authStore.currentUser?.affiliatedTo" class="bg-gray-50 p-2 md:p-3 rounded-lg mb-3">
+          <div class="flex flex-col items-center mb-2 md:mb-3">
+            <img 
+              :src="(authStore.currentUser.affiliatedToInfo?.photoURL && authStore.currentUser.affiliatedToInfo.photoURL.trim() !== '') 
+                ? authStore.currentUser.affiliatedToInfo.photoURL 
+                : getDefaultAvatar(affiliatorInfo.name)" 
+              alt="Avatar do afiliador"
+              class="w-12 h-12 md:w-16 md:h-16 rounded-full object-cover border-2 border-primary mb-2"
+            >
+            <p class="text-gray-700 font-medium text-sm md:text-base">Você está afiliado a:</p>
+            <p class="text-primary font-bold text-sm md:text-base">{{ affiliatorInfo.name }}</p>
+            <p v-if="affiliatorInfo.email" class="text-gray-600 text-xs md:text-sm">{{ affiliatorInfo.email }}</p>
+            <p v-if="affiliatorInfo.congregation" class="text-gray-500 text-xs">{{ affiliatorInfo.congregation }}</p>
+          </div>
           
-          <p class="text-gray-600 mt-2">
+          <p class="text-gray-600 text-xs md:text-sm mt-1 md:mt-2">
             Como afiliado e membro administrativo, você pode acompanhar seu desempenho e o ranking geral.
           </p>
         </div>
         
         <!-- Para Administrador -->
-        <div v-else-if="isAdmin" class="bg-blue-50 p-3 rounded-lg mb-4 border border-blue-200">
-          <p class="text-blue-700 font-medium">Acesso de Administrador</p>
-          <p class="text-blue-600 text-sm mt-1">
+        <div v-else-if="isAdmin" class="bg-blue-50 p-2 md:p-3 rounded-lg mb-3 border border-blue-200">
+          <p class="text-blue-700 font-medium text-sm md:text-base">Acesso de Administrador</p>
+          <p class="text-blue-600 text-xs md:text-sm mt-1">
             Como administrador, você pode visualizar o desempenho geral do ranking, incluindo afiliados e administradores com vendas.
           </p>
         </div>
         
         <!-- Para Tesoureiro/Secretaria sem afiliação -->
-        <div v-else-if="isAdministrativeRole && !authStore.currentUser?.affiliatedTo" class="bg-yellow-50 p-3 rounded-lg mb-4 border border-yellow-200">
-          <p class="text-yellow-700 font-medium">Acesso Administrativo</p>
-          <p class="text-yellow-600 text-sm mt-1">
+        <div v-else-if="isAdministrativeRole && !authStore.currentUser?.affiliatedTo" class="bg-yellow-50 p-2 md:p-3 rounded-lg mb-3 border border-yellow-200">
+          <p class="text-yellow-700 font-medium text-sm md:text-base">Acesso Administrativo</p>
+          <p class="text-yellow-600 text-xs md:text-sm mt-1">
             Como membro administrativo, você tem acesso ao ranking geral de vendas.
           </p>
         </div>
         
         <!-- Fallback para outros casos (não deve ocorrer normalmente) -->
-        <div v-else class="bg-yellow-50 p-3 rounded-lg mb-4 border border-yellow-200">
-          <p class="text-yellow-700">Ranking disponível</p>
-          <p class="text-yellow-600 text-sm">
+        <div v-else class="bg-yellow-50 p-2 md:p-3 rounded-lg mb-3 border border-yellow-200">
+          <p class="text-yellow-700 text-sm md:text-base">Ranking disponível</p>
+          <p class="text-yellow-600 text-xs md:text-sm">
             Você tem acesso ao ranking de vendas.
           </p>
         </div>
@@ -323,18 +353,18 @@ onUnmounted(() => {
       <!-- Exibição do ranking -->
       <div v-if="hasRankingAccess">
         <!-- Loading state -->
-        <div v-if="isLoading" class="flex justify-center items-center p-8">
-          <svg class="animate-spin h-8 w-8 text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+        <div v-if="isLoading" class="flex justify-center items-center p-3 md:p-8">
+          <svg class="animate-spin h-6 w-6 md:h-8 md:w-8 text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
             <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
           </svg>
-          <span class="ml-2 text-gray-600">Carregando ranking...</span>
+          <span class="ml-2 text-gray-600 text-sm md:text-base">Carregando ranking...</span>
         </div>
         
         <!-- Ranking list -->
-        <div v-else-if="rankingUsers.length > 0" class="space-y-3">
+        <div v-else-if="rankingUsers.length > 0" class="space-y-1.5 md:space-y-3">
           <div v-for="user in rankingUsers" :key="user.id" 
-               class="flex items-center p-3 rounded-lg border transition-all"
+               class="rounded-lg border transition-all"
                :class="[
                  user.totalSales <= 25
                    ? 'bg-red-100 border-red-300' 
@@ -343,31 +373,38 @@ onUnmounted(() => {
                    ? 'ring-2 ring-primary ring-opacity-50' 
                    : ''
                ]">
-            <!-- Posição no ranking e troféu - corrigido para mostrar medalha apenas se tiver vendas -->
-            <div class="flex-shrink-0 w-10 text-center font-bold">
-              <span :class="{ 'text-xl': user.position <= 3 && user.totalSales > 0 }">
-                {{ getTrophyEmoji(user.position, user.totalSales) }}
-              </span>
-            </div>
-            
-            <!-- Avatar do usuário -->
-            <div class="flex-shrink-0 ml-2">
-              <img :src="user.photoURL || getDefaultAvatar(user.displayName)" alt="Avatar"
-                   class="w-10 h-10 rounded-full object-cover border border-gray-200">
-            </div>
-            
-            <!-- Informações do usuário -->
-            <div class="ml-4 flex-grow">
-              <div class="flex flex-col sm:flex-row sm:justify-between">
-                <div>
-                  <p class="font-medium text-gray-800">{{ user.displayName }}</p>
-                  <p class="text-xs text-gray-500">{{ user.email }}</p>
+            <!-- Layout específico para mobile -->
+            <div class="md:hidden w-full flex flex-col px-1.5 py-2">
+              <!-- Cabeçalho com dados principais -->
+              <div class="flex items-center w-full">
+                <!-- Posição no ranking e troféu -->
+                <div class="flex-shrink-0 w-6 md:w-8 text-center font-bold">
+                  <span :class="{ 'text-lg': user.position <= 3 && user.totalSales > 0 }">
+                    {{ getTrophyEmoji(user.position, user.totalSales) }}
+                  </span>
                 </div>
                 
-                <!-- Contagem de vendas -->
-                <div class="mt-1 sm:mt-0">
+                <!-- Avatar do usuário -->
+                <div class="flex-shrink-0 ml-1">
+                  <img 
+                    :src="user.photoURL && user.photoURL.trim() !== '' 
+                      ? user.photoURL 
+                      : getDefaultAvatar(user.displayName)" 
+                    alt="Avatar"
+                    class="w-7 h-7 md:w-8 md:h-8 rounded-full object-cover border border-gray-200"
+                  >
+                </div>
+                
+                <!-- Dados principais do usuário -->
+                <div class="ml-1.5 flex-grow overflow-hidden">
+                  <p class="font-medium text-gray-800 text-sm truncate">{{ user.displayName }}</p>
+                  <p class="text-xs text-gray-500 truncate">{{ user.email }}</p>
+                </div>
+                
+                <!-- Contagem de vendas e tipo de usuário (movido para cá) -->
+                <div class="flex-shrink-0 ml-1 flex flex-col items-end">
                   <span :class="[
-                    'px-2 py-1 rounded-full text-xs font-medium',
+                    'px-1.5 py-0.5 rounded-full text-xs font-medium',
                     user.totalSales === 0
                       ? 'bg-gray-100 text-gray-600'
                       : user.totalSales <= 25 
@@ -376,41 +413,108 @@ onUnmounted(() => {
                   ]">
                     {{ formatSalesCount(user) }}
                   </span>
+                  
+                  <!-- Tipo de usuário movido para abaixo das vendas -->
+                  <span class="px-1.5 py-0.5 text-xs rounded-full font-medium mt-1" 
+                        :class="{
+                          'bg-orange-100 text-orange-800': user.role === UserRole.USER,
+                          'bg-blue-100 text-blue-800': user.role === UserRole.ADMIN,
+                          'bg-green-100 text-green-800': user.role === UserRole.SECRETARIA,
+                          'bg-yellow-100 text-yellow-800': user.role === UserRole.TESOUREIRO
+                        }">
+                    {{ 
+                      user.role === UserRole.ADMIN ? 'Admin' : 
+                      user.role === UserRole.SECRETARIA ? 'Secretário' :
+                      user.role === UserRole.TESOUREIRO ? 'Tesoureiro' : 'Usuário'
+                    }}
+                  </span>
                 </div>
               </div>
               
-              <!-- Informações adicionais (congregação e papel) - cores personalizadas por papel -->
-              <div class="mt-1 flex flex-wrap gap-1">
-                <span v-if="user.congregation" class="px-2 py-0.5 text-xs rounded-full bg-gray-100 text-gray-600">
+              <!-- Informações adicionais em nova linha para mobile (apenas congregação agora) -->
+              <div v-if="user.congregation" class="w-full mt-1 flex flex-wrap gap-1">
+                <span class="px-1.5 py-0.5 text-xs rounded-full bg-gray-100 text-gray-600">
                   {{ user.congregation }}
                 </span>
-                
-                <!-- Cores personalizadas para cada tipo de usuário - CORRIGIDO -->
-                <span class="px-2 py-0.5 text-xs rounded-full font-medium" 
-                      :class="{
-                        'bg-orange-100 text-orange-800': user.role === UserRole.USER,
-                        'bg-blue-100 text-blue-800': user.role === UserRole.ADMIN,
-                        'bg-green-100 text-green-800': user.role === UserRole.SECRETARIA,
-                        'bg-yellow-100 text-yellow-800': user.role === UserRole.TESOUREIRO
-                      }">
-                  {{ 
-                    user.role === UserRole.ADMIN ? 'Administrador' : 
-                    user.role === UserRole.SECRETARIA ? 'Secretário' :
-                    user.role === UserRole.TESOUREIRO ? 'Tesoureiro' : 'Usuário'
-                  }}
+              </div>
+            </div>
+            
+            <!-- Layout para desktop - mantido original -->
+            <div class="hidden md:flex items-center p-3">
+              <!-- Posição no ranking e troféu -->
+              <div class="flex-shrink-0 w-10 text-center font-bold">
+                <span :class="{ 'text-xl': user.position <= 3 && user.totalSales > 0 }">
+                  {{ getTrophyEmoji(user.position, user.totalSales) }}
                 </span>
+              </div>
+              
+              <!-- Avatar do usuário -->
+              <div class="flex-shrink-0 ml-2">
+                <img 
+                  :src="user.photoURL && user.photoURL.trim() !== '' 
+                    ? user.photoURL 
+                    : getDefaultAvatar(user.displayName)" 
+                  alt="Avatar"
+                  class="w-10 h-10 rounded-full object-cover border border-gray-200"
+                >
+              </div>
+              
+              <!-- Informações do usuário (exatamente como no original) -->
+              <div class="ml-4 flex-grow">
+                <div class="flex flex-col sm:flex-row sm:justify-between">
+                  <div>
+                    <p class="font-medium text-gray-800">{{ user.displayName }}</p>
+                    <p class="text-xs text-gray-500">{{ user.email }}</p>
+                  </div>
+                  
+                  <!-- Contagem de vendas e tipo de usuário -->
+                  <div class="mt-1 sm:mt-0 flex flex-col items-end">
+                    <span :class="[
+                      'px-2 py-1 rounded-full text-xs font-medium',
+                      user.totalSales === 0
+                        ? 'bg-gray-100 text-gray-600'
+                        : user.totalSales <= 25 
+                          ? 'bg-red-100 text-red-800' 
+                          : 'bg-blue-100 text-blue-800'
+                    ]">
+                      {{ formatSalesCount(user) }}
+                    </span>
+                    
+                    <!-- Tipo de usuário movido para abaixo das vendas -->
+                    <span class="px-2 py-0.5 text-xs rounded-full font-medium mt-1" 
+                          :class="{
+                            'bg-orange-100 text-orange-800': user.role === UserRole.USER,
+                            'bg-blue-100 text-blue-800': user.role === UserRole.ADMIN,
+                            'bg-green-100 text-green-800': user.role === UserRole.SECRETARIA,
+                            'bg-yellow-100 text-yellow-800': user.role === UserRole.TESOUREIRO
+                          }">
+                      {{ 
+                        user.role === UserRole.ADMIN ? 'Administrador' : 
+                        user.role === UserRole.SECRETARIA ? 'Secretário' :
+                        user.role === UserRole.TESOUREIRO ? 'Tesoureiro' : 'Usuário'
+                      }}
+                    </span>
+                  </div>
+                </div>
+                
+                <!-- Apenas informação de congregação agora -->
+                <div v-if="user.congregation" class="mt-1 flex flex-wrap gap-1">
+                  <span class="px-2 py-0.5 text-xs rounded-full bg-gray-100 text-gray-600">
+                    {{ user.congregation }}
+                  </span>
+                </div>
               </div>
             </div>
           </div>
         </div>
         
         <!-- Empty state -->
-        <div v-else class="bg-gray-50 border border-gray-200 p-6 rounded-lg text-center">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mx-auto text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <div v-else class="bg-gray-50 border border-gray-200 p-3 md:p-6 rounded-lg text-center">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 md:h-16 md:w-16 mx-auto text-gray-400 mb-2 md:mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
           </svg>
-          <h3 class="text-lg font-medium text-gray-800 mb-2">Nenhum dado de ranking disponível</h3>
-          <p class="text-gray-600">
+          <h3 class="text-base md:text-lg font-medium text-gray-800 mb-1 md:mb-2">Nenhum dado de ranking disponível</h3>
+          <p class="text-gray-600 text-xs md:text-sm">
             Não encontramos nenhuma venda registrada no sistema. O ranking será atualizado automaticamente
             quando houver vendas.
           </p>
