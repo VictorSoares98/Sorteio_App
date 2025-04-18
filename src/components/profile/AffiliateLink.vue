@@ -1051,7 +1051,7 @@ onUnmounted(() => {
                   class="text-red-600 font-medium flex items-center"
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                   {{ error }}
                 </span>
@@ -1342,10 +1342,7 @@ onUnmounted(() => {
                         <p class="text-lg font-bold text-primary">
                           {{ affiliateSalesMetrics[user.id] ? (affiliateRankings.get(user.id) || '?') : '?' }}
                         </p>
-                        <span class="ml-1 text-xs text-gray-500">/ {{ affiliatedUsers.filter(u => 
-                          u.id in affiliateSalesMetrics && 
-                          affiliateSalesMetrics[u.id]?.totalSales > 0
-                        ).length }}</span>
+                        <span class="ml-1 text-xs text-gray-500">/ {{ affiliatedUsers.length + 1 }}</span>
                       </div>
                       <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-primary opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19l3 3m0 0l3-3m-3 3V10m0 0l3 3m-3-3l-3 3m12-3a9 9 0 11-18 0 9 9 0 0118 0z" />
