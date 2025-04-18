@@ -7,19 +7,25 @@ import AffiliateMetricsChart from '../charts/AffiliateMetricsChart.vue';
 // Estados
 const selectedAffiliateId = ref<string | null>(null);
 const loading = ref(false);
+const initialStatus = computed(() => getAffiliationStatus()); // Estado inicial como propriedade computada
 
 // Obter afiliados e métricas do composable
 const { 
   affiliatedUsers, 
   affiliateSalesMetrics, 
-  fetchAffiliatedUsers 
+  fetchAffiliatedUsers,
+  getAffiliationStatus // Adicionar esta linha
 } = useAffiliateCode();
+
+// Removido, pois initialStatus agora é uma propriedade computada
 
 // Carregar dados quando o componente for montado
 onMounted(async () => {
   loading.value = true;
   try {
     await fetchAffiliatedUsers();
+    // Removido, pois initialStatus agora é uma propriedade computada
+    
     // Se tiver afiliados, selecionar o primeiro por padrão
     if (affiliatedUsers.value.length > 0) {
       selectedAffiliateId.value = affiliatedUsers.value[0].id;
@@ -65,11 +71,13 @@ const selectAffiliate = (id: string) => {
 <template>
   <Card title="Métricas de Afiliados" subtitle="Desempenho da sua rede de afiliados">
     <div class="p-4">
-      <div v-if="loading" class="flex justify-center items-center p-12">
+      <div v-if="loading" class="flex flex-col justify-center items-center p-12">
         <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+        <p class="mt-4 text-gray-500">{{ initialStatus.hasAffiliates ? 'Carregando métricas dos seus afiliados...' : 'Verificando afiliações...' }}</p>
       </div>
       
-      <div v-else-if="affiliatedUsers.length === 0" class="text-center py-10 px-4 bg-gray-50 rounded-lg border border-gray-200">
+      <!-- Mostrar mensagem adequada com base no status inicial -->
+      <div v-else-if="!initialStatus.hasAffiliates && affiliatedUsers.length === 0" class="text-center py-10 px-4 bg-gray-50 rounded-lg border border-gray-200">
         <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mx-auto text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
         </svg>
@@ -77,6 +85,7 @@ const selectAffiliate = (id: string) => {
         <p class="text-gray-500 max-w-md mx-auto mt-2">Compartilhe seu código de afiliação para começar a formar sua rede e visualizar o desempenho dos seus afiliados.</p>
       </div>
       
+      <!-- Resto do conteúdo para usuários com afiliados -->
       <div v-else class="grid grid-cols-1 md:grid-cols-3 gap-6">
         <!-- Lista de afiliados com novo visual -->
         <div class="md:col-span-1 bg-white rounded-lg shadow-md border border-gray-200 overflow-hidden">

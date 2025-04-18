@@ -23,7 +23,8 @@ const {
   updateAffiliateRole,
   isGeneratingCode,
   affiliateToUser,
-  invalidateCache  // Adicionar esta importação
+  invalidateCache,  // Adicionar esta importação
+  getAffiliationStatus  // Adicionar esta linha
 } = useAffiliateCode();
 
 // Usar o novo composable de limpeza de timers
@@ -685,16 +686,38 @@ watch(() => currentUser.value?.affiliateCode, (newCode, oldCode) => {
   }
 });
 
+// Adicionar estado para controlar o carregamento do componente
+const componentLoading = ref(true);
+const initialStatus = ref(getAffiliationStatus());
+
+// Verificação inicial rápida para exibir a UI correta antes mesmo do carregamento completo
+const quickIsAlreadyAffiliated = computed(() => initialStatus.value.isAffiliated);
+const quickHasAffiliates = computed(() => initialStatus.value.hasAffiliates);
+
+// O restante da lógica continua usando os valores completos para maior precisão
+// após o carregamento completo
+
 // Carregar afiliados e iniciar verificação quando o componente é montado
 onMounted(async () => {
-  if (currentUser.value?.id) {
-    await fetchAffiliatedUsers(); // Usar a função do composable
-    
-    if (affiliateCode.value) {
-      startExpiryCheck();
-      // Verificar imediatamente também
-      checkCurrentCode();
+  componentLoading.value = true;
+  
+  try {
+    if (currentUser.value?.id) {
+      await fetchAffiliatedUsers(); // Usar a função do composable
+      
+      // Atualizar o status após o carregamento completo
+      initialStatus.value = getAffiliationStatus();
+      
+      if (affiliateCode.value) {
+        startExpiryCheck();
+        // Verificar imediatamente também
+        checkCurrentCode();
+      }
     }
+  } catch (err) {
+    console.error('[AffiliateLink] Erro ao carregar dados de afiliação:', err);
+  } finally {
+    componentLoading.value = false;
   }
   
   // Adicionar evento de clique global para fechar menus
@@ -718,7 +741,78 @@ onUnmounted(() => {
     :subtitle="affiliationSummary" 
     class="mb-6"
   >
-    <div class="p-4">
+    <!-- Adicionar indicador de carregamento -->
+    <div v-if="componentLoading" class="p-4 flex justify-center items-center">
+      <div class="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary"></div>
+      <span class="ml-2 text-gray-600">Carregando informações...</span>
+    </div>
+    
+    <div v-else class="p-4">
+      <!-- Banner de identificação do tipo de usuário no programa de afiliações -->
+      <div class="mb-6 rounded-lg overflow-hidden border">
+        <div class="bg-primary-dark text-white px-4 py-2 font-medium">
+          Seu status no programa de afiliações
+        </div>
+        <div class="p-4 bg-white">
+          <!-- Usar os valores rápidos para exibição inicial -->
+          <div v-if="quickIsAlreadyAffiliated && quickHasAffiliates" class="flex items-start">
+            <div class="h-10 w-10 rounded-full bg-purple-100 flex items-center justify-center flex-shrink-0">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 11c0 3.517-1.009 6.799-2.753 9.571m-3.44-2.04l.054-.09A13.916 13.916 0 008 11a4 4 0 118 0c0 1.017-.07 2.019-.203 3m-2.118 6.844A21.88 21.88 0 0015.171 17m3.839 1.132c.645-2.266.99-4.659.99-7.132A8 8 0 008 4.07M3 15.364c.64-1.319 1-2.8 1-4.364 0-1.457.39-2.823 1.07-4" />
+              </svg>
+            </div>
+            <div class="ml-4">
+              <h3 class="font-medium text-gray-900">Afiliado e Afiliador</h3>
+              <p class="text-gray-600 text-sm mt-1">
+                Você está afiliado a <strong>{{ currentUser?.affiliatedTo }}</strong> e também possui {{ affiliatedUsers.length }} {{ affiliatedUsers.length === 1 ? 'afiliado direto' : 'afiliados diretos' }}.
+              </p>
+            </div>
+          </div>
+
+          <div v-else-if="quickIsAlreadyAffiliated" class="flex items-start">
+            <div class="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+              </svg>
+            </div>
+            <div class="ml-4">
+              <h3 class="font-medium text-gray-900">Afiliado</h3>
+              <p class="text-gray-600 text-sm mt-1">
+                Você está afiliado a <strong>{{ currentUser?.affiliatedTo }}</strong>. Afiliados podem participar do programa de vendas e ganhar recompensas.
+              </p>
+            </div>
+          </div>
+
+          <div v-else-if="quickHasAffiliates" class="flex items-start">
+            <div class="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+              </svg>
+            </div>
+            <div class="ml-4">
+              <h3 class="font-medium text-gray-900">Afiliador</h3>
+              <p class="text-gray-600 text-sm mt-1">
+                Você possui {{ affiliatedUsers.length }} {{ affiliatedUsers.length === 1 ? 'afiliado direto' : 'afiliados diretos' }}. Como afiliador, você pode gerenciar sua rede e acompanhar as métricas de vendas.
+              </p>
+            </div>
+          </div>
+
+          <div v-else class="flex items-start">
+            <div class="h-10 w-10 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <div class="ml-4">
+              <h3 class="font-medium text-gray-900">Sem Afiliações</h3>
+              <p class="text-gray-600 text-sm mt-1">
+                Você ainda não possui conexões no programa de afiliações. Você pode se afiliar a alguém ou gerar um código para convidar afiliados.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Sistema unificado de alertas - sem duplicação -->
       <!-- Alerta de erro geral -->
       <Alert

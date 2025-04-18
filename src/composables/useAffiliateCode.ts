@@ -97,7 +97,7 @@ export function useAffiliateCode() {
     } else if (expiryTimestamp instanceof Date) {
       expiryDate = expiryTimestamp;
     } else {
-      // Falback: Se não conseguir converter, considerar expirado
+      // Fallback: Se não conseguir converter, considerar expirado
       return false;
     }
     
@@ -474,6 +474,42 @@ export function useAffiliateCode() {
     metricsCache.value = null;
   };
 
+  /**
+   * Método para verificação rápida do status de afiliação do usuário
+   * Não depende de carregamento assíncrono de dados completos
+   * @returns Objeto com informações sobre o estado de afiliação
+   */
+  const getAffiliationStatus = () => {
+    // Obtém o usuário atual do authStore
+    const user = currentUser.value;
+    
+    if (!user) {
+      return {
+        isAuthenticated: false,
+        isAffiliated: false,
+        hasAffiliates: false,
+        isAffiliatePending: false,
+        affiliationComplete: false
+      };
+    }
+    
+    // Verificar rapidamente o status de afiliação a partir dos dados já disponíveis
+    const isAffiliated = !!user.affiliatedTo;
+    
+    // Verificar se possui afiliados a partir do array de afiliados no objeto do usuário
+    const hasAffiliates = (user.affiliates && user.affiliates.length > 0) || affiliatedUsers.value.length > 0;
+    
+    return {
+      isAuthenticated: true,
+      isAffiliated,
+      hasAffiliates,
+      // Indica se estamos esperando dados completos
+      isAffiliatePending: loading.value,
+      // Indica se todos os dados de afiliação foram carregados
+      affiliationComplete: !loading.value && (hasAffiliates ? affiliatedUsers.value.length > 0 : true)
+    };
+  };
+
   // Inicializar verificação de código
   checkCurrentCode();
   
@@ -496,6 +532,7 @@ export function useAffiliateCode() {
     setTemporaryError,
     setTemporarySuccess,
     clearAllTimeouts,
-    invalidateCache
+    invalidateCache,
+    getAffiliationStatus,
   };
 }
