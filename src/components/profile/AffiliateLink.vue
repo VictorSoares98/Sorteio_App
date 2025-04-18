@@ -37,7 +37,6 @@ const alreadyNotifiedCodes = ref(new Set<string>());
 
 // Estados adicionais necessários para o template
 const isAlreadyAffiliated = computed(() => !!currentUser.value?.affiliatedTo);
-const hasAffiliates = computed(() => affiliatedUsers.value.length > 0);
 const codeCopied = ref(false);
 const copied = ref(false);
 const affiliateLink = computed(() => {
@@ -756,44 +755,60 @@ onUnmounted(() => {
         <div class="p-4 bg-white">
           <!-- Usar os valores rápidos para exibição inicial -->
           <div v-if="quickIsAlreadyAffiliated && quickHasAffiliates" class="flex items-start">
-            <div class="h-10 w-10 rounded-full bg-purple-100 flex items-center justify-center flex-shrink-0">
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 11c0 3.517-1.009 6.799-2.753 9.571m-3.44-2.04l.054-.09A13.916 13.916 0 008 11a4 4 0 118 0c0 1.017-.07 2.019-.203 3m-2.118 6.844A21.88 21.88 0 0015.171 17m3.839 1.132c.645-2.266.99-4.659.99-7.132A8 8 0 008 4.07M3 15.364c.64-1.319 1-2.8 1-4.364 0-1.457.39-2.823 1.07-4" />
-              </svg>
-            </div>
             <div class="ml-4">
-              <h3 class="font-medium text-gray-900">Afiliado e Afiliador</h3>
+              <h3 class="font-medium text-gray-900 flex items-center justify-center">
+                <span class="h-10 w-10 rounded-full bg-purple-100 flex items-center justify-center flex-shrink-0 mr-1 sm:mr-3">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 11c0 3.517-1.009 6.799-2.753 9.571m-3.44-2.04l.054-.09A13.916 13.916 0 008 11a4 4 0 118 0c0 1.017-.07 2.019-.203 3m-2.118 6.844A21.88 21.88 0 0015.171 17m3.839 1.132c.645-2.266.99-4.659.99-7.132A8 8 0 008 4.07M3 15.364c.64-1.319 1-2.8 1-4.364 0-1.457.39-2.823 1.07-4" />
+                  </svg>
+                </span>
+                Afiliado e Afiliador
+              </h3>
               <p class="text-gray-600 text-sm mt-1">
                 Você está afiliado a <strong>{{ currentUser?.affiliatedTo }}</strong> e também possui {{ affiliatedUsers.length }} {{ affiliatedUsers.length === 1 ? 'afiliado direto' : 'afiliados diretos' }}.
               </p>
             </div>
           </div>
 
-          <div v-else-if="quickIsAlreadyAffiliated" class="flex items-start">
-            <div class="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
-              </svg>
-            </div>
-            <div class="ml-4">
-              <h3 class="font-medium text-gray-900">Afiliado</h3>
-              <p class="text-gray-600 text-sm mt-1">
+          <div v-else-if="quickIsAlreadyAffiliated" class="flex flex-col sm:flex-row items-start">
+            <div class="sm:ml-3 md:ml-4 w-full text-center sm:text-left">
+              <h3 class="font-medium text-gray-900 text-sm sm:text-base md:text-lg flex items-center justify-center sm:justify-start">
+                <span class="h-7 w-7 sm:h-8 sm:w-8 md:h-10 md:w-10 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0 mr-1 sm:mr-3">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 sm:h-5 sm:w-5 md:h-6 md:w-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+                  </svg>
+                </span>
+                Afiliado
+              </h3>
+              <p class="text-gray-600 text-[11px] sm:text-xs md:text-sm mt-1">
                 Você está afiliado a <strong>{{ currentUser?.affiliatedTo }}</strong>. Afiliados podem participar do programa de vendas e ganhar recompensas.
               </p>
             </div>
           </div>
 
-          <div v-else-if="quickHasAffiliates" class="flex items-start">
-            <div class="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-              </svg>
-            </div>
-            <div class="ml-4">
-              <h3 class="font-medium text-gray-900">Afiliador</h3>
-              <p class="text-gray-600 text-sm mt-1">
+          <div v-else-if="quickHasAffiliates" class="flex flex-col sm:flex-row items-start">
+            <div class="sm:ml-3 md:ml-4 w-full">
+              <h3 class="font-medium text-gray-900 text-sm sm:text-base md:text-lg flex items-center justify-center sm:justify-start">
+                <span class="h-7 w-7 sm:h-8 sm:w-8 md:h-10 md:w-10 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0 mr-1 sm:mr-3">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 sm:h-5 sm:w-5 md:h-6 md:w-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                  </svg>
+                </span>
+                Afiliador
+              </h3>
+              <p class="text-gray-600 text-[11px] sm:text-xs md:text-sm mt-1 leading-snug">
                 Você possui {{ affiliatedUsers.length }} {{ affiliatedUsers.length === 1 ? 'afiliado direto' : 'afiliados diretos' }}. Como afiliador, você pode gerenciar sua rede e acompanhar as métricas de vendas.
               </p>
+              
+              <!-- Integração do aviso "Importante" com responsividade melhorada -->
+              <div class="mt-1.5 sm:mt-2 md:mt-3 p-1.5 sm:p-2 md:p-3 bg-yellow-50 rounded-md border border-yellow-200">
+                <p class="text-yellow-700 text-[9px] sm:text-[10px] md:text-xs flex items-start">
+                  <svg class="h-3 w-3 sm:h-3.5 sm:w-3.5 md:h-4 md:w-4 text-yellow-500 mr-1 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                  <span class="leading-tight"><strong class="font-bold">Importante:</strong> Como você já possui afiliados, não é possível se afiliar a outro usuário. Isso é necessário para preservar a estrutura hierárquica de afiliações.</span>
+                </p>
+              </div>
             </div>
           </div>
 
@@ -857,38 +872,21 @@ onUnmounted(() => {
 
       <!-- Usuário já afiliado - Aviso aprimorado com texto melhorado -->
       <div v-if="isAlreadyAffiliated" class="mb-6 p-4 bg-green-50 rounded-lg border border-green-200">
-        <div class="flex items-start">
-          <div class="mr-3 flex-shrink-0">
-            <svg class="h-6 w-6 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-          </div>
-          <div>
-            <h3 class="text-lg font-medium text-green-700 mb-2">Conexão Ativa</h3>
-            <p class="text-green-600">
+        <div class="flex flex-col sm:flex-row items-start">
+          <div class="sm:ml-3 md:ml-4 w-full text-center sm:text-left">
+            <h3 class="font-medium text-green-700 mb-2 text-sm sm:text-base md:text-lg flex items-center justify-center sm:justify-start">
+              <span class="h-7 w-7 sm:h-8 sm:w-8 md:h-10 md:w-10 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0 mr-1 sm:mr-3">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 sm:h-5 sm:w-5 md:h-6 md:w-6 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </span>
+              Conexão Ativa
+            </h3>
+            <p class="text-green-600 text-[11px] sm:text-xs md:text-sm">
               Você está atualmente conectado à conta de <strong>{{ currentUser?.affiliatedTo }}</strong>. Por questões de hierarquia e integridade do sistema, essa afiliação não pode ser alterada, a menos que seja removida pela pessoa a quem você está afiliado.
             </p>
-            <p v-if="currentUser?.affiliatedToEmail" class="text-green-600 text-sm mt-1">
+            <p v-if="currentUser?.affiliatedToEmail" class="text-green-600 text-[11px] sm:text-xs mt-1">
               {{ currentUser.affiliatedToEmail }}
-            </p>
-          </div>
-        </div>
-      </div>
-      
-      <!-- Aviso de restrição de afiliação - Melhorado com ícone -->
-      <div v-if="hasAffiliates && !isAlreadyAffiliated" 
-           class="mb-6 p-4 bg-yellow-50 rounded-lg border border-yellow-200">
-        <div class="flex items-start">
-          <div class="mr-3 flex-shrink-0">
-            <svg class="h-6 w-6 text-yellow-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-            </svg>
-          </div>
-          <div>
-            <h3 class="text-lg font-medium text-yellow-700 mb-2">Importante</h3>
-            <p class="text-yellow-600">
-              Como você já possui afiliados, não é possível se afiliar a outro usuário.
-              Isso é necessário para preservar a estrutura hierárquica de afiliações.
             </p>
           </div>
         </div>
@@ -1160,18 +1158,18 @@ onUnmounted(() => {
         </div>
         
         <div v-else class="mb-4">
-          <div class="p-4 bg-gray-50 border border-gray-200 rounded-lg mb-4">
-            <div class="flex items-start">
-              <div class="mr-3 flex-shrink-0">
+          <div class="p-3 sm:p-4 bg-gray-50 border border-gray-200 rounded-lg mb-4">
+            <div class="flex flex-col sm:flex-row sm:items-start">
+              <div class="mb-2 sm:mb-0 sm:mr-3 flex-shrink-0 flex justify-center sm:justify-start">
                 <svg class="h-5 w-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
               </div>
-              <div>
-                <p class="text-gray-600">
+              <div class="text-center sm:text-left">
+                <p class="text-gray-600 text-sm sm:text-base">
                   Você ainda não possui um código de afiliado ativo. Gere um código temporário válido por 30 minutos.
                 </p>
-                <p class="text-sm text-gray-500 mt-2">
+                <p class="text-xs sm:text-sm text-gray-500 mt-1 sm:mt-2">
                   Códigos temporários permitem que outros usuários se vinculem à sua conta.
                 </p>
               </div>
