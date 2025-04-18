@@ -758,13 +758,32 @@ export const getAffiliatedUsers = async (userId: string): Promise<User[]> => {
       return [];
     }
     
-    // Buscar detalhes de cada afiliado
+    // Busca em lote em vez de individual
+    // Dividir em chunks para respeitar limites do Firestore (máximo 10 itens no 'in')
     const affiliates: User[] = [];
-    for (const id of affiliateIds) {
-      const affiliateSnap = await getDoc(doc(db, 'users', id));
-      if (affiliateSnap.exists()) {
-        // Usar a função utilitária processFirestoreDocument
-        affiliates.push(processFirestoreDocument<User>(affiliateSnap));
+    const chunkSize = 10;
+    
+    for (let i = 0; i < affiliateIds.length; i += chunkSize) {
+      const chunk = affiliateIds.slice(i, i + chunkSize);
+      const q = query(collection(db, 'users'), where('id', 'in', chunk));
+      const querySnapshot = await getDocs(q);
+      
+      querySnapshot.forEach(doc => {
+        affiliates.push(processFirestoreDocument<User>(doc));
+      });
+    }
+    
+    // Caso alguns IDs não tenham sido encontrados pela query, busque-os individualmente
+    // (apenas necessário porque 'id' pode não ser o campo que estamos procurando)
+    const foundIds = new Set(affiliates.map(user => user.id));
+    const missingIds = affiliateIds.filter((id: string) => !foundIds.has(id));
+    
+    if (missingIds.length > 0) {
+      for (const id of missingIds) {
+        const userDoc = await getDoc(doc(db, 'users', id));
+        if (userDoc.exists()) {
+          affiliates.push(processFirestoreDocument<User>(userDoc));
+        }
       }
     }
     

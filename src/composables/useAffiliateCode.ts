@@ -29,6 +29,32 @@ export function useAffiliateCode() {
   // Gerenciamento de estado de timeouts para limpeza automática de mensagens
   const timeoutIds = ref<number[]>([]);
   
+  // Adicionar cache para dados de afiliados
+  const affiliatesCache = ref<{
+    data: User[];
+    timestamp: number;
+    userId: string;
+  } | null>(null);
+  
+  // Cache para métricas
+  const metricsCache = ref<{
+    data: Record<string, AffiliateSalesMetrics>;
+    timestamp: number;
+    userId: string;
+  } | null>(null);
+  
+  // Duração do cache em millisegundos (5 minutos)
+  const CACHE_DURATION = 5 * 60 * 1000;
+  
+  // Verificar se o cache é válido
+  const isCacheValid = (cacheRef: any, userId: string) => {
+    if (!cacheRef.value) return false;
+    if (cacheRef.value.userId !== userId) return false;
+    
+    const now = Date.now();
+    return (now - cacheRef.value.timestamp) < CACHE_DURATION;
+  };
+  
   // Limpar todos os timeouts ao desmontar o componente
   const clearAllTimeouts = () => {
     timeoutIds.value.forEach(id => window.clearTimeout(id));
@@ -135,16 +161,36 @@ export function useAffiliateCode() {
     }
   };
   
-  // Buscar afiliados
+  // Buscar afiliados com cache
   const fetchAffiliatedUsers = async () => {
     if (!currentUser.value) return;
+    
+    const userId = currentUser.value.id;
+    
+    // Verificar cache primeiro
+    if (isCacheValid(affiliatesCache, userId)) {
+      console.log('[useAffiliateCode] Usando cache de afiliados');
+      affiliatedUsers.value = affiliatesCache.value!.data;
+      
+      // Ainda assim, buscar métricas que podem ter sido atualizadas
+      await fetchAffiliatesMetrics();
+      
+      return affiliatesCache.value!.data;
+    }
     
     loading.value = true;
     try {
       // Importação dinâmica
       const profileModule = await import('../services/profile');
-      const users = await profileModule.getAffiliatedUsers(currentUser.value.id);
+      const users = await profileModule.getAffiliatedUsers(userId);
+      
+      // Atualizar estado e cache
       affiliatedUsers.value = users;
+      affiliatesCache.value = {
+        data: users,
+        timestamp: Date.now(),
+        userId
+      };
       
       // Após buscar afiliados, buscar métricas para cada um
       await fetchAffiliatesMetrics();
@@ -310,16 +356,26 @@ export function useAffiliateCode() {
   };
 
   // NOVA FUNCIONALIDADE: Métricas de desempenho para afiliados
+  // Otimização para métricas - carregar apenas pedidos relevantes
   const fetchAffiliatesMetrics = async () => {
     if (!currentUser.value || affiliatedUsers.value.length === 0) return;
     
+    const userId = currentUser.value.id;
+    
+    // Verificar cache de métricas
+    if (isCacheValid(metricsCache, userId)) {
+      console.log('[useAffiliateCode] Usando cache de métricas');
+      affiliateSalesMetrics.value = metricsCache.value!.data;
+      return;
+    }
+    
     try {
-      // Carregar todos os pedidos para análise
-      await orderStore.fetchAllOrders();
-      const allOrders = orderStore.orders;
+      // Obter apenas IDs dos afiliados para filtrar pedidos
+      const affiliateIds = affiliatedUsers.value.map(user => user.id);
       
-      // Preparar métricas para cada afiliado
-      const metrics: Record<string, AffiliateSalesMetrics> = {};
+      // Carregar apenas pedidos relevantes para estes afiliados
+      await orderStore.fetchOrdersBySellerIds(affiliateIds);
+      const relevantOrders = orderStore.getOrdersBySellerIds(affiliateIds);
       
       // Data atual e cálculo de meses
       const now = new Date();
@@ -328,10 +384,13 @@ export function useAffiliateCode() {
       const lastMonth = currentMonth === 0 ? 11 : currentMonth - 1;
       const lastMonthYear = currentMonth === 0 ? currentYear - 1 : currentYear;
       
+      // Preparar métricas para cada afiliado
+      const metrics: Record<string, AffiliateSalesMetrics> = {};
+      
       // Para cada afiliado, calcular métricas
       for (const affiliate of affiliatedUsers.value) {
         // Filtrar pedidos do afiliado (usando sellerId)
-        const affiliateOrders = allOrders.filter(order => 
+        const affiliateOrders = relevantOrders.filter((order: any) => 
           order.sellerId === affiliate.id || 
           order.originalSellerId === affiliate.id
         );
@@ -358,18 +417,18 @@ export function useAffiliateCode() {
         const lastSaleDate = sortedOrders[0].createdAt;
         
         // Calcular valor total
-        const totalValue = affiliateOrders.reduce((sum, order) => {
+        const totalValue = affiliateOrders.reduce((sum: number, order: any) => {
           return sum + (order.generatedNumbers?.length || 0);
         }, 0);
         
         // Calcular vendas por mês
-        const salesThisMonth = affiliateOrders.filter(order => {
+        const salesThisMonth = affiliateOrders.filter((order: any) => {
           const orderDate = order.createdAt;
           return orderDate.getMonth() === currentMonth && 
                  orderDate.getFullYear() === currentYear;
         }).length;
         
-        const salesLastMonth = affiliateOrders.filter(order => {
+        const salesLastMonth = affiliateOrders.filter((order: any) => {
           const orderDate = order.createdAt;
           return orderDate.getMonth() === lastMonth && 
                  orderDate.getFullYear() === lastMonthYear;
@@ -397,9 +456,22 @@ export function useAffiliateCode() {
       // Atualizar o estado
       affiliateSalesMetrics.value = metrics;
       
+      // Armazenar em cache
+      metricsCache.value = {
+        data: affiliateSalesMetrics.value,
+        timestamp: Date.now(),
+        userId
+      };
+      
     } catch (err) {
       console.error('[useAffiliateCode] Erro ao calcular métricas de afiliados:', err);
     }
+  };
+  
+  // Limpar cache quando necessário
+  const invalidateCache = () => {
+    affiliatesCache.value = null;
+    metricsCache.value = null;
   };
 
   // Inicializar verificação de código
@@ -423,6 +495,7 @@ export function useAffiliateCode() {
     updateAffiliateRole,
     setTemporaryError,
     setTemporarySuccess,
-    clearAllTimeouts
+    clearAllTimeouts,
+    invalidateCache
   };
 }

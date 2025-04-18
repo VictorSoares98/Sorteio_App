@@ -22,7 +22,8 @@ const {
   removeAffiliate,
   updateAffiliateRole,
   isGeneratingCode,
-  affiliateToUser
+  affiliateToUser,
+  invalidateCache  // Adicionar esta importação
 } = useAffiliateCode();
 
 // Usar o novo composable de limpeza de timers
@@ -614,6 +615,7 @@ const reloadAffiliates = async () => {
   reloadingAffiliates.value = true;
   try {
     if (currentUser.value?.id) {
+      invalidateCache(); // Adicionar esta linha para invalidar o cache
       await fetchAffiliatedUsers(); // Usar a função do composable ao invés do userStore
     }
   } finally {

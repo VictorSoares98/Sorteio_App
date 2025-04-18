@@ -23,7 +23,7 @@ export const useOrderStore = defineStore('order', () => {
   const authStore = useAuthStore();
 
   // Estado de conexão
-  const { isOnline, connectionStatus } = useConnectionStatus();
+  const { isOnline } = useConnectionStatus();
   const pendingOrdersCount = ref(0);
 
   // Computar os pedidos do usuário atual
@@ -238,6 +238,75 @@ export const useOrderStore = defineStore('order', () => {
     }
   };
 
+  // Adicionar novos métodos para buscar pedidos por vendedores específicos
+  const fetchOrdersBySellerIds = async (sellerIds: string[]) => {
+    if (!sellerIds || sellerIds.length === 0) return [];
+    
+    loading.value = true;
+    error.value = null;
+    
+    try {
+      const ordersRef = collection(db, 'orders');
+      
+      // Dividir em chunks para respeitar limites do Firestore
+      const chunkSize = 10;
+      let fetchedOrders: Order[] = [];
+      
+      for (let i = 0; i < sellerIds.length; i += chunkSize) {
+        const chunk = sellerIds.slice(i, i + chunkSize);
+        
+        // Query para buscar pedidos onde sellerId está no array de vendedores
+        const q1 = query(ordersRef, where('sellerId', 'in', chunk));
+        const snapshot1 = await getDocs(q1);
+        
+        // Query para buscar pedidos onde originalSellerId está no array de vendedores
+        const q2 = query(ordersRef, where('originalSellerId', 'in', chunk));
+        const snapshot2 = await getDocs(q2);
+        
+        // Processar resultados da primeira query
+        snapshot1.forEach(doc => {
+          const orderData = processFirestoreDocument<Order>(doc);
+          if (!fetchedOrders.some(order => order.id === orderData.id)) {
+            fetchedOrders.push(orderData);
+          }
+        });
+        
+        // Processar resultados da segunda query
+        snapshot2.forEach(doc => {
+          const orderData = processFirestoreDocument<Order>(doc);
+          if (!fetchedOrders.some(order => order.id === orderData.id)) {
+            fetchedOrders.push(orderData);
+          }
+        });
+      }
+      
+      // Adicionar os novos pedidos ao estado, evitando duplicatas
+      const uniqueOrderIds = new Set(orders.value.map(o => o.id));
+      const newOrders = fetchedOrders.filter(o => !uniqueOrderIds.has(o.id));
+      
+      if (newOrders.length > 0) {
+        orders.value = [...orders.value, ...newOrders];
+      }
+      
+      return fetchedOrders;
+    } catch (err: any) {
+      console.error('Erro ao buscar pedidos por vendedores:', err);
+      error.value = err.message || 'Falha ao carregar pedidos.';
+      return [];
+    } finally {
+      loading.value = false;
+    }
+  };
+
+  // Obter pedidos específicos de vendedores do estado atual
+  const getOrdersBySellerIds = (sellerIds: string[]): Order[] => {
+    const sellerIdSet = new Set(sellerIds);
+    return orders.value.filter(order => 
+      (order.sellerId && sellerIdSet.has(order.sellerId)) || 
+      (order.originalSellerId && sellerIdSet.has(order.originalSellerId))
+    );
+  };
+
   // Inicializar busca de pedidos
   if (authStore.currentUser) {
     fetchUserOrders();
@@ -252,7 +321,9 @@ export const useOrderStore = defineStore('order', () => {
     fetchAllOrders,
     createOrder,
     pendingOrdersCount,
-    connectionStatus
+    isOnline,
+    fetchOrdersBySellerIds,
+    getOrdersBySellerIds
   };
 });
 
