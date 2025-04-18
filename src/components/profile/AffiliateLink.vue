@@ -647,6 +647,30 @@ const isMetricsExpanded = (userId: string) => {
   return expandedMetrics.value.has(userId);
 };
 
+// Calcular posições de ranking para afiliados
+const affiliateRankings = computed(() => {
+  // Classificar afiliados por vendas totais (maior para menor)
+  const sortedAffiliates = [...affiliatedUsers.value]
+    .filter(user => 
+      affiliateSalesMetrics.value && 
+      affiliateSalesMetrics.value[user.id] && 
+      affiliateSalesMetrics.value[user.id].totalSales > 0
+    )
+    .sort((a, b) => {
+      const salesA = affiliateSalesMetrics.value[a.id].totalSales;
+      const salesB = affiliateSalesMetrics.value[b.id].totalSales;
+      return salesB - salesA; // Ordenação decrescente
+    });
+
+  // Criar mapa de ID para posição no ranking
+  const rankings = new Map();
+  sortedAffiliates.forEach((user, index) => {
+    rankings.set(user.id, index + 1);
+  });
+
+  return rankings;
+});
+
 // Observar mudanças no código e expiração
 watch(() => currentUser.value?.affiliateCode, (newCode, oldCode) => {
   if (newCode && newCode !== oldCode) {
@@ -1224,9 +1248,12 @@ onUnmounted(() => {
                     <div class="flex items-end justify-between mt-1">
                       <div class="flex items-center">
                         <p class="text-lg font-bold text-primary">
-                            {{ (user as any).position || (affiliateSalesMetrics[user.id] && affiliateSalesMetrics[user.id].hasOwnProperty('rank') ? (affiliateSalesMetrics[user.id] as any).rank : '?') }}
-                          </p>
-                        <span class="ml-1 text-xs text-gray-500">/ {{ affiliatedUsers.length }}</span>
+                          {{ affiliateSalesMetrics[user.id] ? (affiliateRankings.get(user.id) || '?') : '?' }}
+                        </p>
+                        <span class="ml-1 text-xs text-gray-500">/ {{ affiliatedUsers.filter(u => 
+                          u.id in affiliateSalesMetrics && 
+                          affiliateSalesMetrics[u.id]?.totalSales > 0
+                        ).length }}</span>
                       </div>
                       <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-primary opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19l3 3m0 0l3-3m-3 3V10m0 0l3 3m-3-3l-3 3m12-3a9 9 0 11-18 0 9 9 0 0118 0z" />
