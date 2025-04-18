@@ -59,6 +59,12 @@ const fixAdminRole = async () => {
 
 // Função para alternar entre abas com reinicialização para o componente de afiliados
 const switchTab = (tab: string) => {
+  // Se já estiver na mesma aba, não fazer nada
+  if (activeTab.value === tab) {
+    console.log('[ProfileView] Já está na aba:', tab);
+    return;
+  }
+  
   // Se estiver mudando para a aba de afiliados, incrementar a chave
   if (tab === 'affiliate') {
     affiliateLinkKey.value++;
