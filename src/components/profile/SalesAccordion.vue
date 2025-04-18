@@ -156,11 +156,17 @@ onMounted(async () => {
         <div v-else>
           <!-- Search -->
           <div class="mb-4">
+            <label for="search-orders" class="block text-sm font-medium text-gray-700 mb-1">
+              Buscar vendas
+            </label>
             <input
+              id="search-orders"
+              name="search-orders"
               v-model="searchQuery"
               type="text"
               placeholder="Buscar por nome do comprador, número ou data..."
               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
+              autocomplete="off"
             />
           </div>
           
