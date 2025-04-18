@@ -1,6 +1,12 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, setPersistence, browserLocalPersistence } from 'firebase/auth';
-import { getFirestore, enableIndexedDbPersistence } from 'firebase/firestore';
+import { 
+  initializeFirestore, 
+  CACHE_SIZE_UNLIMITED, 
+  persistentLocalCache, 
+  persistentMultipleTabManager,
+  type Firestore 
+} from 'firebase/firestore';
 
 const firebaseConfig = {
     apiKey: "AIzaSyDZvWlQfdskmFmyiRHxjldX6VsY_2JlnRw",
@@ -13,27 +19,32 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
-const db = getFirestore(app);
+
+// Inicializar Firestore com configurações de cache persistente
+// Tipagem explícita para evitar erro de 'any' implícito
+let db: Firestore;
+try {
+  // Configurar Firestore com cache persistente e suporte para múltiplas abas
+  db = initializeFirestore(app, {
+    localCache: persistentLocalCache({
+      tabManager: persistentMultipleTabManager(),
+      cacheSizeBytes: CACHE_SIZE_UNLIMITED
+    })
+  });
+
+  console.log("Persistência Firestore configurada com sucesso!");
+} catch (err) {
+  console.error("Erro ao configurar persistência Firestore:", err);
+  
+  // Inicializar Firestore sem persistência como fallback
+  db = initializeFirestore(app, {});
+  console.warn("Firestore inicializado sem persistência local.");
+}
 
 // Configurar persistência local para autenticação
 setPersistence(auth, browserLocalPersistence)
   .catch((error) => {
     console.error("Erro ao configurar persistência de autenticação:", error);
-  });
-
-// Habilitar persistência offline para Firestore
-enableIndexedDbPersistence(db)
-  .then(() => {
-    console.log("Persistência Firestore habilitada com sucesso!");
-  })
-  .catch((err) => {
-    if (err.code === 'failed-precondition') {
-      console.warn("Persistência falhou. Múltiplas abas abertas simultaneamente.");
-    } else if (err.code === 'unimplemented') {
-      console.warn("Navegador não suporta persistência offline.");
-    } else {
-      console.error("Erro ao configurar persistência Firestore:", err);
-    }
   });
 
 export { auth, db };

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { RouterView, useRoute } from 'vue-router'
-import { computed, onMounted, watch } from 'vue'
+import { computed, onMounted, watch, ref } from 'vue'
 import Navbar from './components/layout/Navbar.vue'
 import Footer from './components/layout/Footer.vue'
 import { useAuthStore } from './stores/authStore'
@@ -15,20 +15,29 @@ const isAuthPage = computed(() => {
   return route.path === '/login' || route.path === '/register'
 })
 
-// Atualizar dados do usuário quando o estado de autenticação mudar
-watch(() => authStore.currentUser, (newValue) => {
-  if (newValue) {
-    console.log('[App] Usuário autenticado, atualizando dados');
-    authStore.fetchUserData(true);
-  }
-})
+// Variável para controlar se já verificamos o usuário
+const userDataUpdated = ref(false);
 
-// Verificar e atualizar dados do usuário ao montar o componente
-onMounted(() => {
-  if (authStore.currentUser) {
-    console.log('[App] App montado, atualizando dados do usuário');
-    authStore.fetchUserData(true);
+// Atualização de dados do usuário para evitar loop infinito
+watch(() => authStore.isAuthenticated, (isAuthenticated) => {
+  if (isAuthenticated && !userDataUpdated.value) {
+    console.log('[App] Usuário autenticado, atualizando dados (única vez)');
+    userDataUpdated.value = true;
+    authStore.fetchUserData(false); // Usar false para evitar forçar refresh desnecessariamente
   }
+});
+
+// Se necessário, podemos resetar a flag quando o usuário fizer logout
+watch(() => !authStore.isAuthenticated, (isLoggedOut) => {
+  if (isLoggedOut) {
+    userDataUpdated.value = false;
+  }
+});
+
+// Remover qualquer código de onMounted que esteja fazendo fetchUserData(true)
+onMounted(() => {
+  console.log('[App] App montado');
+  // Remova ou modifique qualquer chamada para authStore.fetchUserData(true) aqui
 })
 </script>
 

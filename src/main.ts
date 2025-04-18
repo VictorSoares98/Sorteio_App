@@ -14,6 +14,7 @@ declare global {
     __vite_is_modern_browser?: boolean;
     __vite_is_legacy_browser?: boolean;
     loadModuleWithFallback?: (moduleUrl: string, maxRetries?: number) => Promise<any>;
+    Sentry?: any;
   }
 }
 
@@ -100,11 +101,40 @@ try {
   app.use(pinia)
   app.use(router)
 
-  // Adicionar manipulador global de erros
+  // Adicionar manipulador global de erros mais detalhado e robusto
   app.config.errorHandler = (err, instance, info) => {
     console.error('[Vue Error]', err);
-    console.error('Component:', instance ? (instance.$options?.name || 'unnamed-component') : 'unknown');
-    console.error('Info:', info);
+    
+    // Obter mais detalhes sobre o componente
+    let componentDetails = 'unknown';
+    try {
+      if (instance) {
+        const name = instance.$options?.name || instance.$options?.__file || 'unnamed-component';
+        const propsData = instance.$props ? JSON.stringify(instance.$props) : 'none';
+        componentDetails = `${name} (props: ${propsData})`;
+      }
+    } catch (detailsError) {
+      componentDetails = 'Erro ao obter detalhes do componente: ' + String(detailsError);
+    }
+    
+    // Registrar informações mais detalhadas sobre o erro
+    console.error('Componente com erro:', componentDetails);
+    console.error('Tipo de erro:', info);
+    
+    // Registrar stack trace completo quando disponível
+    if (err instanceof Error && err.stack) {
+      console.error('Stack trace:', err.stack);
+    }
+    
+    // Enviar para sistema de monitoramento se disponível
+    if (window.Sentry) {
+      window.Sentry.captureException(err, {
+        extra: {
+          componentInfo: componentDetails,
+          vueErrorInfo: info
+        }
+      });
+    }
   };
 
   // Inicializar o authStore com o router antes de montar a aplicação

@@ -1,4 +1,9 @@
 <script setup lang="ts">
+// Define um nome para o componente para facilitar depuração
+defineOptions({
+  name: 'SalesAccordion'
+});
+
 import { ref, computed, onMounted } from 'vue';
 import { useOrderStore } from '../../stores/orderStore';
 import { formatDate } from '../../utils/formatters';
@@ -61,6 +66,9 @@ const toggleExpand = (orderId: string) => {
 
 // Função para recarregar os pedidos
 const reloadOrders = async () => {
+  // Impede múltiplos cliques durante o carregamento
+  if (isReloading.value) return;
+  
   isReloading.value = true;
   try {
     await orderStore.fetchUserOrders();
@@ -68,6 +76,7 @@ const reloadOrders = async () => {
   } catch (error) {
     console.error('[SalesAccordion] Erro ao recarregar pedidos:', error);
   } finally {
+    // Garantir que isReloading seja definido como false mesmo em caso de erro
     isReloading.value = false;
   }
 };
@@ -94,13 +103,14 @@ onMounted(async () => {
       @click="reloadOrders" 
       :disabled="isLoading || isReloading"
       class="absolute top-5 right-4 text-gray-500 hover:text-primary p-2 rounded-full hover:bg-gray-100 active:bg-gray-200 transition-all"
+      :class="{ 'bg-gray-100': isReloading }"
       title="Atualizar lista de vendas"
       aria-label="Atualizar lista de vendas"
     >
       <svg 
         xmlns="http://www.w3.org/2000/svg" 
         class="h-6 w-6" 
-        :class="{ 'animate-spin': isReloading }"
+        :class="{ 'reload-spin': isReloading }"
         fill="none" 
         viewBox="0 0 24 24" 
         stroke="currentColor"
@@ -256,4 +266,5 @@ onMounted(async () => {
 .transition-transform {
   transition: transform 0.2s ease-in-out;
 }
+
 </style>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import { useAuthStore } from '../../stores/authStore';
 import { useAffiliateCode } from '../../composables/useAffiliateCode';
 import { useTimerCleanup } from '../../composables/useTimerCleanup';
@@ -137,10 +137,34 @@ const shouldShowExpiryAlert = computed(() => {
   // Se já notificamos sobre este código, não mostrar novamente
   if (alreadyNotifiedCodes.value.has(currentCode)) return false;
   
-  // Se chegamos aqui, devemos mostrar o alerta e marcar como notificado
-  alreadyNotifiedCodes.value.add(currentCode);
+  // Apenas retornar true, sem modificar o estado
   return true;
 });
+
+// Nova função para marcar um código como já notificado
+const markCodeAsNotified = (code: string) => {
+  if (code) {
+    alreadyNotifiedCodes.value.add(code);
+    
+    // Opcional: persistir em localStorage para persistência entre sessões
+    try {
+      const storedCodes = JSON.parse(localStorage.getItem('notifiedExpiredCodes') || '[]');
+      if (!storedCodes.includes(code)) {
+        storedCodes.push(code);
+        localStorage.setItem('notifiedExpiredCodes', JSON.stringify(storedCodes));
+      }
+    } catch (e) {
+      console.error('Erro ao salvar códigos notificados:', e);
+    }
+  }
+};
+
+const dismissExpiryAlert = () => {
+  // Ao dispensar o alerta, marcar o código atual como notificado
+  if (currentUser.value?.affiliateCode) {
+    markCodeAsNotified(currentUser.value.affiliateCode);
+  }
+};
 
 // Verificar regularmente se o código ainda é válido usando o sistema simplificado
 const startExpiryCheck = () => {
@@ -607,10 +631,6 @@ const handleCodeInput = (event: Event) => {
   affiliateTarget.value = value;
 };
 
-const dismissExpiryAlert = () => {
-  // Já foi marcado como notificado no computed
-};
-
 const reloadAffiliates = async () => {
   reloadingAffiliates.value = true;
   try {
@@ -700,6 +720,14 @@ const quickHasAffiliates = computed(() => initialStatus.value.hasAffiliates);
 onMounted(async () => {
   componentLoading.value = true;
   
+  // Carregar códigos já notificados do localStorage
+  try {
+    const storedCodes = JSON.parse(localStorage.getItem('notifiedExpiredCodes') || '[]');
+    storedCodes.forEach((code: string) => alreadyNotifiedCodes.value.add(code));
+  } catch (e) {
+    console.error('Erro ao carregar códigos notificados:', e);
+  }
+  
   try {
     if (currentUser.value?.id) {
       await fetchAffiliatedUsers(); // Usar a função do composable
@@ -717,6 +745,18 @@ onMounted(async () => {
     console.error('[AffiliateLink] Erro ao carregar dados de afiliação:', err);
   } finally {
     componentLoading.value = false;
+    
+    // Marcar o código como notificado APÓS a renderização inicial
+    // para evitar que o alerta apareça e desapareça rapidamente
+    if (shouldShowExpiryAlert.value && currentUser.value?.affiliateCode) {
+      // Usar nextTick para garantir que a UI seja atualizada primeiro
+      nextTick(() => {
+        // Pequeno delay para garantir que o usuário veja o alerta
+        setTimeout(() => {
+          markCodeAsNotified(currentUser.value!.affiliateCode!);
+        }, 100);
+      });
+    }
   }
   
   // Adicionar evento de clique global para fechar menus
@@ -1051,7 +1091,7 @@ onUnmounted(() => {
                   class="text-red-600 font-medium flex items-center"
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                   {{ error }}
                 </span>

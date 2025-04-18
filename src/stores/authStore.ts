@@ -255,6 +255,12 @@ export const useAuthStore = defineStore('auth', () => {
     try {
       console.log('[AuthStore] Buscando dados do usuário', firebaseUser.value.uid);
       
+      // Adicionar uma verificação para prevenir buscas desnecessárias
+      if (!forceRefresh && currentUser.value) {
+        console.log('[AuthStore] Usando dados em cache');
+        return currentUser.value;
+      }
+      
       // Buscar dados diretamente do Firestore para garantir dados atualizados
       if (forceRefresh) {
         console.log('[AuthStore] Forçando atualização dos dados');
@@ -307,15 +313,20 @@ export const useAuthStore = defineStore('auth', () => {
     }
   };
 
+  // Modificar o setupUserDataListener para evitar múltiplos listeners
   const setupUserDataListener = () => {
     if (!firebaseUser.value) return null;
     
-    const userDocRef = doc(db, 'users', firebaseUser.value.uid);
-    
+    // Limpar listener anterior se existir
     if (userDataUnsubscribe) {
+      console.log('[AuthStore] Removendo listener anterior');
       userDataUnsubscribe();
+      userDataUnsubscribe = null;
     }
     
+    const userDocRef = doc(db, 'users', firebaseUser.value.uid);
+    
+    console.log('[AuthStore] Configurando novo listener de dados');
     userDataUnsubscribe = onSnapshot(userDocRef, (docSnapshot) => {
       if (docSnapshot.exists()) {
         console.log('[AuthStore] Dados do usuário atualizados via listener');
@@ -329,9 +340,13 @@ export const useAuthStore = defineStore('auth', () => {
     return userDataUnsubscribe;
   };
 
+  // Modificar o watchEffect para ser mais cuidadoso
+  let isSettingUpListener = false;
   watchEffect(() => {
-    if (firebaseUser.value && isAuthenticated.value) {
+    if (firebaseUser.value && isAuthenticated.value && !isSettingUpListener) {
+      isSettingUpListener = true;
       setupUserDataListener();
+      isSettingUpListener = false;
     }
   });
 
