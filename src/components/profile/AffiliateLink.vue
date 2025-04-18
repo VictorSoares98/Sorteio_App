@@ -1163,9 +1163,11 @@ onUnmounted(() => {
           
           <!-- Link para compartilhar - modificado -->
           <div class="mb-4">
-            <label class="block text-sm text-gray-600 mb-1">Link para compartilhar:</label>
+            <label class="block text-sm text-gray-600 mb-1" for="affiliate-share-link">Link para compartilhar:</label>
             <div class="flex">
               <input
+                id="affiliate-share-link"
+                name="affiliate-share-link"
                 type="text"
                 readonly
                 :value="affiliateLink"
