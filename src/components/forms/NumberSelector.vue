@@ -42,6 +42,12 @@ const updateValue = (event: Event) => {
       value = MAX_NUMBERS_PER_REQUEST.toString();
       target.value = value;
     }
+    
+    // Não permitir zero
+    if (numberValue === 0) {
+      value = '';
+      target.value = '';
+    }
   }
   
   inputValue.value = value;

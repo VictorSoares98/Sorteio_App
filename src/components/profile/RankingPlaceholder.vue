@@ -16,7 +16,7 @@ const affiliatorInfo = computed(() => {
   const currentUser = authStore.currentUser;
   
   if (!currentUser) {
-    return { name: '', email: '', congregation: '' };
+    return { name: '', email: '', congregation: '', photoURL: '' };
   }
   
   // Se temos informações detalhadas do afiliador, usamos elas
@@ -24,7 +24,9 @@ const affiliatorInfo = computed(() => {
     return {
       name: currentUser.affiliatedToInfo.displayName,
       email: currentUser.affiliatedToInfo.email,
-      congregation: currentUser.affiliatedToInfo.congregation || ''
+      congregation: currentUser.affiliatedToInfo.congregation || '',
+      photoURL: currentUser.affiliatedToInfo.photoURL || ''
+      // Removida a propriedade providerData que não existe no tipo
     };
   }
   
@@ -32,7 +34,8 @@ const affiliatorInfo = computed(() => {
   return {
     name: currentUser.affiliatedTo || '',
     email: currentUser.affiliatedToEmail || '',
-    congregation: ''
+    congregation: '',
+    photoURL: ''
   };
 });
 
@@ -82,10 +85,82 @@ const shouldShowExactSales = (user: any) => {
   return hasAdminAccess.value;
 };
 
-// Calcular avatar padrão baseado no nome
+// Melhorada para garantir URLs de avatar válidas e robustas
 const getDefaultAvatar = (name: string) => {
-  const seed = encodeURIComponent(name || 'user');
+  // Se o nome estiver vazio ou for inválido, use um valor padrão
+  const displayName = (name || '').trim() || 'user';
+  // Limitar a 50 caracteres para evitar URLs muito longas
+  const seed = encodeURIComponent(displayName.substring(0, 50));
   return `https://api.dicebear.com/7.x/initials/svg?seed=${seed}&backgroundColor=FF8C00`;
+};
+
+// Diretiva personalizada para tratar erros de carregamento de imagem
+const vImgFallback = {
+  mounted: (el: HTMLImageElement, binding: any) => {
+    const fallbackSrc = binding.value;
+    
+    const handleError = () => {
+      console.log("Imagem falhou ao carregar, usando fallback:", fallbackSrc);
+      el.src = fallbackSrc;
+      // Remover o listener para evitar loop infinito se a imagem de fallback também falhar
+      el.removeEventListener('error', handleError);
+    };
+    
+    el.addEventListener('error', handleError);
+  }
+};
+
+// Função para obter avatar seguro (com melhor tratamento de erro)
+const getSafeAvatar = (user: any) => {
+  // Verificar se o usuário existe
+  if (!user) return getDefaultAvatar('Usuário');
+  
+  // 1. Verificar se há photoURL direta no usuário
+  if (user.photoURL && user.photoURL.trim() !== '') {
+    return user.photoURL;
+  }
+  
+  // 2. Verificar se o usuário tem providerData (informações de login com Google)
+  if (user.providerData && Array.isArray(user.providerData) && user.providerData.length > 0) {
+    // Procurar por um provedor Google
+    const googleProvider = user.providerData.find((provider: any) => 
+      provider.providerId === 'google.com' && provider.photoURL && provider.photoURL.trim() !== ''
+    );
+    
+    if (googleProvider && googleProvider.photoURL) {
+      console.log("Usando foto do Google para:", user.displayName || user.email);
+      return googleProvider.photoURL;
+    }
+  }
+  
+  // 3. Se não encontrou nenhuma foto, retornar avatar padrão
+  return getDefaultAvatar(user.displayName || 'Usuário');
+};
+
+// Função otimizada para buscar avatar do afiliador com melhor tratamento para fotos do Google
+const getAffiliatorAvatar = () => {
+  const currentUser = authStore.currentUser;
+  if (!currentUser) return getDefaultAvatar('');
+  
+  // Se temos o objeto completo do afiliador
+  if (currentUser.affiliatedToInfo) {
+    // Verificar se há photoURL direta no usuário afiliador
+    if (currentUser.affiliatedToInfo.photoURL && 
+        currentUser.affiliatedToInfo.photoURL.trim() !== '') {
+      return currentUser.affiliatedToInfo.photoURL;
+    }
+    
+    // Como não temos acesso ao providerData do afiliador, usamos o nome para gerar avatar
+    return getDefaultAvatar(currentUser.affiliatedToInfo.displayName);
+  }
+  
+  // Se só temos o nome do afiliador, gerar avatar baseado no nome
+  if (currentUser.affiliatedTo) {
+    return getDefaultAvatar(currentUser.affiliatedTo);
+  }
+  
+  // Fallback final
+  return getDefaultAvatar('Afiliador');
 };
 
 // Função para exibir troféus ou medalhas conforme a posição e vendas
@@ -136,6 +211,7 @@ const fetchRankingData = async () => {
       const totalSales = await processOrdersForUser(userDoc.id);
       
       // Adicionar usuário ao array com suas vendas calculadas
+      // Incluindo providerData para acesso à foto do Google
       usersData.push({
         id: userDoc.id,
         displayName: userData.displayName || 'Usuário',
@@ -143,7 +219,8 @@ const fetchRankingData = async () => {
         email: userData.email,
         role: userData.role,
         congregation: userData.congregation,
-        totalSales: totalSales
+        totalSales: totalSales,
+        providerData: userData.providerData  // Adicionado: incluir dados do provedor
       });
     }
     
@@ -241,6 +318,7 @@ const refreshRankingData = async () => {
       const userData = userDoc.data();
       const totalSales = await processOrdersForUser(userDoc.id);
       
+      // Incluir providerData para que possamos acessar a foto do Google
       usersData.push({
         id: userDoc.id,
         displayName: userData.displayName || 'Usuário',
@@ -248,7 +326,8 @@ const refreshRankingData = async () => {
         email: userData.email,
         role: userData.role,
         congregation: userData.congregation,
-        totalSales: totalSales
+        totalSales: totalSales,
+        providerData: userData.providerData  // Adicionado: incluir dados do provedor
       });
     }
     
@@ -286,10 +365,10 @@ onUnmounted(() => {
         <!-- Para Afiliados Comuns -->
         <div v-if="isRegularAffiliate" class="bg-gray-50 p-2 md:p-3 rounded-lg mb-3">
           <div class="flex flex-col items-center mb-2 md:mb-3">
+            <!-- Substituir pelo método melhorado para obter avatar do afiliador -->
             <img 
-              :src="(authStore.currentUser?.affiliatedToInfo?.photoURL && authStore.currentUser?.affiliatedToInfo.photoURL.trim() !== '') 
-                ? authStore.currentUser.affiliatedToInfo.photoURL 
-                : getDefaultAvatar(affiliatorInfo.name)" 
+              :src="getAffiliatorAvatar()"
+              v-img-fallback="getDefaultAvatar(affiliatorInfo.name)"
               alt="Avatar do afiliador"
               class="w-12 h-12 md:w-16 md:h-16 rounded-full object-cover border-2 border-primary mb-2"
             >
@@ -307,10 +386,10 @@ onUnmounted(() => {
         <!-- Para Tesoureiro e Secretaria -->
         <div v-else-if="isAdministrativeRole && authStore.currentUser?.affiliatedTo" class="bg-gray-50 p-2 md:p-3 rounded-lg mb-3">
           <div class="flex flex-col items-center mb-2 md:mb-3">
+            <!-- Substituir pelo método melhorado para obter avatar do afiliador -->
             <img 
-              :src="(authStore.currentUser.affiliatedToInfo?.photoURL && authStore.currentUser.affiliatedToInfo.photoURL.trim() !== '') 
-                ? authStore.currentUser.affiliatedToInfo.photoURL 
-                : getDefaultAvatar(affiliatorInfo.name)" 
+              :src="getAffiliatorAvatar()"
+              v-img-fallback="getDefaultAvatar(affiliatorInfo.name)"
               alt="Avatar do afiliador"
               class="w-12 h-12 md:w-16 md:h-16 rounded-full object-cover border-2 border-primary mb-2"
             >
@@ -384,12 +463,11 @@ onUnmounted(() => {
                   </span>
                 </div>
                 
-                <!-- Avatar do usuário -->
+                <!-- Avatar do usuário com tratamento de erro -->
                 <div class="flex-shrink-0 ml-1">
                   <img 
-                    :src="user.photoURL && user.photoURL.trim() !== '' 
-                      ? user.photoURL 
-                      : getDefaultAvatar(user.displayName)" 
+                    :src="getSafeAvatar(user)"
+                    v-img-fallback="getDefaultAvatar(user.displayName)"
                     alt="Avatar"
                     class="w-7 h-7 md:w-8 md:h-8 rounded-full object-cover border border-gray-200"
                   >
@@ -448,12 +526,11 @@ onUnmounted(() => {
                 </span>
               </div>
               
-              <!-- Avatar do usuário -->
+              <!-- Avatar do usuário com tratamento de erro -->
               <div class="flex-shrink-0 ml-2">
                 <img 
-                  :src="user.photoURL && user.photoURL.trim() !== '' 
-                    ? user.photoURL 
-                    : getDefaultAvatar(user.displayName)" 
+                  :src="getSafeAvatar(user)"
+                  v-img-fallback="getDefaultAvatar(user.displayName)"
                   alt="Avatar"
                   class="w-10 h-10 rounded-full object-cover border border-gray-200"
                 >

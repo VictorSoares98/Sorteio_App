@@ -1,87 +1,105 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
+import { useAuthStore } from '../../stores/authStore';
 import { useAffiliateCode } from '../../composables/useAffiliateCode';
+import { useTimerCleanup } from '../../composables/useTimerCleanup';
+import Button from '../ui/Button.vue';
 import Card from '../ui/Card.vue';
 import Alert from '../ui/Alert.vue';
-import Button from '../ui/Button.vue';
 import { UserRole } from '../../types/user';
 
-// Hooks - usar o composable que já tem toda a lógica necessária
+const authStore = useAuthStore();
 const { 
-  currentUser, 
+  affiliatedUsers, 
   loading, 
   error,
   success,
-  affiliatedUsers,
-  generateTemporaryAffiliateCode,
-  affiliateToUser,
-  fetchAffiliatedUsers,
   timeRemaining,
   isCodeValid,
-  isGeneratingCode,
-  checkCurrentCode,
+  affiliateSalesMetrics,
+  generateTemporaryAffiliateCode,
+  fetchAffiliatedUsers,
   removeAffiliate,
   updateAffiliateRole,
-  setTemporaryError,
-  setTemporarySuccess,
-  clearAllTimeouts,
-  affiliateSalesMetrics
+  isGeneratingCode,
+  affiliateToUser
 } = useAffiliateCode();
 
-// Estados
-const copied = ref(false);
+// Usar o novo composable de limpeza de timers
+const { setInterval: setManagedInterval, setTimeout: setManagedTimeout } = useTimerCleanup();
+
+const copySuccess = ref<string | null>(null);
+const copiedType = ref<string | null>(null);
+const checkingInterval = ref<number | null>(null);
+const alreadyNotifiedCodes = ref(new Set<string>());
+
+// Estados adicionais necessários para o template
+const isAlreadyAffiliated = computed(() => !!currentUser.value?.affiliatedTo);
+const hasAffiliates = computed(() => affiliatedUsers.value.length > 0);
 const codeCopied = ref(false);
+const copied = ref(false);
+const affiliateLink = computed(() => {
+  if (!affiliateCode.value) return '';
+  return `${window.location.origin}/register?ref=${affiliateCode.value}`;
+});
+const animateSuccess = ref(false);
+
+// Variáveis para afiliação
 const affiliateTarget = ref('');
 const isEmail = ref(false);
 const affiliating = ref(false);
-const checkingInterval = ref<number | null>(null);
 const confirmDialogVisible = ref(false);
 const pendingAffiliationData = ref<{ target: string; isEmail: boolean } | null>(null);
-const affiliateCodeInputRef = ref<HTMLInputElement | null>(null);
-const animateSuccess = ref(false);
 
-// Novos estados para o menu de afiliados e reload
-const reloadingAffiliates = ref(false);
+// Estados para menus e interação
 const activeDropdownId = ref<string | null>(null);
 const showRoleMenu = ref<string | null>(null);
-const roleUpdateLoading = ref<string | null>(null);
-
-// Novos estados para confirmação
+const reloadingAffiliates = ref(false);
 const showConfirmDialog = ref(false);
 const confirmAction = ref<{type: 'remove' | 'role'; id: string; role?: UserRole}>({
   type: 'remove',
   id: ''
 });
-
-// Adicionar uma propriedade reativa para armazenar as posições calculadas
+const roleUpdateLoading = ref<string | null>(null);
 const menuPositions = ref<Record<string, any>>({});
 
-// Novo estado para controlar quais métricas estão expandidas
-const expandedMetrics = ref<Set<string>>(new Set());
+// Usuário atual
+const currentUser = computed(() => authStore.currentUser);
 
-// Termos mais intuitivos para os papéis (hierarquias)
-const roleLabels = {
-  [UserRole.ADMIN]: 'Administrador',
-  [UserRole.SECRETARIA]: 'Secretário',
-  [UserRole.TESOUREIRO]: 'Tesoureiro',
-  [UserRole.USER]: 'Usuário Padrão'
-};
+// Código de afiliação atual
+const affiliateCode = computed(() => currentUser.value?.affiliateCode || '');
 
-// Computados
-const affiliateCode = computed(() => currentUser.value?.affiliateCode || null);
-const affiliateLink = computed(() => {
-  if (!affiliateCode.value) return '';
-  return `${window.location.origin}/register?ref=${affiliateCode.value}`;
+// Expiração do código
+const codeExpiry = computed(() => {
+  if (!currentUser.value?.affiliateCodeExpiry) return null;
+  
+  const expiry = currentUser.value.affiliateCodeExpiry;
+  if (typeof expiry === 'object' && 'toDate' in expiry) {
+    return expiry.toDate();
+  }
+  return typeof expiry === 'string' ? new Date(expiry) : null;
 });
 
-// Adicionar um ref para rastrear se já mostramos notificação para este código expirado
-const alreadyNotifiedCodes = ref<Set<string>>(new Set());
+// Verificar se o código está expirado
+const isCodeExpired = computed(() => {
+  if (!codeExpiry.value) return false;
+  return codeExpiry.value.getTime() < Date.now();
+});
 
-// Verificar se já notificamos sobre este código específico
-const shouldShowExpiryAlert = computed(() => {
-  if (!currentUser.value?.affiliateCode || isCodeValid.value || error.value) return false;
+// Verificar regularmente se o código ainda é válido
+const checkCurrentCode = () => {
+  if (isCodeExpired.value && shouldNotifyCodeExpiry.value) {
+    success.value = null;
+    error.value = 'Seu código de afiliação expirou! Gere um novo para continuar compartilhando.';
+  }
+};
+
+// Verificador para saber se devemos mostrar alerta de expiração
+const shouldNotifyCodeExpiry = computed(() => {
+  if (!isCodeExpired.value || !currentUser.value?.affiliateCode) return false;
   
   const currentCode = currentUser.value.affiliateCode;
+  
   // Se já notificamos sobre este código, não mostrar novamente
   if (alreadyNotifiedCodes.value.has(currentCode)) return false;
   
@@ -90,298 +108,7 @@ const shouldShowExpiryAlert = computed(() => {
   return true;
 });
 
-// Verificar regularmente se o código ainda é válido usando o sistema simplificado
-const startExpiryCheck = () => {
-  if (checkingInterval.value) {
-    clearInterval(checkingInterval.value);
-  }
-  
-  // Verificar a cada 30 segundos se o código expirou
-  checkingInterval.value = window.setInterval(() => {
-    checkCurrentCode();
-  }, 30000);
-};
-
-// Verificar se o usuário pode se afiliar (não tem afiliados E não está afiliado a ninguém)
-const canAffiliate = computed(() => {
-  if (!currentUser.value) return false;
-  
-  // REGRA 1: Se o usuário já está afiliado a alguém, não pode se afiliar novamente
-  if (currentUser.value.affiliatedTo) return false;
-  
-  // REGRA 2: Se tem afiliados, não pode se afiliar a outra pessoa
-  return !(currentUser.value.affiliates && currentUser.value.affiliates.length > 0);
-});
-
-// Verificar se o usuário já está afiliado a alguém
-const isAlreadyAffiliated = computed(() => {
-  return !!currentUser.value?.affiliatedTo;
-});
-
-// Verificar se o usuário tem afiliados (usada para mensagens informativas)
-const hasAffiliates = computed(() => {
-  return !!(currentUser.value?.affiliates && currentUser.value.affiliates.length > 0);
-});
-
-// Validar o formato do código/email antes de enviar
-const isValidTarget = computed(() => {
-  if (!affiliateTarget.value) return false;
-  
-  if (isEmail.value) {
-    // Validação básica de email
-    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(affiliateTarget.value);
-  } else {
-    // Códigos de afiliado têm 6 caracteres alfanuméricos (aceita minúsculas ou maiúsculas)
-    return /^[A-Za-z0-9]{6}$/.test(affiliateTarget.value);
-  }
-});
-
-// Normaliza o código de afiliação para caixa alta
-const normalizeAffiliateCode = (code: string): string => {
-  return code.toUpperCase();
-};
-
-// Contagem de afiliados
-const affiliatesCount = computed(() => {
-  return affiliatedUsers.value.length;
-});
-
-// Exibir resumo da rede de afiliação
-const affiliationSummary = computed(() => {
-  if (isAlreadyAffiliated.value) {
-    return `Você está afiliado a ${currentUser.value?.affiliatedTo}`;
-  }
-  
-  if (affiliatesCount.value > 0) {
-    return `Você tem ${affiliatesCount.value} ${affiliatesCount.value === 1 ? 'afiliado' : 'afiliados'}`;
-  }
-  
-  return 'Você ainda não tem afiliações';
-});
-
-// Gerar código temporário de afiliado
-const generateCode = async () => {
-  try {
-    console.log('[AffiliateLink] Gerando código temporário');
-    await generateTemporaryAffiliateCode();
-    console.log('[AffiliateLink] Código temporário gerado');
-    
-    // Iniciar verificação periódica após gerar código
-    startExpiryCheck();
-  } catch (err) {
-    console.error('[AffiliateLink] Erro ao gerar código:', err);
-  }
-};
-
-// Copiar link para clipboard
-const copyToClipboard = async (text: string, type: 'code' | 'link' = 'link') => {
-  if (!text) return;
-  
-  try {
-    await navigator.clipboard.writeText(text);
-    
-    if (type === 'code') {
-      codeCopied.value = true;
-      setTimeout(() => {
-        codeCopied.value = false;
-      }, 2000);
-    } else {
-      copied.value = true;
-      setTimeout(() => {
-        copied.value = false;
-      }, 2000);
-    }
-  } catch (err) {
-    console.error(`Falha ao copiar ${type}:`, err);
-  }
-};
-
-// Função para copiar apenas o código
-const copyCodeToClipboard = () => {
-  if (affiliateCode.value) {
-    copyToClipboard(affiliateCode.value, 'code');
-  }
-};
-
-// Observar mudanças no código e expiração
-watch(() => currentUser.value?.affiliateCode, (newCode, oldCode) => {
-  if (newCode && newCode !== oldCode) {
-    // Se um novo código foi gerado, podemos mostrar alertas para ele no futuro
-    if (alreadyNotifiedCodes.value.has(newCode)) {
-      alreadyNotifiedCodes.value.delete(newCode);
-    }
-    
-    if (newCode) {
-      startExpiryCheck();
-    } else if (checkingInterval.value) {
-      clearInterval(checkingInterval.value);
-      checkingInterval.value = null;
-    }
-  }
-});
-
-// Carregar afiliados e iniciar verificação quando o componente é montado
-onMounted(async () => {
-  console.log('[AffiliateLink] Componente montado, buscando afiliados');
-  try {
-    await fetchAffiliatedUsers();
-    console.log('[AffiliateLink] Afiliados carregados:', affiliatedUsers.value.length);
-    
-    // Iniciar verificação do código se existir
-    if (currentUser.value?.affiliateCode) {
-      checkCurrentCode();
-      startExpiryCheck();
-    }
-  } catch (err) {
-    console.error('[AffiliateLink] Erro ao carregar afiliados:', err);
-  }
-
-  // Adicionar evento de clique global para fechar menus
-  document.addEventListener('click', closeAllMenus);
-  
-  // Adicionar evento de rolagem para fechar menus ao rolar
-  window.addEventListener('scroll', handleScroll);
-  
-  // Enviar evento para armazenar status de novas afiliações
-  if (sessionStorage.getItem('newAffiliation') === 'true') {
-    sessionStorage.removeItem('newAffiliation');
-  }
-});
-
-// Limpar intervalo quando o componente é desmontado
-onUnmounted(() => {
-  clearResources();
-  // Remover evento de clique global
-  document.removeEventListener('click', closeAllMenus);
-  // Remover evento de rolagem
-  window.removeEventListener('scroll', handleScroll);
-});
-
-// Processar afiliação com confirmação
-const requestAffiliation = async () => {
-  if (!affiliateTarget.value || !isValidTarget.value) {
-    error.value = isEmail.value 
-      ? 'Por favor, insira um email válido' 
-      : 'O código de afiliado deve ter 6 caracteres';
-    return;
-  }
-  
-  // Armazenar os dados para a confirmação
-  pendingAffiliationData.value = {
-    target: affiliateTarget.value,
-    isEmail: isEmail.value
-  };
-  
-  // Mostrar diálogo de confirmação
-  confirmDialogVisible.value = true;
-};
-
-// Método simplificado que delega para o composable
-const showMessage = (type: 'error' | 'success', message: string) => {
-  if (type === 'error') {
-    setTemporaryError(message);
-  } else {
-    setTemporarySuccess(message);
-  }
-};
-
-// Efetuar afiliação após confirmação
-const confirmAffiliation = async () => {
-  if (!pendingAffiliationData.value) return;
-  
-  const { target, isEmail: isEmailTarget } = pendingAffiliationData.value;
-  confirmDialogVisible.value = false;
-  
-  affiliating.value = true;
-  try {
-    console.log('[AffiliateLink] Iniciando processo de afiliação confirmado');
-    // Normalizar o código para maiúsculas antes de enviar
-    const normalizedTarget = isEmailTarget 
-      ? target 
-      : normalizeAffiliateCode(target);
-    
-    const response = await affiliateToUser(normalizedTarget, isEmailTarget);
-    
-    if (response && response.success) {
-      console.log('[AffiliateLink] Afiliação bem-sucedida');
-      // Limpar campo após sucesso
-      affiliateTarget.value = '';
-      
-      // Animação de sucesso
-      animateSuccess.value = true;
-      setTimeout(() => {
-        animateSuccess.value = false;
-      }, 2000);
-    } else {
-      console.warn('[AffiliateLink] Afiliação falhou:', 'message' in response ? response.message : 'Erro desconhecido');
-    }
-  } catch (err) {
-    console.error('[AffiliateLink] Erro ao processar afiliação:', err);
-  } finally {
-    affiliating.value = false;
-    pendingAffiliationData.value = null;
-  }
-};
-
-// Cancelar processo de afiliação
-const cancelAffiliation = () => {
-  confirmDialogVisible.value = false;
-  pendingAffiliationData.value = null;
-};
-
-// Toggling entre código e email com melhor UX
-const toggleAffiliationMethod = (newValue: boolean) => {
-  isEmail.value = newValue;
-  affiliateTarget.value = ''; // Limpar o campo ao mudar o método
-  
-  // Focar automaticamente no campo após a mudança
-  setTimeout(() => {
-    if (affiliateCodeInputRef.value) {
-      affiliateCodeInputRef.value.focus();
-    }
-  }, 100);
-};
-
-// Auto-focar quando mudar entre código e email
-watch(isEmail, () => {
-  setTimeout(() => {
-    if (affiliateCodeInputRef.value) {
-      affiliateCodeInputRef.value.focus();
-    }
-  }, 100);
-});
-
-// Função para validar caracteres no campo de código
-const validateCodeInput = (event: KeyboardEvent) => {
-  // Permitir apenas letras e números (alfanuméricos)
-  if (!/[a-zA-Z0-9]/.test(event.key)) {
-    event.preventDefault();
-  }
-};
-
-// Função para controle rigoroso da entrada com debounce embutido
-const handleCodeInput = (event: Event) => {
-  const input = event.target as HTMLInputElement;
-  const value = input.value.toUpperCase();
-  
-  // Garantir que nunca exceda 6 caracteres, mesmo em conexões lentas
-  if (value.length > 6) {
-    affiliateTarget.value = value.slice(0, 6);
-    return;
-  }
-  
-  // Normalização e conversão para maiúsculas
-  affiliateTarget.value = value;
-};
-
-// Indicador visual de validade do código
-const codeStatus = computed(() => {
-  if (!affiliateTarget.value) return 'empty';
-  if (affiliateTarget.value.length < 6) return 'incomplete';
-  return isValidTarget.value ? 'valid' : 'invalid';
-});
-
-// Adicionar função para identificar tipos de erro
+// Classificador de tipos de erro para o template
 const getErrorCategory = computed(() => {
   if (!error.value) return null;
   
@@ -401,38 +128,122 @@ const getErrorCategory = computed(() => {
   }
 });
 
-// Limpar o erro ao mudar entre email e código
-watch(isEmail, () => {
-  if (error.value && (getErrorCategory.value === 'code' || getErrorCategory.value === 'email')) {
-    error.value = null;
+// Para alerta de expiração
+const shouldShowExpiryAlert = computed(() => {
+  if (!currentUser.value?.affiliateCode || isCodeValid.value || error.value) return false;
+  
+  const currentCode = currentUser.value.affiliateCode;
+  // Se já notificamos sobre este código, não mostrar novamente
+  if (alreadyNotifiedCodes.value.has(currentCode)) return false;
+  
+  // Se chegamos aqui, devemos mostrar o alerta e marcar como notificado
+  alreadyNotifiedCodes.value.add(currentCode);
+  return true;
+});
+
+// Verificar regularmente se o código ainda é válido usando o sistema simplificado
+const startExpiryCheck = () => {
+  // Usar o novo método setManagedInterval que será limpo automaticamente
+  checkingInterval.value = setManagedInterval(() => {
+    checkCurrentCode();
+  }, 30000);
+};
+
+// Verificar se o usuário pode se afiliar (não tem afiliados E não está afiliado a ninguém)
+const canAffiliate = computed(() => {
+  if (!currentUser.value) return false;
+  
+  // REGRA 1: Se o usuário já está afiliado a alguém, não pode se afiliar novamente
+  if (currentUser.value.affiliatedTo) return false;
+  
+  // REGRA 2: Se o usuário já tem afiliados, não pode se afiliar a outro vendedor
+  return affiliatedUsers.value.length === 0;
+});
+
+// Resumo da afiliação para título do card
+const affiliationSummary = computed(() => {
+  if (isAlreadyAffiliated.value) {
+    return `Você está afiliado a ${currentUser.value?.affiliatedTo}`;
+  }
+  
+  if (affiliatedUsers.value.length > 0) {
+    return `Você tem ${affiliatedUsers.value.length} ${affiliatedUsers.value.length === 1 ? 'afiliado' : 'afiliados'}`;
+  }
+  
+  return 'Você ainda não tem afiliações';
+});
+
+// Validar formato do código/email
+const isValidTarget = computed(() => {
+  if (!affiliateTarget.value) return false;
+  
+  if (isEmail.value) {
+    // Validação básica de email
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(affiliateTarget.value);
+  } else {
+    // Códigos de afiliado têm 6 caracteres alfanuméricos
+    return /^[A-Za-z0-9]{6}$/.test(affiliateTarget.value);
   }
 });
 
-// Função unificada para limpar recursos
-const clearResources = () => {
-  if (checkingInterval.value) {
-    clearInterval(checkingInterval.value);
-    checkingInterval.value = null;
+// Status do código para feedback visual
+const codeStatus = computed(() => {
+  if (!affiliateTarget.value) return 'empty';
+  if (affiliateTarget.value.length < 6) return 'incomplete';
+  return isValidTarget.value ? 'valid' : 'invalid';
+});
+
+// Gerar código temporário
+const generateCode = async () => {
+  try {
+    console.log('[AffiliateLink] Gerando código temporário');
+    await generateTemporaryAffiliateCode();
+    console.log('[AffiliateLink] Código temporário gerado');
+    
+    // Iniciar verificação periódica após gerar código
+    startExpiryCheck();
+  } catch (err) {
+    console.error('[AffiliateLink] Erro ao gerar código:', err);
   }
-  
-  // Limpar todos os timeouts de mensagens
-  clearAllTimeouts();
 };
 
-// Função para recarregar a lista de afiliados
-const reloadAffiliates = async () => {
-  if (reloadingAffiliates.value) return;
-  
-  reloadingAffiliates.value = true;
+// Função genérica para copiar para a área de transferência
+const copyToClipboard = async (text: string, type: string) => {
   try {
-    await fetchAffiliatedUsers();
-    console.log('[AffiliateLink] Lista de afiliados recarregada com sucesso');
+    await navigator.clipboard.writeText(text);
+    copySuccess.value = `${type === 'code' ? 'Código' : 'URL'} copiado com sucesso!`;
+    copiedType.value = type;
+    
+    // Atualizar também os estados de cópia específicos para compatibilidade
+    if (type === 'code') {
+      codeCopied.value = true;
+    } else {
+      copied.value = true;
+    }
+    
+    // Usar a versão gerenciada do setTimeout
+    setManagedTimeout(() => {
+      copySuccess.value = null;
+      copiedType.value = null;
+      codeCopied.value = false;
+      copied.value = false;
+    }, 3000);
   } catch (err) {
-    console.error('[AffiliateLink] Erro ao recarregar afiliados:', err);
-    showMessage('error', 'Não foi possível atualizar a lista de afiliados.');
-  } finally {
-    reloadingAffiliates.value = false;
+    console.error(`Falha ao copiar ${type}:`, err);
   }
+};
+
+// Função para copiar apenas o código
+const copyCodeToClipboard = () => {
+  if (affiliateCode.value) {
+    copyToClipboard(affiliateCode.value, 'code');
+  }
+};
+
+// Funções para menus e ações em afiliados
+const getDefaultAvatar = (name: string) => {
+  const seed = encodeURIComponent(name || 'user');
+  return `https://api.dicebear.com/7.x/initials/svg?seed=${seed}&backgroundColor=FF8C00`;
 };
 
 // Função unificada para controlar todos os tipos de menus
@@ -604,8 +415,7 @@ const calculateMenuPosition = (userId: string, rect?: DOMRect, options: {
   return position;
 };
 
-// NOVA FUNÇÃO: apenas recupera uma posição previamente calculada
-// Sem efeitos colaterais, segura para uso em bindings
+// Apenas recupera posição previamente calculada
 const getSubmenuPosition = (userId: string) => {
   // Simplesmente retorna a posição armazenada, ou um fallback seguro
   if (!menuPositions.value[userId]) {
@@ -641,7 +451,6 @@ const handleScroll = () => {
   }
 };
 
-// Abrir diálogo de confirmação para remover afiliado
 const confirmRemoveAffiliate = (userId: string, event: Event) => {
   event.stopPropagation();
   confirmAction.value = {
@@ -650,44 +459,6 @@ const confirmRemoveAffiliate = (userId: string, event: Event) => {
   };
   showConfirmDialog.value = true;
   activeDropdownId.value = null; // Fechar dropdown
-};
-
-// Função que verifica se um determinado papel pode ser atribuído ao usuário
-const canAssignRole = (user: any, role: UserRole): boolean => {
-  // Papéis administrativos só podem ser atribuídos a usuários com afiliação válida
-  if (role === UserRole.ADMIN || role === UserRole.SECRETARIA || role === UserRole.TESOUREIRO) {
-    return !!user.affiliatedToId && user.affiliatedToId === currentUser.value?.id;
-  }
-  
-  // Papel de usuário comum pode ser atribuído a qualquer usuário
-  return true;
-};
-
-// Verificar se um usuário pode ter sua hierarquia alterada
-const canChangeUserRole = (user: any): boolean => {
-  // Só pode alterar o papel se o usuário estiver afiliado ao usuário atual
-  return !!user.affiliatedToId && user.affiliatedToId === currentUser.value?.id;
-};
-
-// Função para abrir diálogo de confirmação para mudar papel
-const confirmChangeRole = (userId: string, role: UserRole, event: Event) => {
-  event.stopPropagation();
-  
-  // Verifica se o papel pode ser atribuído ao usuário
-  const user = affiliatedUsers.value.find(u => u.id === userId);
-  if (user && !canAssignRole(user, role)) {
-    showMessage('error', 'Não é possível atribuir este papel a um usuário sem afiliação válida.');
-    return;
-  }
-  
-  confirmAction.value = {
-    type: 'role',
-    id: userId,
-    role
-  };
-  showConfirmDialog.value = true;
-  activeDropdownId.value = null; // Fechar dropdown
-  showRoleMenu.value = null; // Fechar submenu de papéis
 };
 
 // Executar a ação confirmada
@@ -706,14 +477,14 @@ const handleRemoveAffiliate = async (userId: string) => {
   try {
     const result = await removeAffiliate(userId);
     if (result.success) {
-      showMessage('success', 'Afiliado removido com sucesso!');
+      success.value = 'Afiliado removido com sucesso!';
     } else {
       // Use 'in' operator to check if message property exists
       const errorMsg = 'message' in result ? result.message : 'Não foi possível remover o afiliado.';
-      showMessage('error', errorMsg);
+      error.value = errorMsg;
     }
   } catch (err: any) {
-    showMessage('error', err.message || 'Erro ao processar a solicitação.');
+    error.value = err.message || 'Erro ao processar a solicitação.';
   }
 };
 
@@ -723,40 +494,176 @@ const handleChangeRole = async (userId: string, newRole: UserRole) => {
   try {
     const result = await updateAffiliateRole(userId, newRole);
     if (result.success) {
-      showMessage('success', `Papel alterado para ${roleLabels[newRole]} com sucesso!`);
+      success.value = `Papel alterado para ${roleLabels[newRole]} com sucesso!`;
     } else {
       // Use 'in' operator to check if message property exists
       const errorMsg = 'message' in result ? result.message : 'Não foi possível alterar o papel do afiliado.';
-      showMessage('error', errorMsg);
+      error.value = errorMsg;
     }
   } catch (err: any) {
-    showMessage('error', err.message || 'Erro ao alterar o papel do afiliado.');
+    error.value = err.message || 'Erro ao alterar o papel do afiliado.';
   } finally {
     roleUpdateLoading.value = null;
   }
 };
 
-// Função para lidar com dispensa de alerta de expiração
-const dismissExpiryAlert = () => {
-  // Já está marcado como notificado em shouldShowExpiryAlert
-  if (currentUser.value?.affiliateCode) {
-    // Manteremos o registro na memória para não mostrar novamente
-    console.log('[AffiliateLink] Alerta de expiração descartado para código:', currentUser.value.affiliateCode);
+// Verificar se um usuário pode ter sua hierarquia alterada
+const canChangeUserRole = (user: any) => {
+  // Só pode alterar o papel se o usuário estiver afiliado ao usuário atual
+  return !!user?.affiliatedToId && user.affiliatedToId === currentUser.value?.id;
+};
+
+// Função que verifica se um determinado papel pode ser atribuído ao usuário
+const canAssignRole = (user: any, role: UserRole): boolean => {
+  // Papéis administrativos só podem ser atribuídos a usuários com afiliação válida
+  if (role === UserRole.ADMIN || role === UserRole.SECRETARIA || role === UserRole.TESOUREIRO) {
+    return !!user.affiliatedToId && user.affiliatedToId === currentUser.value?.id;
+  }
+  
+  // Papel de usuário comum pode ser atribuído a qualquer usuário
+  return true;
+};
+
+const confirmChangeRole = (userId: string, role: UserRole, event: Event) => {
+  event.stopPropagation();
+  
+  // Verifica se o papel pode ser atribuído ao usuário
+  const user = affiliatedUsers.value.find(u => u.id === userId);
+  if (user && !canAssignRole(user, role)) {
+    error.value = 'Não é possível atribuir este papel a um usuário sem afiliação válida.';
+    return;
+  }
+  
+  confirmAction.value = {
+    type: 'role',
+    id: userId,
+    role
+  };
+  showConfirmDialog.value = true;
+  activeDropdownId.value = null;
+  showRoleMenu.value = null;
+};
+
+// Funções para afiliação
+const toggleAffiliationMethod = (newValue: boolean) => {
+  isEmail.value = newValue;
+  affiliateTarget.value = '';
+};
+
+const normalizeAffiliateCode = (code: string): string => {
+  return code.toUpperCase();
+};
+
+// Processar afiliação com confirmação
+const requestAffiliation = async () => {
+  if (!affiliateTarget.value || !isValidTarget.value) {
+    error.value = isEmail.value 
+      ? 'Por favor, insira um email válido' 
+      : 'O código de afiliado deve ter 6 caracteres';
+    return;
+  }
+  
+  // Armazenar os dados para a confirmação
+  pendingAffiliationData.value = {
+    target: affiliateTarget.value,
+    isEmail: isEmail.value
+  };
+  
+  // Mostrar diálogo de confirmação
+  confirmDialogVisible.value = true;
+};
+
+const confirmAffiliation = async () => {
+  if (!pendingAffiliationData.value) return;
+  
+  const { target, isEmail: isEmailTarget } = pendingAffiliationData.value;
+  confirmDialogVisible.value = false;
+  
+  affiliating.value = true;
+  try {
+    console.log('[AffiliateLink] Iniciando processo de afiliação confirmado');
+    // Normalizar o código para maiúsculas antes de enviar
+    const normalizedTarget = isEmailTarget 
+      ? target 
+      : normalizeAffiliateCode(target);
+    
+    const response = await affiliateToUser(normalizedTarget, isEmailTarget);
+    
+    if (response && response.success) {
+      console.log('[AffiliateLink] Afiliação bem-sucedida');
+      // Limpar campo após sucesso
+      affiliateTarget.value = '';
+      
+      // Animação de sucesso
+      animateSuccess.value = true;
+      setTimeout(() => {
+        animateSuccess.value = false;
+      }, 2000);
+    } else {
+      console.warn('[AffiliateLink] Afiliação falhou:', 'message' in response ? response.message : 'Erro desconhecido');
+    }
+  } catch (err) {
+    console.error('[AffiliateLink] Erro ao processar afiliação:', err);
+  } finally {
+    affiliating.value = false;
+    pendingAffiliationData.value = null;
   }
 };
 
-// Calcular avatar padrão baseado no nome do usuário
-const getDefaultAvatar = (name: string) => {
-  // Usando Dicebear como serviço de avatar padrão
-  const seed = encodeURIComponent(name || 'user');
-  return `https://api.dicebear.com/7.x/initials/svg?seed=${seed}&backgroundColor=FF8C00`;
+const cancelAffiliation = () => {
+  confirmDialogVisible.value = false;
+  pendingAffiliationData.value = null;
 };
 
-// Função para alternar a exibição das métricas de um afiliado
-const toggleMetrics = (userId: string, event: Event) => {
-  // Prevenir propagação para não acionar outros handlers
-  event.stopPropagation();
+const validateCodeInput = (event: KeyboardEvent) => {
+  if (!/[a-zA-Z0-9]/.test(event.key)) {
+    event.preventDefault();
+  }
+};
+
+// Função para controle rigoroso da entrada com debounce embutido
+const handleCodeInput = (event: Event) => {
+  const input = event.target as HTMLInputElement;
+  const value = input.value.toUpperCase();
   
+  // Garantir que nunca exceda 6 caracteres, mesmo em conexões lentas
+  if (value.length > 6) {
+    affiliateTarget.value = value.slice(0, 6);
+    return;
+  }
+  
+  // Normalização e conversão para maiúsculas
+  affiliateTarget.value = value;
+};
+
+const dismissExpiryAlert = () => {
+  // Já foi marcado como notificado no computed
+};
+
+const reloadAffiliates = async () => {
+  reloadingAffiliates.value = true;
+  try {
+    if (currentUser.value?.id) {
+      await fetchAffiliatedUsers(); // Usar a função do composable ao invés do userStore
+    }
+  } finally {
+    reloadingAffiliates.value = false;
+  }
+};
+
+// Configuração para hierarquias
+const roleLabels = {
+  [UserRole.ADMIN]: 'Administrador',
+  [UserRole.SECRETARIA]: 'Secretário',
+  [UserRole.TESOUREIRO]: 'Tesoureiro',
+  [UserRole.USER]: 'Usuário Padrão'
+};
+
+// Estados para métricas
+const expandedMetrics = ref<Set<string>>(new Set());
+
+const toggleMetrics = (userId: string, event: Event) => {
+  event.stopPropagation();
   if (expandedMetrics.value.has(userId)) {
     expandedMetrics.value.delete(userId);
   } else {
@@ -764,10 +671,48 @@ const toggleMetrics = (userId: string, event: Event) => {
   }
 };
 
-// Verificar se as métricas de um afiliado estão expandidas
 const isMetricsExpanded = (userId: string) => {
   return expandedMetrics.value.has(userId);
 };
+
+// Observar mudanças no código e expiração
+watch(() => currentUser.value?.affiliateCode, (newCode, oldCode) => {
+  if (newCode && newCode !== oldCode) {
+    // Se um novo código foi gerado, podemos mostrar alertas para ele no futuro
+    if (alreadyNotifiedCodes.value.has(newCode)) {
+      alreadyNotifiedCodes.value.delete(newCode);
+    }
+    
+    if (newCode) {
+      startExpiryCheck();
+    }
+  }
+});
+
+// Carregar afiliados e iniciar verificação quando o componente é montado
+onMounted(async () => {
+  if (currentUser.value?.id) {
+    await fetchAffiliatedUsers(); // Usar a função do composable
+    
+    if (affiliateCode.value) {
+      startExpiryCheck();
+      // Verificar imediatamente também
+      checkCurrentCode();
+    }
+  }
+  
+  // Adicionar evento de clique global para fechar menus
+  document.addEventListener('click', closeAllMenus);
+  
+  // Adicionar evento de rolagem para fechar menus ao rolar
+  window.addEventListener('scroll', handleScroll);
+});
+
+// Limpar evento de clique global e evento de rolagem quando o componente for desmontado
+onUnmounted(() => {
+  document.removeEventListener('click', closeAllMenus);
+  window.removeEventListener('scroll', handleScroll);
+});
 
 </script>
 
@@ -1220,7 +1165,7 @@ const isMetricsExpanded = (userId: string) => {
                 v-if="affiliateSalesMetrics[user.id]"
                 @click="toggleMetrics(user.id, $event)" 
                 class="text-gray-500 hover:text-primary p-2 rounded-full hover:bg-gray-100 transition-colors flex-shrink-0 mr-2"
-                :class="{'bg-primary bg-opacity-10 text-primary': isMetricsExpanded(user.id)}"
+                :class="{'bg-primary text-white': isMetricsExpanded(user.id)}"
                 :title="isMetricsExpanded(user.id) ? 'Esconder métricas' : 'Ver métricas'"
               >
                 <svg v-if="!isMetricsExpanded(user.id)" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1238,7 +1183,7 @@ const isMetricsExpanded = (userId: string) => {
                 class="text-gray-500 hover:text-primary p-2 rounded-full hover:bg-gray-100 transition-colors flex-shrink-0"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a 1 1 0 110-2 1 1 0 010 2z" />
                 </svg>
               </button>
             </div>
@@ -1267,7 +1212,7 @@ const isMetricsExpanded = (userId: string) => {
                 </div>
                 
                 <!-- Cards de métricas -->
-                <div class="p-3 grid grid-cols-2 sm:grid-cols-3 gap-3">
+                <div class="p-3 grid grid-cols-2 sm:grid-cols-4 gap-3">
                   <!-- Card: Total de Vendas -->
                   <div class="bg-white rounded-lg p-2 shadow-sm border border-gray-100 flex flex-col justify-between">
                     <p class="text-xs text-gray-500">Total de Vendas</p>
@@ -1297,6 +1242,22 @@ const isMetricsExpanded = (userId: string) => {
                       <p class="text-lg font-bold text-primary">{{ affiliateSalesMetrics[user.id].salesThisMonth }}</p>
                       <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-primary opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                    </div>
+                  </div>
+                  
+                  <!-- NOVO Card: Ranking -->
+                  <div class="bg-white rounded-lg p-2 shadow-sm border border-gray-100 flex flex-col justify-between">
+                    <p class="text-xs text-gray-500">Ranking</p>
+                    <div class="flex items-end justify-between mt-1">
+                      <div class="flex items-center">
+                        <p class="text-lg font-bold text-primary">
+                            {{ (user as any).position || (affiliateSalesMetrics[user.id] && affiliateSalesMetrics[user.id].hasOwnProperty('rank') ? (affiliateSalesMetrics[user.id] as any).rank : '?') }}
+                          </p>
+                        <span class="ml-1 text-xs text-gray-500">/ {{ affiliatedUsers.length }}</span>
+                      </div>
+                      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-primary opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19l3 3m0 0l3-3m-3 3V10m0 0l3 3m-3-3l-3 3m12-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
                     </div>
                   </div>

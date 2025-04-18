@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, setPersistence, browserLocalPersistence } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import { getFirestore, enableIndexedDbPersistence } from 'firebase/firestore';
 
 const firebaseConfig = {
     apiKey: "AIzaSyDZvWlQfdskmFmyiRHxjldX6VsY_2JlnRw",
@@ -13,13 +13,27 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
+const db = getFirestore(app);
 
-// Configurar persistência local para manter o usuário logado após recarregar
+// Configurar persistência local para autenticação
 setPersistence(auth, browserLocalPersistence)
   .catch((error) => {
-    console.error("Erro ao configurar persistência:", error);
+    console.error("Erro ao configurar persistência de autenticação:", error);
   });
 
-const db = getFirestore(app);
+// Habilitar persistência offline para Firestore
+enableIndexedDbPersistence(db)
+  .then(() => {
+    console.log("Persistência Firestore habilitada com sucesso!");
+  })
+  .catch((err) => {
+    if (err.code === 'failed-precondition') {
+      console.warn("Persistência falhou. Múltiplas abas abertas simultaneamente.");
+    } else if (err.code === 'unimplemented') {
+      console.warn("Navegador não suporta persistência offline.");
+    } else {
+      console.error("Erro ao configurar persistência Firestore:", err);
+    }
+  });
 
 export { auth, db };

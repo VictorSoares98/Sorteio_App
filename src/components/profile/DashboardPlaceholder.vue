@@ -86,7 +86,7 @@ const toggleDashboard = () => {
           </div>
           
           <div class="bg-red-50 p-4 rounded-lg shadow-sm border border-red-200">
-            <h4 class="font-medium text-red-800 mb-2">Ações de Manutenção</h4>
+            <h4 class="font-medium text-red-800 mb-2">⚠️ Ações de Manutenção</h4>
             <ResetSalesButton showHelpText />
           </div>
         </div>

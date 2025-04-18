@@ -1,16 +1,15 @@
 <script setup lang="ts">
-import { ref } from 'vue';
-import { PaymentMethod, type OrderFormData } from '../../types/order';
+import { ref, nextTick } from 'vue';
 import { useRaffleNumbers } from '../../composables/useRaffleNumbers';
-import { validateName, validatePhone } from '../../utils/validation';
-import { useAuthStore } from '../../stores/authStore';
-import { formatPhone } from '../../utils/formatters';
 import { useFormValidation } from '../../composables/useFormValidation';
-import Button from '../ui/Button.vue';
-import ConfirmationModal from '../modals/ConfirmationModal.vue';
+import { useAuthStore } from '../../stores/authStore';
 import { useOrderStore } from '../../stores/orderStore';
+import { PaymentMethod, type OrderFormData } from '../../types/order';
+import ConfirmationModal from '../modals/ConfirmationModal.vue';
+import { validatePhone, validateName } from '../../utils/validation';
+import { formatPhone } from '../../utils/formatters';
+import Button from '../ui/Button.vue';
 import OrderFormFields from './OrderFormFields.vue';
-import { useConnectionStatus } from '../../services/connectivity';
 
 // Form data
 const formData = ref<OrderFormData>({
@@ -38,10 +37,12 @@ const {
 } = useRaffleNumbers();
 const authStore = useAuthStore();
 const orderStore = useOrderStore();
-const { isOnline } = useConnectionStatus();
 
 // Referência ao pedido criado para o modal de confirmação
 const createdOrder = ref<any>(null);
+
+// Adicionar nova ref para controlar o bloqueio do botão
+const buttonDisabled = ref(false);
 
 // Faz validação dos campos antes de submit
 const validateForm = () => {
@@ -82,7 +83,22 @@ const updateFormData = (newFormData: OrderFormData) => {
 
 // Processa o envio do formulário otimizado
 const submitForm = async () => {
-  if (!validateForm()) return;
+  // Bloquear múltiplos cliques imediatamente
+  if (buttonDisabled.value || isSubmitting.value || isGenerating.value) return;
+  
+  // Ativar bloqueio temporário do botão
+  buttonDisabled.value = true;
+  setTimeout(() => {
+    buttonDisabled.value = false;
+  }, 3000); // Bloquear por 3 segundos no mínimo
+  
+  if (!validateForm()) {
+    buttonDisabled.value = false;
+    return;
+  }
+  
+  let orderCreated = false;
+  let newOrderId = '';
   
   try {
     isSubmitting.value = true;
@@ -106,11 +122,14 @@ const submitForm = async () => {
       throw new Error('Você precisa estar logado para criar um pedido');
     }
     
-    // 2. Criar pedido - não é mais necessário o flag para processamento em lote
-    const newOrderId = await orderStore.createOrder(
+    // 2. Criar pedido
+    newOrderId = await orderStore.createOrder(
       formData.value, 
       generatedNumbers.value
     );
+    
+    // Marcar que o pedido foi criado com sucesso
+    orderCreated = true;
     
     // 3. Construir objeto do pedido localmente sem busca adicional
     const username = authStore.currentUser.username || 
@@ -123,64 +142,61 @@ const submitForm = async () => {
       paymentMethod: formData.value.paymentMethod,
       contactNumber: formData.value.contactNumber,
       addressOrCongregation: formData.value.addressOrCongregation,
-      observations: formData.value.observations,
+      observations: formData.value.observations || '',
       generatedNumbers: generatedNumbers.value,
       sellerId: authStore.currentUser.id,
       sellerName: authStore.currentUser.displayName,
       sellerUsername: username,
       createdAt: new Date()
     };
-    
-    // Adicionar alerta se estiver offline
-    if (!isOnline.value) {
-      errors.value.submit = "Pedido salvo localmente. Será sincronizado automaticamente quando a conexão for restaurada.";
-    }
-    
-    // 4. Mostrar confirmação e resetar formulário
-    orderId.value = newOrderId;
-    showConfirmation.value = true;
-    resetForm();
-    
   } catch (err: any) {
     console.error('Erro ao criar pedido:', err);
     errors.value.submit = err.message || 'Erro ao processar pedido. Tente novamente.';
   } finally {
     isSubmitting.value = false;
   }
+  
+  // Mover a lógica do modal para fora do bloco try/finally
+  if (orderCreated) {
+    console.log(`[OrderForm] Pedido ${newOrderId} criado com sucesso, preparando modal`);
+    orderId.value = newOrderId;
+    
+    // Exibir confirmação e resetar formulário após um breve intervalo
+    nextTick(() => {
+      // Mostrar o modal de confirmação
+      showConfirmation.value = true;
+      
+      // Resetar formulário após o pedido ter sido processado
+      setTimeout(() => {
+        resetForm();
+      }, 500);
+    });
+  } else {
+    // Liberar o botão se o pedido não for criado
+    buttonDisabled.value = false;
+  }
 };
 
-// Reseta o formulário após envio bem-sucedido
-const resetForm = () => {
-  formData.value = {
-    buyerName: '',
-    paymentMethod: undefined, // Redefinir para nenhum método selecionado
-    contactNumber: '',
-    addressOrCongregation: '',
-    observations: '',
-    numTickets: 0 // Resetar para 0 para que o campo fique vazio
-  };
-};
-
-// Fecha o modal de confirmação
+// Fechar o modal de confirmação
 const closeConfirmation = () => {
   showConfirmation.value = false;
 };
+
+// Resetar o formulário
+const resetForm = () => {
+  formData.value = {
+    buyerName: '',
+    paymentMethod: undefined,
+    contactNumber: '',
+    addressOrCongregation: '',
+    observations: '',
+    numTickets: 0
+  };
+};
+
 </script>
 
 <template>
-  <!-- Alerta de modo offline -->
-  <div v-if="!isOnline" class="mb-4 bg-yellow-50 border border-yellow-200 p-3 rounded-lg">
-    <div class="flex items-center">
-      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-yellow-600 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-      </svg>
-      <span class="text-yellow-700 font-medium">Modo Offline Ativo</span>
-    </div>
-    <p class="text-sm text-yellow-600 mt-1">
-      Seus pedidos serão salvos localmente e sincronizados automaticamente quando a conexão for restaurada.
-    </p>
-  </div>
-
   <form @submit.prevent="submitForm" class="form-container">
     <!-- Form Title -->
     <h2 class="form-title">Novo Pedido</h2>
@@ -202,20 +218,26 @@ const closeConfirmation = () => {
     <div class="flex items-center justify-center">
       <Button
         type="submit"
-        :disabled="isSubmitting || isGenerating"
+        :disabled="isSubmitting || isGenerating || buttonDisabled"
         variant="primary"
         block
       >
         <span v-if="isSubmitting || isGenerating">Processando...</span>
+        <span v-else-if="buttonDisabled">Aguarde...</span>
         <span v-else>Finalizar Pedido</span>
       </Button>
     </div>
   </form>
   
-  <!-- Confirmation Modal -->
+  <!-- Modal de confirmação simplificado -->
   <ConfirmationModal
+    v-if="showConfirmation"
     :show="showConfirmation"
     :order="createdOrder"
     @close="closeConfirmation"
   />
 </template>
+
+<style>
+/* Estilos para status offline já estão no componente principal */
+</style>

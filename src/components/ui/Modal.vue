@@ -40,6 +40,10 @@ const props = defineProps({
     type: Boolean,
     default: false
   },
+  forceShowCloseButton: {
+    type: Boolean,
+    default: false
+  },
   position: {
     type: String,
     default: 'center',
@@ -119,7 +123,8 @@ const headerClasses = computed(() => {
 
 // Fechar o modal
 const closeModal = () => {
-  if (props.persistent) return;
+  // Permitir fechamento se forceShowCloseButton for true, mesmo com persistent
+  if (props.persistent && !props.forceShowCloseButton) return;
   emit('close');
 };
 
@@ -259,7 +264,7 @@ onBeforeUnmount(() => {
       @after-leave="emit('closed')"
     >
       <div v-if="show" 
-           class="fixed inset-0 flex z-50 overflow-y-auto" 
+           class="fixed inset-0 flex z-50 overflow-y-auto modal-container" 
            :class="positionClasses"
            @click="handleClickOutside"
       >
@@ -269,7 +274,7 @@ onBeforeUnmount(() => {
         <!-- Modal Container -->
         <div 
           ref="modalContent"
-          class="bg-white rounded-lg shadow-xl relative mx-auto my-auto transition-all transform"
+          class="bg-white rounded-lg shadow-xl relative mx-auto my-auto transition-all transform modal-content"
           :class="[sizeClasses, { 'scale-95 opacity-0': !isVisible, 'scale-100 opacity-100': isVisible }]"
         >
           <!-- Header -->
@@ -283,7 +288,7 @@ onBeforeUnmount(() => {
             
             <!-- Botão fechar (versão melhorada 3D) -->
             <button 
-              v-if="!hideCloseButton && !persistent" 
+              v-if="(!hideCloseButton && !persistent) || forceShowCloseButton" 
               @click="closeModal" 
               class="ml-auto text-gray-400 hover:text-gray-600 focus:outline-none transition-transform hover:scale-110"
               aria-label="Fechar"
@@ -341,11 +346,19 @@ onBeforeUnmount(() => {
   opacity: 0;
 }
 
-.modal-enter-from .bg-white {
+.modal-enter-from .bg-white,
+.modal-enter-from .modal-content {
   transform: scale(0.95);
 }
 
-.modal-leave-to .bg-white {
+.modal-leave-to .bg-white,
+.modal-leave-to .modal-content {
   transform: scale(0.95);
+}
+
+/* Garantir que o modal seja visível em todas as condições */
+.modal-container {
+  display: flex;
+  z-index: 50; 
 }
 </style>

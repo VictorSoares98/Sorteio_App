@@ -37,12 +37,15 @@ const handleClose = () => {
   <Modal 
     :show="show" 
     title="Pedido Realizado com Sucesso!"
-    :closeOnClickOutside="true"
+    :closeOnClickOutside="false"
+    :persistent="true" 
+    :forceShowCloseButton="true"
     @close="handleClose"
     scrollable
+    class="confirmation-modal"
   >
     <div v-if="order" class="space-y-4">
-      <!-- Cada informação agora tem seu próprio container -->
+      <!-- Cada informação tem seu próprio container -->
       <div class="p-3 bg-gray-50 rounded-lg border border-gray-200">
         <h4 class="text-sm text-gray-500 mb-1">Vendedor</h4>
         <p class="font-medium">{{ order.sellerName }}</p>
@@ -105,3 +108,7 @@ const handleClose = () => {
     </template>
   </Modal>
 </template>
+
+<style scoped>
+/* Os estilos agora estão centralizados no componente Modal */
+</style>
