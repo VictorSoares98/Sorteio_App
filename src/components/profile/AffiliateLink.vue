@@ -331,39 +331,18 @@ const calculateMenuPosition = (userId: string, rect?: DOMRect, options: {
   if (rect) {
     // Calculamos com base no retângulo (elemento acionador)
     if (isSubmenu && parentMenuPosition) {
-      // Para submenu, usamos a posição do menu pai
+      // Para submenu, sempre usar posicionamento à esquerda
       const menuTop = parseInt(parentMenuPosition.top) || 0;
       const menuLeft = parseInt(parentMenuPosition.left) || 0;
       const menuRight = parentMenuPosition.right !== 'auto' ? 
-        parseInt(parentMenuPosition.right) || 0 : 0;
+        parseInt(parentMenuPosition.right) || 0 : windowWidth - menuLeft;
       
-      // Determinar se o menu pai está à direita ou à esquerda
-      const isMenuOnLeft = parentMenuPosition.right !== 'auto';
-      
-      if (isMenuOnLeft) {
-        // Menu está à esquerda do gatilho, submenu vai para a esquerda
-        position = {
-          top: `${menuTop}px`,
-          right: `${menuRight + width}px`,
-          left: 'auto'
-        };
-      } else {
-        // Menu está à direita do gatilho, submenu vai para a direita
-        position = {
-          top: `${menuTop}px`,
-          left: `${menuLeft + width}px`,
-          right: 'auto'
-        };
-        
-        // Se não couber à direita, coloca à esquerda do menu
-        if (menuLeft + width + width > windowWidth) {
-          position = {
-            top: `${menuTop}px`,
-            right: `${windowWidth - menuLeft + 5}px`,
-            left: 'auto'
-          };
-        }
-      }
+      // Sempre posicionar submenus à esquerda
+      position = {
+        top: `${menuTop}px`,
+        right: `${menuRight + width}px`,
+        left: 'auto'
+      };
       
       // Verificar se vai caber para baixo ou se precisa ir para cima
       if (menuTop + menuHeight > windowHeight) {
@@ -373,21 +352,12 @@ const calculateMenuPosition = (userId: string, rect?: DOMRect, options: {
         };
       }
     } else {
-      // Menu principal - posicionamento padrão à direita do botão
+      // Menu principal - sempre à esquerda do botão
       position = {
         top: `${rect.top}px`,
-        left: `${rect.right + 5}px`,
-        right: 'auto'
+        right: `${windowWidth - rect.left + 5}px`,
+        left: 'auto'
       };
-      
-      // Verificar se vai caber à direita ou se precisa ir para a esquerda
-      if (rect.right + width > windowWidth) {
-        position = {
-          top: `${rect.top}px`,
-          right: `${windowWidth - rect.left + 5}px`,
-          left: 'auto'
-        };
-      }
       
       // Verificar se vai caber para baixo ou se precisa ir para cima
       if (rect.bottom + menuHeight > windowHeight) {
@@ -405,7 +375,7 @@ const calculateMenuPosition = (userId: string, rect?: DOMRect, options: {
     });
   } else {
     // Fallback - sem retângulo, sem posição do menu pai
-    position = { top: '0px', left: '0px' };
+    position = { top: '0px', right: '0px', left: 'auto' };
   }
   
   // Armazenar a posição calculada
