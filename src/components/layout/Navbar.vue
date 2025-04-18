@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue';
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '../../stores/authStore';
 import { UserRole } from '../../types/user';
@@ -7,6 +7,8 @@ import { UserRole } from '../../types/user';
 const router = useRouter();
 const authStore = useAuthStore();
 const isMenuOpen = ref(false);
+const menuRef = ref<HTMLElement | null>(null);
+const menuButtonRef = ref<HTMLElement | null>(null);
 
 // Recalcular as permissões sempre que o papel do usuário mudar
 const isAdmin = computed(() => {
@@ -22,6 +24,14 @@ onMounted(() => {
     console.log('[NavBar] Atualizando dados do usuário no mount');
     authStore.fetchUserData();
   }
+  
+  // Adicionar event listener para cliques fora do menu
+  document.addEventListener('click', handleClickOutside);
+});
+
+// Remover event listeners quando o componente é desmontado
+onUnmounted(() => {
+  document.removeEventListener('click', handleClickOutside);
 });
 
 // Observar mudanças de autenticação para atualizar a interface
@@ -46,8 +56,24 @@ const logout = async () => {
   }
 };
 
-const toggleMenu = () => {
+const toggleMenu = (event?: MouseEvent) => {
+  if (event) {
+    event.stopPropagation();
+  }
   isMenuOpen.value = !isMenuOpen.value;
+};
+
+// Fechar o menu quando clicar fora dele
+const handleClickOutside = (event: MouseEvent) => {
+  if (
+    isMenuOpen.value && 
+    menuRef.value && 
+    menuButtonRef.value && 
+    !menuRef.value.contains(event.target as Node) &&
+    !menuButtonRef.value.contains(event.target as Node)
+  ) {
+    isMenuOpen.value = false;
+  }
 };
 
 // Função para gerar avatar padrão baseado no nome do usuário
@@ -128,7 +154,8 @@ const getProfilePicture = (user: any) => {
         <!-- Menu Mobile Button -->
         <div class="block md:hidden">
           <button 
-            @click="toggleMenu" 
+            ref="menuButtonRef"
+            @click.stop="toggleMenu($event)" 
             class="inline-flex items-center justify-center p-2 rounded-md text-white hover:bg-primary-dark focus:outline-none transition-colors"
             aria-label="Menu principal"
           >
@@ -144,6 +171,7 @@ const getProfilePicture = (user: any) => {
       
       <!-- Mobile Menu -->
       <div 
+        ref="menuRef"
         :class="{
           'mobile-menu-open': isMenuOpen,
           'mobile-menu-closed': !isMenuOpen,
