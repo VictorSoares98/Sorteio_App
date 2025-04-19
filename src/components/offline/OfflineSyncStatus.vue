@@ -5,19 +5,14 @@ import { useConnectionStatus } from '../../services/connectivity';
 import Alert from '../ui/Alert.vue';
 
 const orderStore = useOrderStore();
-const { connectionStatus, isOnline } = useConnectionStatus();
+const { isOnline } = useConnectionStatus();
 
 // Status de conexão para exibição
 const statusDisplay = computed(() => {
-  switch (connectionStatus.value) {
-    case 'online':
-      return { text: 'Online', class: 'text-green-500', icon: 'wifi' };
-    case 'offline':
-      return { text: 'Offline', class: 'text-red-500', icon: 'wifi-off' };
-    case 'reconnecting':
-      return { text: 'Sincronizando...', class: 'text-yellow-500', icon: 'refresh' };
-    default:
-      return { text: 'Desconhecido', class: 'text-gray-500', icon: 'help' };
+  if (isOnline.value) {
+    return { text: 'Online', class: 'text-green-500', icon: 'wifi' };
+  } else {
+    return { text: 'Offline', class: 'text-red-500', icon: 'wifi-off' };
   }
 });
 
