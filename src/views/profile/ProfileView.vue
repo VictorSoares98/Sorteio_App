@@ -18,12 +18,18 @@ const isLoading = ref(true);
 const activeTab = ref('sales'); // Inicia com a tab de vendas ativa
 const affiliateLinkKey = ref(0); // Chave para forçar recreação do componente AffiliateLink
 
-// Removido isAdmin não utilizado e substituído pelo showDashboard que tem a mesma lógica
-
 // Verificar se o usuário tem permissão para ver o Painel de Controle
 const showDashboard = computed(() => {
   if (!authStore.currentUser) return false;
-  return [UserRole.ADMIN, UserRole.TESOUREIRO, UserRole.SECRETARIA].includes(authStore.currentUser.role);
+  
+  // Verificar se usuário tem papel administrativo
+  const isAdmin = [UserRole.ADMIN, UserRole.TESOUREIRO, UserRole.SECRETARIA].includes(authStore.currentUser.role);
+  
+  // Verificar se usuário está afiliado a alguém
+  const isAffiliated = !!authStore.currentUser.affiliatedTo;
+  
+  // Mostrar para admins OU para não-afiliados
+  return isAdmin || !isAffiliated;
 });
 
 // Verificar se o usuário é afiliado a alguém OU tem papel administrativo para mostrar Ranking
@@ -181,7 +187,7 @@ const getDefaultAvatar = (name: string) => {
             >
               <span class="flex items-center">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 0 012 2" />
                 </svg>
                 Minhas Vendas
               </span>
