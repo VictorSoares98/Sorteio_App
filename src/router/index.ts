@@ -58,6 +58,14 @@ const routes: AppRouteRecordRaw[] = [
     component: () => import(/* webpackChunkName: "profile" */ '../views/profile/ProfileView.vue'),
     meta: { requiresAuth: true, title: 'Perfil' }
   },
+
+  // Nova rota para a página de sorteio
+  {
+    path: '/raffle',
+    name: 'raffle',
+    component: () => import(/* webpackChunkName: "raffle" */ '../views/raffle/RaffleView.vue'),
+    meta: { requiresAuth: false, title: 'Sorteio' }
+  },
   
   // Rotas de Administração
   {

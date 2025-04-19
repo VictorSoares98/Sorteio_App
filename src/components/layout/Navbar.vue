@@ -130,6 +130,10 @@ const getProfilePicture = (user: any) => {
             <button @click="navigateTo('/profile')" class="px-3 py-2 rounded hover:bg-primary-dark text-sm md:text-base transition-colors">
               Perfil
             </button>
+            <!-- Link para página de sorteio -->
+            <button @click="navigateTo('/raffle')" class="px-3 py-2 rounded hover:bg-primary-dark text-sm md:text-base transition-colors">
+              Sorteio
+            </button>
             <button 
               v-if="isAdmin" 
               @click="navigateTo('/admin')" 
@@ -142,6 +146,10 @@ const getProfilePicture = (user: any) => {
             </button>
           </template>
           <template v-else>
+            <!-- Link para página de sorteio também para usuários não autenticados -->
+            <button @click="navigateTo('/raffle')" class="px-3 py-2 rounded hover:bg-primary-dark text-sm md:text-base transition-colors">
+              Sorteio
+            </button>
             <button @click="navigateTo('/login')" class="px-3 py-2 rounded hover:bg-primary-dark text-sm md:text-base transition-colors">
               Login
             </button>
@@ -203,6 +211,10 @@ const getProfilePicture = (user: any) => {
             <button @click="navigateTo('/profile')" class="block w-full text-left px-3 py-2 rounded hover:bg-primary-dark transition-colors">
               Perfil
             </button>
+            <!-- Link para página de sorteio mobile -->
+            <button @click="navigateTo('/raffle')" class="block w-full text-left px-3 py-2 rounded hover:bg-primary-dark transition-colors">
+              Sorteio
+            </button>
             <button 
               v-if="isAdmin" 
               @click="navigateTo('/admin')" 
@@ -215,6 +227,10 @@ const getProfilePicture = (user: any) => {
             </button>
           </template>
           <template v-else>
+            <!-- Link para página de sorteio mobile (não autenticado) -->
+            <button @click="navigateTo('/raffle')" class="block w-full text-left px-3 py-2 rounded hover:bg-primary-dark transition-colors">
+              Sorteio
+            </button>
             <button @click="navigateTo('/login')" class="block w-full text-left px-3 py-2 rounded hover:bg-primary-dark transition-colors">
               Login
             </button>
