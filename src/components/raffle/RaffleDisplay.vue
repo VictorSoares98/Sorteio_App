@@ -62,10 +62,20 @@ const isPastDate = computed(() => {
         
         <!-- Imagem principal -->
         <img 
+          v-if="raffleData.imageUrl" 
           :src="raffleData.imageUrl" 
           :alt="raffleData.title"
           class="relative z-10 rounded-lg shadow-lg w-full h-auto"
         />
+        
+        <!-- Placeholder para quando não há imagem -->
+        <div v-else class="relative z-10 rounded-lg shadow-lg w-full bg-gray-100 flex flex-col items-center justify-center p-8" style="min-height: 250px;">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 text-gray-400 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+          </svg>
+          <p class="text-gray-500 text-center">Imagem do prêmio não inserida</p>
+          <p class="text-sm text-gray-400 mt-2 text-center">Os detalhes do item estão na descrição abaixo</p>
+        </div>
         
         <!-- Badge de preço quando o sorteio está ativo -->
         <div v-if="!isCompleted" class="absolute -top-3 -right-3 z-20 bg-primary text-white rounded-full py-2 px-4 shadow-md font-bold transform rotate-12">

@@ -26,6 +26,12 @@ const validateForm = () => {
     return false;
   }
   
+  // Validação do tamanho mínimo da descrição
+  if (editedData.value.description.trim().length < 10) {
+    alert('A descrição do prêmio deve ter pelo menos 10 caracteres');
+    return false;
+  }
+  
   if (!editedData.value.raffleDate.trim()) {
     alert('A data do sorteio é obrigatória');
     return false;
@@ -169,14 +175,19 @@ const toggleCompletedStatus = () => {
           id="description"
           v-model="editedData.description"
           rows="4"
+          minlength="10"
+          style="min-height: 100px;"
           class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
           placeholder="Descreva detalhes sobre o item que será sorteado..."
         ></textarea>
+        <p class="text-xs text-gray-500 mt-1">
+          Escreva pelo menos 10 caracteres para uma boa descrição do prêmio.
+        </p>
       </div>
       
       <!-- Upload de imagem -->
       <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">
+        <label class="block text-sm font-medium text-gray-700 mb-1" for="imageUpload">
           Imagem do Prêmio
         </label>
         
@@ -191,11 +202,22 @@ const toggleCompletedStatus = () => {
                 alt="Preview" 
                 class="max-h-40 max-w-full object-contain rounded"
               />
+              
+              <!-- Placeholder visual quando não há imagem -->
+              <div v-if="!editedData.imageUrl && !imageLoading" class="flex flex-col items-center justify-center h-full w-full border-2 border-dashed border-gray-300 rounded-lg p-4">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 text-gray-400 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                <p class="text-sm text-gray-500 text-center">Nenhuma imagem selecionada</p>
+                <p class="text-xs text-primary mt-1">Clique no botão "Escolher arquivo" para adicionar uma imagem</p>
+              </div>
+              
               <div v-if="imageLoading" class="flex flex-col items-center">
                 <div class="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary mb-2"></div>
                 <span class="text-sm text-gray-500">Processando imagem...</span>
               </div>
             </div>
+            
             <!-- Botão para remover imagem com ícone X em 3D -->
             <button 
               v-if="editedData.imageUrl && !imageLoading && editedData.imageUrl.indexOf('placeholder') === -1"
@@ -216,6 +238,7 @@ const toggleCompletedStatus = () => {
           <!-- Input de upload -->
           <div class="flex flex-col justify-center">
             <input
+              id="imageUpload"
               type="file"
               accept="image/*"
               class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-white hover:file:bg-primary-dark"
