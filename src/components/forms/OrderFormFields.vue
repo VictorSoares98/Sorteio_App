@@ -82,30 +82,59 @@ const calculateCursorPosition = (oldValue: string, newValue: string, oldPosition
   
   <!-- Payment Method -->
   <div class="mb-4">
-    <label class="form-label">
+    <label class="form-label mb-2" for="paymentMethodPix">
       Forma de Pagamento <span class="text-danger">*</span>
     </label>
     <div class="flex w-full gap-2">
-      <button 
-        type="button" 
-        @click="updateFormData('paymentMethod', PaymentMethod.PIX)"
-        class="w-1/2 py-2 px-4 text-center rounded transition-colors"
+      <label 
+        class="w-1/2 relative"
         :class="formData.paymentMethod === PaymentMethod.PIX 
-          ? 'bg-primary text-white' 
-          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
+          ? 'text-white' 
+          : 'text-gray-700'"
       >
-        Pix
-      </button>
-      <button 
-        type="button" 
-        @click="updateFormData('paymentMethod', PaymentMethod.DINHEIRO)"
-        class="w-1/2 py-2 px-4 text-center rounded transition-colors"
+        <input 
+          type="radio" 
+          name="paymentMethod" 
+          id="paymentMethodPix"
+          :value="PaymentMethod.PIX" 
+          :checked="formData.paymentMethod === PaymentMethod.PIX"
+          @change="updateFormData('paymentMethod', PaymentMethod.PIX)"
+          class="sr-only"
+        />
+        <span 
+          class="block py-2 px-4 text-center rounded transition-colors cursor-pointer"
+          :class="formData.paymentMethod === PaymentMethod.PIX 
+            ? 'bg-primary text-white' 
+            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
+        >
+          Pix
+        </span>
+      </label>
+      
+      <label 
+        class="w-1/2 relative"
         :class="formData.paymentMethod === PaymentMethod.DINHEIRO 
-          ? 'bg-primary text-white' 
-          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
+          ? 'text-white' 
+          : 'text-gray-700'"
       >
-        Dinheiro
-      </button>
+        <input 
+          type="radio" 
+          name="paymentMethod" 
+          id="paymentMethodDinheiro"
+          :value="PaymentMethod.DINHEIRO" 
+          :checked="formData.paymentMethod === PaymentMethod.DINHEIRO"
+          @change="updateFormData('paymentMethod', PaymentMethod.DINHEIRO)"
+          class="sr-only"
+        />
+        <span 
+          class="block py-2 px-4 text-center rounded transition-colors cursor-pointer"
+          :class="formData.paymentMethod === PaymentMethod.DINHEIRO 
+            ? 'bg-primary text-white' 
+            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
+        >
+          Dinheiro
+        </span>
+      </label>
     </div>
     <p v-if="errors.paymentMethod" class="mt-1 text-sm text-danger">
       {{ errors.paymentMethod }}
@@ -142,6 +171,7 @@ const calculateCursorPosition = (oldValue: string, newValue: string, oldPosition
     </label>
     <textarea
       id="observations"
+      name="observations"
       :value="formData.observations"
       @input="e => updateFormData('observations', (e.target as HTMLTextAreaElement).value)"
       class="form-input"

@@ -81,6 +81,8 @@ const clearValue = () => {
     <!-- Input para valor manual -->
     <div class="flex mb-3">
       <input
+        id="number-ticket-value"
+        name="number-ticket-value"
         type="text"
         :value="inputValue"
         @input="updateValue"

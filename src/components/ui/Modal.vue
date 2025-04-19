@@ -73,6 +73,11 @@ const props = defineProps({
   contentClass: {
     type: String,
     default: ''
+  },
+  // Nova prop para classes personalizadas
+  customClass: {
+    type: String,
+    default: ''
   }
 });
 
@@ -275,7 +280,7 @@ onBeforeUnmount(() => {
         <div 
           ref="modalContent"
           class="bg-white rounded-lg shadow-xl relative mx-auto my-auto transition-all transform modal-content"
-          :class="[sizeClasses, { 'scale-95 opacity-0': !isVisible, 'scale-100 opacity-100': isVisible }]"
+          :class="[sizeClasses, { 'scale-95 opacity-0': !isVisible, 'scale-100 opacity-100': isVisible }, customClass]"
         >
           <!-- Header -->
           <div v-if="title || $slots.header" 

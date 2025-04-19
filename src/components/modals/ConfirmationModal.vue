@@ -42,7 +42,7 @@ const handleClose = () => {
     :forceShowCloseButton="true"
     @close="handleClose"
     scrollable
-    class="confirmation-modal"
+    :customClass="'confirmation-modal'"
   >
     <div v-if="order" class="space-y-4">
       <!-- Cada informação tem seu próprio container -->
