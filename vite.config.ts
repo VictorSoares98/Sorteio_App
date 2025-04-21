@@ -82,7 +82,29 @@ export default defineConfig({
   server: {
     // Configurações para desenvolvimento local
     port: 5173,
-    open: true
+    open: true,
+    // Configuração melhorada para WebSocket
+    hmr: {
+      // Configurar protocolo explicitamente
+      protocol: 'ws',
+      // Garantir que o host seja correto
+      host: 'localhost',
+      // Aumentar timeout para evitar desconexões rápidas
+      timeout: 120000,
+      // Desativar overlay para prevenir problemas de UI relacionados a HMR
+      overlay: false
+    },
+    // Configurações para melhor desempenho do watch
+    watch: {
+      // Usar polling como fallback se o watching baseado em eventos falhar
+      usePolling: true,
+      // Intervalo de polling em ms (balanceia CPU e responsividade)
+      interval: 1000
+    },
+    // Configuração de middlewares para WebSocket
+    middlewareMode: false,
+    // Permitir conexões de qualquer IP na rede local (útil para testes em múltiplos dispositivos)
+    host: '0.0.0.0'
   },
   // Configuração para melhorar o suporte a importações dinâmicas
   optimizeDeps: {
