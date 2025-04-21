@@ -26,7 +26,7 @@ type AppRouteRecordRaw = RouteRecordRaw & {
 const routes: AppRouteRecordRaw[] = [
   {
     path: '/',
-    name: 'home',
+    name: 'inicio',
     component: () => import(/* webpackChunkName: "home" */ '../views/HomeView.vue'),
     meta: { requiresAuth: true, title: 'Página Inicial' }
   },
@@ -39,38 +39,38 @@ const routes: AppRouteRecordRaw[] = [
     meta: { title: 'Login', requiresGuest: true }
   },
   {
-    path: '/register',
-    name: 'register',
+    path: '/cadastro',
+    name: 'cadastro',  // Já estava traduzido
     component: () => import(/* webpackChunkName: "auth" */ '../views/auth/RegisterView.vue'),
     meta: { title: 'Cadastro', requiresGuest: true }
   },
   {
-    path: '/forgot-password',
-    name: 'forgot-password',
+    path: '/esqueci-senha',
+    name: 'esqueci-senha',  // Já estava traduzido
     component: ForgotPasswordView,
-    meta: { requiresGuest: true }
+    meta: { requiresGuest: true, title: 'Esqueci Minha Senha' }
   },
   
   // Rotas de Perfil
   {
-    path: '/profile',
-    name: 'profile',
+    path: '/perfil',
+    name: 'perfil',  // Já estava traduzido
     component: () => import(/* webpackChunkName: "profile" */ '../views/profile/ProfileView.vue'),
     meta: { requiresAuth: true, title: 'Perfil' }
   },
 
   // Nova rota para a página de sorteio
   {
-    path: '/raffle',
-    name: 'raffle',
+    path: '/sorteio',
+    name: 'sorteio',  // Já estava traduzido
     component: () => import(/* webpackChunkName: "raffle" */ '../views/raffle/RaffleView.vue'),
     meta: { requiresAuth: false, title: 'Sorteio' }
   },
   
   // Rotas de Administração
   {
-    path: '/admin',
-    name: 'admin',
+    path: '/painel',
+    name: 'painel',  // Já estava traduzido
     component: () => import(/* webpackChunkName: "admin" */ '../views/admin/AdminView.vue'),
     meta: { requiresAuth: true, requiresAdmin: true, title: 'Administração' }
   },
@@ -78,7 +78,7 @@ const routes: AppRouteRecordRaw[] = [
   // Rota para tratar URLs inválidas
   {
     path: '/:pathMatch(.*)*',
-    name: 'not-found',
+    name: 'nao-encontrado',  // Já estava traduzido
     component: () => import(/* webpackChunkName: "error" */ '../views/NotFoundView.vue'),
     meta: { title: 'Página não encontrada' }
   }
@@ -122,7 +122,7 @@ router.beforeEach((to, _from, next) => {
     if (to.path === '/' || to.path === '/login') {
       console.log('[Router] Redirecionando para página de registro com código de afiliado');
       return next({ 
-        path: '/register',
+        path: '/cadastro',
         query: { ref: refCode }
       });
     }
@@ -146,9 +146,9 @@ router.beforeEach(async (
   // Verificar se está indo para página de autenticação e já está logado
   const currentUser = await getCurrentUser() as User | null;
   
-  if ((to.path === '/login' || to.path === '/register') && currentUser) {
+  if ((to.path === '/login' || to.path === '/cadastro') && currentUser) {
     console.log('[Router] Usuário já autenticado, redirecionando para home');
-    return next({ name: 'home' });
+    return next({ name: 'inicio' });
   }
   
   // Resto da lógica de proteção de rotas
@@ -170,11 +170,11 @@ router.beforeEach(async (
       } else {
         // Não é admin, redirecionar para home
         console.log('[Router] Usuário não é admin, redirecionando para home');
-        next({ name: 'home' });
+        next({ name: 'inicio' });
       }
     } catch (error) {
       console.error('Erro ao verificar permissões:', error);
-      next({ name: 'home' });
+      next({ name: 'inicio' });
     }
   } else {
     next();
@@ -185,7 +185,7 @@ router.beforeEach(async (
 router.beforeEach(async (to, from, next) => {
   // Se está navegando para a página inicial e tem afiliação pendente,
   // garantir que os dados de usuário estejam atualizados
-  if (to.path === '/' && (sessionStorage.getItem('newAffiliation') === 'true' || from.path === '/register' || from.path === '/login')) {
+  if (to.path === '/' && (sessionStorage.getItem('newAffiliation') === 'true' || from.path === '/cadastro' || from.path === '/login')) {
     console.log('[Router] Detectada possível nova afiliação, atualizando dados do usuário');
     console.log('[Router] Estado newAffiliation:', sessionStorage.getItem('newAffiliation'));
     console.log('[Router] Origem da navegação:', from.path);

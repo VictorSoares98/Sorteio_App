@@ -127,16 +127,16 @@ const getProfilePicture = (user: any) => {
             <button @click="navigateTo('/')" class="px-3 py-2 rounded hover:bg-primary-dark text-sm md:text-base transition-colors">
               Início
             </button>
-            <button @click="navigateTo('/profile')" class="px-3 py-2 rounded hover:bg-primary-dark text-sm md:text-base transition-colors">
+            <button @click="navigateTo('/perfil')" class="px-3 py-2 rounded hover:bg-primary-dark text-sm md:text-base transition-colors">
               Perfil
             </button>
             <!-- Link para página de sorteio -->
-            <button @click="navigateTo('/raffle')" class="px-3 py-2 rounded hover:bg-primary-dark text-sm md:text-base transition-colors">
+            <button @click="navigateTo('/sorteio')" class="px-3 py-2 rounded hover:bg-primary-dark text-sm md:text-base transition-colors">
               Sorteio
             </button>
             <button 
               v-if="isAdmin" 
-              @click="navigateTo('/admin')" 
+              @click="navigateTo('/painel')" 
               class="px-3 py-2 rounded hover:bg-primary-dark text-sm md:text-base transition-colors"
             >
               Painel
@@ -147,13 +147,13 @@ const getProfilePicture = (user: any) => {
           </template>
           <template v-else>
             <!-- Link para página de sorteio também para usuários não autenticados -->
-            <button @click="navigateTo('/raffle')" class="px-3 py-2 rounded hover:bg-primary-dark text-sm md:text-base transition-colors">
+            <button @click="navigateTo('/sorteio')" class="px-3 py-2 rounded hover:bg-primary-dark text-sm md:text-base transition-colors">
               Sorteio
             </button>
             <button @click="navigateTo('/login')" class="px-3 py-2 rounded hover:bg-primary-dark text-sm md:text-base transition-colors">
-              Login
+              Entrar
             </button>
-            <button @click="navigateTo('/register')" class="px-3 py-2 rounded hover:bg-primary-dark text-sm md:text-base transition-colors">
+            <button @click="navigateTo('/cadastro')" class="px-3 py-2 rounded hover:bg-primary-dark text-sm md:text-base transition-colors">
               Cadastrar
             </button>
           </template>
@@ -208,19 +208,19 @@ const getProfilePicture = (user: any) => {
             <button @click="navigateTo('/')" class="block w-full text-left px-3 py-2 rounded hover:bg-primary-dark transition-colors">
               Início
             </button>
-            <button @click="navigateTo('/profile')" class="block w-full text-left px-3 py-2 rounded hover:bg-primary-dark transition-colors">
+            <button @click="navigateTo('/perfil')" class="block w-full text-left px-3 py-2 rounded hover:bg-primary-dark transition-colors">
               Perfil
             </button>
             <!-- Link para página de sorteio mobile -->
-            <button @click="navigateTo('/raffle')" class="block w-full text-left px-3 py-2 rounded hover:bg-primary-dark transition-colors">
+            <button @click="navigateTo('/sorteio')" class="block w-full text-left px-3 py-2 rounded hover:bg-primary-dark transition-colors">
               Sorteio
             </button>
             <button 
               v-if="isAdmin" 
-              @click="navigateTo('/admin')" 
+              @click="navigateTo('/painel')" 
               class="block w-full text-left px-3 py-2 rounded hover:bg-primary-dark transition-colors"
             >
-              Admin
+              Painel
             </button>
             <button @click="logout" class="block w-full text-left px-3 py-2 rounded hover:bg-danger transition-colors mt-2 border-t border-primary-light pt-3">
               Sair
@@ -228,13 +228,13 @@ const getProfilePicture = (user: any) => {
           </template>
           <template v-else>
             <!-- Link para página de sorteio mobile (não autenticado) -->
-            <button @click="navigateTo('/raffle')" class="block w-full text-left px-3 py-2 rounded hover:bg-primary-dark transition-colors">
+            <button @click="navigateTo('/sorteio')" class="block w-full text-left px-3 py-2 rounded hover:bg-primary-dark transition-colors">
               Sorteio
             </button>
             <button @click="navigateTo('/login')" class="block w-full text-left px-3 py-2 rounded hover:bg-primary-dark transition-colors">
-              Login
+              Entrar
             </button>
-            <button @click="navigateTo('/register')" class="block w-full text-left px-3 py-2 rounded hover:bg-primary-dark transition-colors">
+            <button @click="navigateTo('/cadastro')" class="block w-full text-left px-3 py-2 rounded hover:bg-primary-dark transition-colors">
               Cadastrar
             </button>
           </template>

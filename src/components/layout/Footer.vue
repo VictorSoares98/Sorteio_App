@@ -53,7 +53,7 @@ const logout = async () => {
                 </router-link>
               </li>
               <li>
-                <router-link to="/profile" class="text-gray-400 hover:text-primary text-xs md:text-sm transition-colors">
+                <router-link to="/perfil" class="text-gray-400 hover:text-primary text-xs md:text-sm transition-colors">
                   Perfil
                 </router-link>
               </li>
