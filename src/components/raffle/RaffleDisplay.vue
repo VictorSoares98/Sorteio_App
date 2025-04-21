@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import { DateTime } from 'luxon'; // Importar o Luxon para tratamento correto de datas
-import { capitalizeMonth } from '../../utils/formatters'; // Importando a função do utilitário
+import { DateTime } from 'luxon'; 
+import { capitalizeMonth } from '../../utils/formatters';
+import RaffleWinnerInfo from './RaffleWinnerInfo.vue';
+import RaffleSellerInfo from './RaffleSellerInfo.vue';
 
 const props = defineProps<{
   raffleData: any;
@@ -124,31 +126,11 @@ const isPastDate = computed(() => {
         </div>
         
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <!-- Vencedor do sorteio -->
-          <div class="bg-green-50 border border-green-200 rounded-lg p-4">
-            <h3 class="text-center font-bold text-lg text-green-800 mb-3">Vencedor</h3>
-            <div class="text-center">
-              <p class="font-bold text-xl text-gray-800">{{ raffleData.winner.name }}</p>
-              <p class="text-gray-600 mt-1">{{ raffleData.winner.phone }}</p>
-              <p class="text-gray-600">{{ raffleData.winner.congregation }}</p>
-            </div>
-          </div>
+          <!-- Componente de informações do vencedor -->
+          <RaffleWinnerInfo :winner="raffleData.winner" />
           
-          <!-- Vendedor do número premiado -->
-          <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <h3 class="text-center font-bold text-lg text-blue-800 mb-3">Vendido por</h3>
-            <div class="flex flex-col items-center">
-              <div class="w-16 h-16 rounded-full overflow-hidden border-2 border-primary mb-2">
-                <img 
-                  :src="raffleData.seller.photoURL" 
-                  :alt="raffleData.seller.name" 
-                  class="w-full h-full object-cover"
-                  onerror="this.src='https://api.dicebear.com/7.x/initials/svg?seed='+encodeURIComponent(this.alt)+'&backgroundColor=FF8C00'"
-                />
-              </div>
-              <p class="font-bold text-gray-800">{{ raffleData.seller.name }}</p>
-            </div>
-          </div>
+          <!-- Componente de informações do vendedor -->
+          <RaffleSellerInfo :seller="raffleData.seller" />
         </div>
       </template>
     </div>
