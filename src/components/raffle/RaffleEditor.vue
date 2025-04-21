@@ -1,34 +1,45 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue';
-import { imageToBase64 } from '../../services/raffle';
 import Modal from '../ui/Modal.vue';
 import VueDatePicker from '@vuepic/vue-datepicker';
 import '@vuepic/vue-datepicker/dist/main.css';
-import { DateTime } from 'luxon';
+import { useRaffleValidation } from '../../composables/useRaffleValidation';
+import { useImageProcessing } from '../../composables/useImageProcessing';
+import type { RaffleData } from '../../services/raffle';
 
 const props = defineProps<{
-  raffleData: any;
+  raffleData: RaffleData;
 }>();
 
 const emit = defineEmits(['save']);
 
+// Utilizar os composables
+const { 
+  dateError, 
+  modalMessage, 
+  showModal, 
+  isValid, 
+  isDateValid, 
+  validateForm, 
+  getDateLimits,
+  getPriceLimit 
+} = useRaffleValidation();
+
+const { 
+  imageLoading, 
+  imageError, 
+  processImage 
+} = useImageProcessing();
+
 // Criar cópia dos dados para edição
 const editedData = ref({ ...props.raffleData });
-const imageLoading = ref(false);
-const imageError = ref<string | null>(null);
 const priceInput = ref('');
-const dateError = ref<string | null>(null);
 
 // Valores pré-definidos para o preço do bilhete
 const priceOptions = [1, 2, 5, 10, 20, 50];
 
-// Constante para o limite máximo de preço
-const MAX_PRICE_LIMIT = 1000000; // 1 milhão em reais
-
-// Estados para o modal de confirmação
-const showModal = ref(false);
-const modalMessage = ref('');
-const isValid = ref(false);
+// Obter o limite máximo de preço do composable
+const MAX_PRICE_LIMIT = getPriceLimit();
 
 // Configuração do datepicker em português com configuração segura para Luxon
 const datepickerLocale = {
@@ -39,16 +50,10 @@ const datepickerLocale = {
   format: 'dd/MM/yyyy' // Definir o formato explicitamente aqui
 };
 
-// Configurações avançadas para o datepicker
-const minDate = computed(() => {
-  // Data mínima é hoje
-  return DateTime.now().toJSDate();
-});
-
-const maxDate = computed(() => {
-  // Data máxima é 1 ano no futuro
-  return DateTime.now().plus({ years: 1 }).toJSDate();
-});
+// Obter limites de data do composable
+const dateLimits = getDateLimits();
+const minDate = computed(() => dateLimits.minDate);
+const maxDate = computed(() => dateLimits.maxDate);
 
 // Lista de feriados nacionais brasileiros (estática para o ano atual e o próximo)
 const getFeriados = (): Date[] => {
@@ -109,93 +114,6 @@ const isWeekDayDisabled = (date: Date): boolean => {
   return false;
 };
 
-// Verificar se a data é válida
-const isDateValid = (date: Date | null): boolean => {
-  if (!date) return false;
-  
-  const jsDate = date instanceof Date ? date : new Date(date);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  
-  // Data não pode ser no passado
-  if (jsDate < today) {
-    dateError.value = 'A data do sorteio não pode ser no passado';
-    return false;
-  }
-  
-  // Data não pode ser mais de um ano no futuro
-  const maxAllowedDate = new Date();
-  maxAllowedDate.setFullYear(maxAllowedDate.getFullYear() + 1);
-  
-  if (jsDate > maxAllowedDate) {
-    dateError.value = 'A data do sorteio não pode ser mais de 1 ano no futuro';
-    return false;
-  }
-  
-  // Se passou todas as validações, limpar erro e retornar válido
-  dateError.value = null;
-  return true;
-};
-
-// Validar dados antes de salvar
-const validateForm = () => {
-  // Validação básica
-  if (!editedData.value.title.trim()) {
-    modalMessage.value = 'O título do sorteio é obrigatório';
-    showModal.value = true;
-    return false;
-  }
-  
-  if (!editedData.value.description.trim()) {
-    modalMessage.value = 'A descrição do sorteio é obrigatória';
-    showModal.value = true;
-    return false;
-  }
-  
-  // Validação do tamanho mínimo da descrição
-  if (editedData.value.description.trim().length < 10) {
-    modalMessage.value = 'A descrição do prêmio deve ter pelo menos 10 caracteres';
-    showModal.value = true;
-    return false;
-  }
-  
-  if (!editedData.value.raffleDate.trim()) {
-    modalMessage.value = 'A data do sorteio é obrigatória';
-    showModal.value = true;
-    return false;
-  }
-  
-  // Validação avançada de data adicionada aqui
-  try {
-    const raffleDate = new Date(editedData.value.raffleDate);
-    if (!isDateValid(raffleDate)) {
-      modalMessage.value = dateError.value || 'Data de sorteio inválida';
-      showModal.value = true;
-      return false;
-    }
-  } catch (error) {
-    modalMessage.value = 'Formato de data inválido';
-    showModal.value = true;
-    return false;
-  }
-  
-  // Validar preço mínimo
-  if (editedData.value.price <= 0) {
-    modalMessage.value = 'O preço do bilhete de Sorteio não pode ser zero (0,00)';
-    showModal.value = true;
-    return false;
-  }
-  
-  // Validar limite máximo de preço
-  if (editedData.value.price > MAX_PRICE_LIMIT) {
-    modalMessage.value = `O preço máximo do bilhete não pode exceder R$ ${MAX_PRICE_LIMIT.toLocaleString('pt-BR')}`;
-    showModal.value = true;
-    return false;
-  }
-  
-  return true;
-};
-
 // Preparar para salvar alterações
 const prepareToSave = () => {
   // Verificar especificamente se a data está vazia para destacar o campo com erro
@@ -203,9 +121,14 @@ const prepareToSave = () => {
     dateError.value = 'A data do sorteio é obrigatória';
   }
   
-  if (validateForm()) {
+  const validationResult = validateForm(editedData.value);
+  
+  if (validationResult.isValid) {
     modalMessage.value = 'Deseja salvar as alterações realizadas no sorteio?';
     isValid.value = true;
+    showModal.value = true;
+  } else {
+    modalMessage.value = validationResult.message || 'Verifique os dados do formulário';
     showModal.value = true;
   }
 };
@@ -221,49 +144,22 @@ const cancelSave = () => {
   showModal.value = false;
 };
 
-// Lidar com atualização de imagem
+// Lidar com atualização de imagem - Usando o composable
 const handleImageChange = async (event: Event) => {
   const input = event.target as HTMLInputElement;
   const file = input.files?.[0];
   
   if (!file) return;
   
-  // Limpar erros anteriores
-  imageError.value = null;
-  
-  // Verificar tipo de arquivo - suportar mais formatos de imagem
-  const supportedFormats = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml', 'image/bmp'];
-  
-  if (!supportedFormats.includes(file.type)) {
-    imageError.value = 'Formato de imagem não suportado. Use JPEG, PNG, GIF, WEBP, SVG ou BMP.';
-    return;
-  }
-  
-  // Limitação de tamanho (2MB)
-  const MAX_SIZE = 2 * 1024 * 1024; // 2MB
-  if (file.size > MAX_SIZE) {
-    imageError.value = 'A imagem deve ter menos de 2MB.';
-    return;
-  }
-  
-  try {
-    imageLoading.value = true;
-    
-    // Converter para base64 usando o serviço
-    const base64Image = await imageToBase64(file);
+  const base64Image = await processImage(file);
+  if (base64Image) {
     editedData.value.imageUrl = base64Image;
-    
-  } catch (error) {
-    console.error('Erro ao processar imagem:', error);
-    imageError.value = 'Não foi possível processar a imagem. Tente novamente.';
-  } finally {
-    imageLoading.value = false;
   }
 };
 
-// Remover imagem
+// Remover imagem - Corrigido para usar string vazia em vez de null
 const removeImage = () => {
-  editedData.value.imageUrl = null;
+  editedData.value.imageUrl = '';
 };
 
 // Formatar preço para BRL
