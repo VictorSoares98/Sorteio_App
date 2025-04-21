@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
 import { imageToBase64 } from '../../services/raffle';
+import Modal from '../ui/Modal.vue';
 
 const props = defineProps<{
   raffleData: any;
@@ -12,38 +13,82 @@ const emit = defineEmits(['save']);
 const editedData = ref({ ...props.raffleData });
 const imageLoading = ref(false);
 const imageError = ref<string | null>(null);
+const priceInput = ref('');
+
+// Valores pré-definidos para o preço do bilhete
+const priceOptions = [1, 2, 5, 10, 20, 50];
+
+// Constante para o limite máximo de preço
+const MAX_PRICE_LIMIT = 1000000; // 1 milhão em reais
+
+// Estados para o modal de confirmação
+const showModal = ref(false);
+const modalMessage = ref('');
+const isValid = ref(false);
 
 // Validar dados antes de salvar
 const validateForm = () => {
   // Validação básica
   if (!editedData.value.title.trim()) {
-    alert('O título do sorteio é obrigatório');
+    modalMessage.value = 'O título do sorteio é obrigatório';
+    showModal.value = true;
     return false;
   }
   
   if (!editedData.value.description.trim()) {
-    alert('A descrição do sorteio é obrigatória');
+    modalMessage.value = 'A descrição do sorteio é obrigatória';
+    showModal.value = true;
     return false;
   }
   
   // Validação do tamanho mínimo da descrição
   if (editedData.value.description.trim().length < 10) {
-    alert('A descrição do prêmio deve ter pelo menos 10 caracteres');
+    modalMessage.value = 'A descrição do prêmio deve ter pelo menos 10 caracteres';
+    showModal.value = true;
     return false;
   }
   
   if (!editedData.value.raffleDate.trim()) {
-    alert('A data do sorteio é obrigatória');
+    modalMessage.value = 'A data do sorteio é obrigatória';
+    showModal.value = true;
+    return false;
+  }
+  
+  // Validar preço mínimo
+  if (editedData.value.price <= 0) {
+    modalMessage.value = 'O preço do bilhete de Sorteio não pode ser zero (0,00)';
+    showModal.value = true;
+    return false;
+  }
+  
+  // Validar limite máximo de preço
+  if (editedData.value.price > MAX_PRICE_LIMIT) {
+    modalMessage.value = `O preço máximo do bilhete não pode exceder R$ ${MAX_PRICE_LIMIT.toLocaleString('pt-BR')}`;
+    showModal.value = true;
     return false;
   }
   
   return true;
 };
 
-// Enviar alterações para o componente pai
-const saveChanges = () => {
-  if (!validateForm()) return;
+// Preparar para salvar alterações
+const prepareToSave = () => {
+  if (validateForm()) {
+    modalMessage.value = 'Deseja salvar as alterações realizadas no sorteio?';
+    isValid.value = true;
+    showModal.value = true;
+  }
+};
+
+// Enviar alterações para o componente pai (após confirmação)
+const confirmSave = () => {
   emit('save', editedData.value);
+  showModal.value = false;
+};
+
+// Cancelar a operação
+const cancelSave = () => {
+  showModal.value = false;
 };
 
 // Lidar com atualização de imagem
@@ -90,13 +135,66 @@ const handleImageChange = async (event: Event) => {
 const removeImage = () => {
   editedData.value.imageUrl = null;
 };
+
+// Formatar preço para BRL
+const formatPriceToBRL = (value: number) => {
+  return new Intl.NumberFormat('pt-BR', { 
+    style: 'decimal',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  }).format(value);
+};
+
+// Lidar com entrada de preço
+const handlePriceInput = (event: Event) => {
+  // Obter apenas dígitos da entrada
+  const input = (event.target as HTMLInputElement).value.replace(/\D/g, '');
+  
+  // Converter para um valor decimal (divide por 100 para transformar centavos em reais)
+  let numericValue = input ? parseInt(input) / 100 : 0;
+  
+  // Limitando o valor máximo a 1 milhão
+  if (numericValue > MAX_PRICE_LIMIT) {
+    numericValue = MAX_PRICE_LIMIT;
+    // Atualizar o campo com valor formatado limitado
+    setTimeout(() => {
+      priceInput.value = formatPriceToBRL(MAX_PRICE_LIMIT);
+    }, 0);
+  }
+  
+  // Armazenar o valor numérico real
+  editedData.value.price = numericValue;
+  
+  // Formatar para exibição no formato brasileiro
+  priceInput.value = formatPriceToBRL(numericValue);
+};
+
+// Formatar preço ao perder o foco
+const formatPrice = () => {
+  priceInput.value = formatPriceToBRL(editedData.value.price);
+};
+
+// Função para selecionar um valor pré-definido
+const selectPriceValue = (value: number) => {
+  // Atualizar o valor numérico real
+  editedData.value.price = value;
+  
+  // Formatar para exibição
+  priceInput.value = formatPriceToBRL(value);
+};
+
+onMounted(() => {
+  if (editedData.value.price) {
+    priceInput.value = formatPriceToBRL(editedData.value.price);
+  }
+});
 </script>
 
 <template>
   <div class="bg-white rounded-lg shadow-lg p-6 border border-gray-200">
     <h2 class="text-2xl font-bold text-center text-primary mb-6">Editar Informações do Sorteio</h2>
     
-    <form @submit.prevent="saveChanges" class="space-y-6">
+    <form @submit.prevent="prepareToSave" class="space-y-6">
       <!-- Informações básicas -->
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div>
@@ -128,17 +226,44 @@ const removeImage = () => {
       <!-- Preço do bilhete -->
       <div>
         <label class="block text-sm font-medium text-gray-700 mb-1" for="price">
-          Preço do Bilhete (R$)
+          Preço do Bilhete
         </label>
-        <input 
-          id="price"
-          v-model.number="editedData.price"
-          type="number"
-          min="0"
-          step="0.01"
-          class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
-          placeholder="10.00"
-        />
+        
+        <div class="flex flex-col md:flex-row md:items-center gap-2">
+          <!-- Input com largura total em mobile e reduzida em desktop -->
+          <div class="relative w-full md:w-1/3 md:min-w-[144px] mb-2 md:mb-0">
+            <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-700">
+              R$
+            </span>
+            <input 
+              id="price"
+              v-model="priceInput"
+              type="text"
+              class="w-full h-10 pl-10 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
+              @input="handlePriceInput"
+              @blur="formatPrice"
+              placeholder="0,00"
+            />
+          </div>
+          
+          <!-- Container para botões de valores pré-definidos com grid responsivo -->
+          <div class="w-full md:flex-1 grid grid-cols-3 md:grid-cols-6 gap-2">
+            <button
+              v-for="option in priceOptions"
+              :key="option"
+              type="button"
+              @click="selectPriceValue(option)"
+              :class="[
+                'h-10 rounded-md px-3 text-sm flex items-center justify-center transition-colors',
+                editedData.price === option 
+                  ? 'bg-primary text-white' 
+                  : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
+              ]"
+            >
+              R$ {{ option.toFixed(2).replace('.', ',') }}
+            </button>
+          </div>
+        </div>
       </div>
       
       <!-- Descrição do prêmio -->
@@ -181,7 +306,7 @@ const removeImage = () => {
               <!-- Placeholder visual quando não há imagem -->
               <div v-if="!editedData.imageUrl && !imageLoading" class="flex flex-col items-center justify-center h-full w-full border-2 border-dashed border-gray-300 rounded-lg p-4">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 text-gray-400 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 0 1 2.828 0L16 16m-2-2l1.586-1.586a2 2 0 0 1 2.828 0L20 14m-6-6h.01M6 20h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2z" />
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 0 1 2.828 0L16 16m-2-2l1.586-1.586a2 2 0 0 1 2.828 0L20 14m-6-6h.01M6 20h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2z" />
                 </svg>
                 <p class="text-sm text-gray-500 text-center">Nenhuma imagem selecionada</p>
                 <p class="text-xs text-primary mt-1">Clique no botão "Escolher arquivo" para adicionar uma imagem</p>
@@ -243,5 +368,33 @@ const removeImage = () => {
         </button>
       </div>
     </form>
+    
+    <!-- Modal de confirmação -->
+    <Modal 
+      :show="showModal" 
+      :title="isValid ? 'Confirmação' : 'Atenção'"
+      @close="cancelSave"
+      :closeOnClickOutside="!isValid"
+    >
+      <p class="py-4">{{ modalMessage }}</p>
+      
+      <template #footer>
+        <div class="flex justify-end space-x-3">
+          <button 
+            @click="cancelSave"
+            class="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+          >
+            Cancelar
+          </button>
+          <button 
+            v-if="isValid"
+            @click="confirmSave"
+            class="px-4 py-2 bg-primary text-white rounded-md hover:bg-primary-dark"
+          >
+            Confirmar
+          </button>
+        </div>
+      </template>
+    </Modal>
   </div>
 </template>
