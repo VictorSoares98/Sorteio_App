@@ -12,6 +12,8 @@ export default defineConfig({
     assetsDir: 'assets',
     // Adicionar sourcemaps para facilitar debug em produção
     sourcemap: true,
+    // Aumentar o limite de aviso para chunks grandes
+    chunkSizeWarningLimit: 800,
     // Configuração para evitar problemas de MIME type
     rollupOptions: {
       output: {
@@ -21,19 +23,55 @@ export default defineConfig({
         assetFileNames: 'assets/[name].[hash].[ext]',
         // Estratégia de chunking manual para melhor divisão
         manualChunks: (id) => {
-          // Agrupar dependências de firestore para otimizar
+          // Firebase - dividido em módulos específicos
           if (id.includes('firebase/firestore')) {
             return 'vendor-firestore';
           }
-          // Agrupar outras dependências do Firebase
-          if (id.includes('firebase/') && !id.includes('firestore')) {
+          if (id.includes('firebase/auth')) {
+            return 'vendor-firebase-auth';
+          }
+          if (id.includes('firebase/analytics') || id.includes('firebase/app')) {
             return 'vendor-firebase-core';
           }
-          // Vue e dependências relacionadas
-          if (id.includes('vue') || id.includes('pinia')) {
-            return 'vendor-vue';
+          if (id.includes('firebase/') && !id.includes('firestore') && !id.includes('auth') && !id.includes('app')) {
+            return 'vendor-firebase-other';
           }
-          // Outros node_modules
+          
+          // Vue ecosystem - separar Vue de Pinia para melhor reuso
+          if (id.includes('vue') && !id.includes('vue-router')) {
+            return 'vendor-vue-core';
+          }
+          if (id.includes('vue-router')) {
+            return 'vendor-vue-router';
+          }
+          if (id.includes('pinia')) {
+            return 'vendor-pinia';
+          }
+          
+          // Chart.js e componentes relacionados - geralmente grandes
+          if (id.includes('chart.js') || id.includes('vue-chartjs')) {
+            return 'vendor-charts';
+          }
+          
+          // Luxon - biblioteca de datas que pode ser grande
+          if (id.includes('luxon')) {
+            return 'vendor-date-utils';
+          }
+          
+          // UI components específicos
+          if (id.includes('@vuepic/vue-datepicker')) {
+            return 'vendor-datepicker';
+          }
+          
+          // Outros node_modules menores agrupados por categoria
+          if (id.includes('node_modules') && (
+              id.includes('validator') || 
+              id.includes('format') || 
+              id.includes('util'))) {
+            return 'vendor-utils';
+          }
+          
+          // Demais dependências
           if (id.includes('node_modules')) {
             return 'vendor-other';
           }
