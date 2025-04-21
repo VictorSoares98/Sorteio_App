@@ -1,8 +1,15 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, computed, defineAsyncComponent } from 'vue';
 import Modal from '../ui/Modal.vue';
-import VueDatePicker from '@vuepic/vue-datepicker';
-import '@vuepic/vue-datepicker/dist/main.css';
+// Implementação de lazy-loading para o datepicker
+const VueDatePicker = defineAsyncComponent(() => 
+  import('@vuepic/vue-datepicker').then(mod => {
+    // Importar CSS de forma dinâmica para melhorar o carregamento inicial
+    import('@vuepic/vue-datepicker/dist/main.css');
+    return mod;
+  })
+);
+
 import { useRaffleValidation } from '../../composables/useRaffleValidation';
 import { useImageProcessing } from '../../composables/useImageProcessing';
 import type { RaffleData } from '../../services/raffle';
@@ -85,8 +92,7 @@ const getFeriados = (): Date[] => {
 // Feriados convertidos para datas
 const feriados = getFeriados();
 
-// Função para verificar se uma data é feriado 
-// NOTA: Mantida apenas para referência futura - não utilizada atualmente para bloquear dias
+// Tipagem explícita para a função de verificação de feriados
 const isFeriado = (date: Date): boolean => {
   if (!date || !(date instanceof Date) || isNaN(date.getTime())) {
     return false; // Retorna falso para datas inválidas

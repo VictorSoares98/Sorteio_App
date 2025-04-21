@@ -1,12 +1,34 @@
 <script setup lang="ts">
 import { computed } from 'vue';
+// Importação específica do Luxon em vez de importar tudo
 import { DateTime } from 'luxon'; 
 import { capitalizeMonth } from '../../utils/formatters';
 import RaffleWinnerInfo from './RaffleWinnerInfo.vue';
 import RaffleSellerInfo from './RaffleSellerInfo.vue';
 
+// Melhorar tipagem com uma interface específica
+interface RaffleDataProps {
+  title: string;
+  description: string;
+  imageUrl: string;
+  raffleDate: string;
+  price: number;
+  isCompleted: boolean;
+  winningNumber?: string;
+  winner?: {
+    name: string;
+    phone: string;
+    congregation: string;
+  } | null;
+  seller?: {
+    id: string;
+    name: string;
+    photoURL: string;
+  } | null;
+}
+
 const props = defineProps<{
-  raffleData: any;
+  raffleData: RaffleDataProps;
 }>();
 
 // Formatar a data para exibição com tratamento correto de fuso horário
@@ -127,10 +149,10 @@ const isPastDate = computed(() => {
         
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
           <!-- Componente de informações do vencedor -->
-          <RaffleWinnerInfo :winner="raffleData.winner" />
+          <RaffleWinnerInfo :winner="raffleData.winner || null" />
           
           <!-- Componente de informações do vendedor -->
-          <RaffleSellerInfo :seller="raffleData.seller" />
+          <RaffleSellerInfo :seller="raffleData.seller ?? null" />
         </div>
       </template>
     </div>

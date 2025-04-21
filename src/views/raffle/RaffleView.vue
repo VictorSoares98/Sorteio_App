@@ -1,12 +1,17 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, defineAsyncComponent } from 'vue';
 import { useAuthStore } from '../../stores/authStore';
 import Alert from '../../components/ui/Alert.vue';
-import RaffleEditor from '../../components/raffle/RaffleEditor.vue';
+// Importação condicional para melhorar desempenho
 import RaffleDisplay from '../../components/raffle/RaffleDisplay.vue';
 import { UserRole } from '../../types/user';
 import { fetchRaffleData, saveRaffleData, type RaffleData } from '../../services/raffle';
-import { createDefaultRaffle } from '../../utils/raffleFactory'; // Importando a função factory
+import { createDefaultRaffle } from '../../utils/raffleFactory';
+
+// Importação condicional do editor apenas quando necessário (para administradores)
+const RaffleEditor = defineAsyncComponent(() => 
+  import('../../components/raffle/RaffleEditor.vue')
+);
 
 const authStore = useAuthStore();
 const loading = ref(true);
@@ -26,6 +31,22 @@ const isEditing = ref(false);
 
 const toggleEdit = () => {
   isEditing.value = !isEditing.value;
+};
+
+// Computed property to ensure type compatibility with RaffleDisplay component
+const compatibleRaffleData = computed(() => {
+  if (!raffleData.value) return null;
+  return {
+    ...raffleData.value,
+    // Make sure winningNumber is the correct type
+    winningNumber: raffleData.value.winningNumber || undefined
+  };
+});
+
+// Função específica para verificar erros durante o carregamento dos dados
+const handleFetchError = (error: unknown): string => {
+  console.error('Erro ao carregar dados do sorteio:', error);
+  return 'Não foi possível carregar as informações do sorteio. Tente novamente mais tarde.';
 };
 
 // Carregar dados do sorteio do Firestore
@@ -49,8 +70,7 @@ const fetchRaffleDataFromFirestore = async () => {
       }
     }
   } catch (err) {
-    console.error('Erro ao carregar dados do sorteio:', err);
-    error.value = 'Não foi possível carregar as informações do sorteio. Tente novamente mais tarde.';
+    error.value = handleFetchError(err);
   } finally {
     loading.value = false;
   }
@@ -142,7 +162,12 @@ onMounted(() => {
       />
       
       <!-- Exibição normal para todos os usuários -->
-      <RaffleDisplay v-else :raffle-data="raffleData" />
+      <RaffleDisplay v-else-if="compatibleRaffleData" :raffle-data="compatibleRaffleData" />
+      
+      <!-- Fallback caso compatibleRaffleData seja null (improvável, mas para garantir tipagem correta) -->
+      <div v-else class="text-center py-8 bg-gray-50 rounded-lg shadow-sm">
+        <p class="text-gray-500">Ocorreu um erro ao processar os dados do sorteio.</p>
+      </div>
     </div>
     
     <!-- Fallback quando não há dados -->

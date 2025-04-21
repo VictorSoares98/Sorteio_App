@@ -9,28 +9,31 @@ interface Seller {
 }
 
 defineProps<{
-  seller: Seller;
+  seller: Seller | null;
 }>();
 
 // Função para gerar avatar padrão caso a imagem falhe ao carregar
-const generateFallbackAvatar = (name: string) => {
+const generateFallbackAvatar = (name: string): string => {
   return `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(name)}&backgroundColor=FF8C00`;
 };
 </script>
 
 <template>
-  <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+  <div class="bg-blue-50 border border-blue-200 rounded-lg p-4" role="region" aria-label="Informações do vendedor">
     <h3 class="text-center font-bold text-lg text-blue-800 mb-3">Vendido por</h3>
-    <div class="flex flex-col items-center">
+    <div v-if="seller" class="flex flex-col items-center">
       <div class="w-16 h-16 rounded-full overflow-hidden border-2 border-primary mb-2">
         <img 
           :src="seller.photoURL" 
-          :alt="seller.name" 
+          :alt="`Foto de perfil de ${seller.name}`"
           class="w-full h-full object-cover"
           @error="($event.target as HTMLImageElement).src = generateFallbackAvatar(seller.name)"
         />
       </div>
       <p class="font-bold text-gray-800">{{ seller.name }}</p>
+    </div>
+    <div v-else class="text-center text-gray-500 p-2">
+      Informações do vendedor não disponíveis
     </div>
   </div>
 </template>
