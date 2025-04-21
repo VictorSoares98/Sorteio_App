@@ -1,14 +1,15 @@
 <script setup lang="ts">
 import { RouterView, useRoute } from 'vue-router'
-import { computed, onMounted, watch, ref } from 'vue'
+import { computed, onMounted, watch, ref, onUnmounted } from 'vue'
 import Navbar from './components/layout/Navbar.vue'
 import Footer from './components/layout/Footer.vue'
+import AdblockWarning from './components/ui/AdblockWarning.vue'
 import { useAuthStore } from './stores/authStore'
-// Sidebar é importado mas não será usado por enquanto
-// import Sidebar from './components/layout/Sidebar.vue'
+import { useOrderStore } from './stores/orderStore'
 
 const route = useRoute()
 const authStore = useAuthStore()
+const orderStore = useOrderStore()
 
 // Verifica se a rota atual é uma página de autenticação
 const isAuthPage = computed(() => {
@@ -37,12 +38,21 @@ watch(() => !authStore.isAuthenticated, (isLoggedOut) => {
 // Remover qualquer código de onMounted que esteja fazendo fetchUserData(true)
 onMounted(() => {
   console.log('[App] App montado');
-  // Remova ou modifique qualquer chamada para authStore.fetchUserData(true) aqui
+  // Verifica autenticação inicial
+  if (authStore.isAuthenticated) {
+    console.log('[App] Usuário autenticado na montagem do componente App');
+  }
+})
+
+// Limpar recursos e event listeners quando o componente é desmontado
+onUnmounted(() => {
+  // Limpar intervalos de polling se estiverem ativos
+  orderStore.cleanup();
 })
 </script>
 
 <template>
-  <div class="flex flex-col min-h-screen">
+  <div class="flex flex-col min-h-screen bg-gray-50">
     <header v-if="!isAuthPage" class="w-full sticky top-0 z-50">
       <Navbar />
     </header>
@@ -65,5 +75,8 @@ onMounted(() => {
     <footer class="w-full mt-auto">
       <Footer />
     </footer>
+
+    <!-- Componente de aviso de bloqueador -->
+    <AdblockWarning />
   </div>
 </template>

@@ -23,8 +23,11 @@ export const useOrderStore = defineStore('order', () => {
   const authStore = useAuthStore();
 
   // Estado de conexão
-  const { isOnline } = useConnectionStatus();
+  const { isOnline, isServiceBlocked } = useConnectionStatus();
   const pendingOrdersCount = ref(0);
+
+  // Variável para rastrear o intervalo de polling
+  let pollingInterval: number | null = null;
 
   // Computar os pedidos do usuário atual
   const userOrders = computed(() => {
@@ -51,59 +54,78 @@ export const useOrderStore = defineStore('order', () => {
     try {
       const userId = authStore.currentUser.id;
       console.log(`[OrderStore] Buscando pedidos para usuário: ${userId}`);
+
+      // Primeiro, carregamos os dados iniciais independentemente do método
+      await fetchOrdersWithFallback(userId);
       
-      // Usar onSnapshot para obter atualizações em tempo real (funciona offline também)
-      const ordersQuery1 = query(
-        collection(db, 'orders'),
-        where('originalSellerId', '==', userId),
-        orderBy('createdAt', 'desc')
-      );
-      
-      const ordersQuery2 = query(
-        collection(db, 'orders'),
-        where('sellerId', '==', userId),
-        orderBy('createdAt', 'desc')
-      );
-      
-      // Executar primeiro query
-      onSnapshot(ordersQuery1, (snapshot) => {
-        const ordersFromQuery1 = new Map();
-        
-        snapshot.forEach((doc) => {
-          const orderData = processFirestoreDocument<Order>(doc);
-          ordersFromQuery1.set(orderData.id, orderData);
-        });
-        
-        // Atualizar state depois de ambas as consultas (continuará no segundo onSnapshot)
-        updateOrdersFromSnapshots(ordersFromQuery1);
-      }, (error) => {
-        console.error('[OrderStore] Erro ao observar pedidos (query1):', error);
-      });
-      
-      // Executar segundo query
-      onSnapshot(ordersQuery2, (snapshot) => {
-        const ordersFromQuery2 = new Map();
-        
-        snapshot.forEach((doc) => {
-          const orderData = processFirestoreDocument<Order>(doc);
-          ordersFromQuery2.set(orderData.id, orderData);
-        });
-        
-        // Atualizar state
-        updateOrdersFromSnapshots(ordersFromQuery2);
-      }, (error) => {
-        console.error('[OrderStore] Erro ao observar pedidos (query2):', error);
-      });
-      
-      // Observar status de conectividade do Firestore para contar pedidos pendentes
-      onSnapshot(doc(db, '.info', 'connectivityState'), (snapshot) => {
-        const data = snapshot.data();
-        if (data) {
-          pendingOrdersCount.value = data.pendingWrites || 0;
+      // Se não há bloqueio de serviços, tentamos configurar o listener em tempo real
+      if (!isServiceBlocked.value) {
+        try {
+          // Usar onSnapshot para obter atualizações em tempo real (funciona offline também)
+          const ordersQuery1 = query(
+            collection(db, 'orders'),
+            where('originalSellerId', '==', userId),
+            orderBy('createdAt', 'desc')
+          );
+          
+          const ordersQuery2 = query(
+            collection(db, 'orders'),
+            where('sellerId', '==', userId),
+            orderBy('createdAt', 'desc')
+          );
+          
+          // Executar primeiro query
+          onSnapshot(ordersQuery1, (snapshot) => {
+            const ordersFromQuery1 = new Map();
+            
+            snapshot.forEach((doc) => {
+              const orderData = processFirestoreDocument<Order>(doc);
+              ordersFromQuery1.set(orderData.id, orderData);
+            });
+            
+            // Atualizar state depois de ambas as consultas (continuará no segundo onSnapshot)
+            updateOrdersFromSnapshots(ordersFromQuery1);
+          }, (error) => {
+            console.error('[OrderStore] Erro ao observar pedidos (query1):', error);
+            // Se ocorrer um erro, configuramos o polling como fallback
+            setupPollingFallback(userId);
+          });
+          
+          // Executar segundo query
+          onSnapshot(ordersQuery2, (snapshot) => {
+            const ordersFromQuery2 = new Map();
+            
+            snapshot.forEach((doc) => {
+              const orderData = processFirestoreDocument<Order>(doc);
+              ordersFromQuery2.set(orderData.id, orderData);
+            });
+            
+            // Atualizar state
+            updateOrdersFromSnapshots(ordersFromQuery2);
+          }, (error) => {
+            console.error('[OrderStore] Erro ao observar pedidos (query2):', error);
+            // Se ocorrer um erro, configuramos o polling como fallback
+            setupPollingFallback(userId);
+          });
+          
+          // Observar status de conectividade do Firestore para contar pedidos pendentes
+          onSnapshot(doc(db, '.info', 'connectivityState'), (snapshot) => {
+            const data = snapshot.data();
+            if (data) {
+              pendingOrdersCount.value = data.pendingWrites || 0;
+            }
+          }, (error) => {
+            console.error('[OrderStore] Erro ao observar estado de conectividade:', error);
+          });
+        } catch (err) {
+          console.error('[OrderStore] Erro ao configurar listeners em tempo real:', err);
+          // Se houver qualquer erro na configuração dos listeners, usamos polling
+          setupPollingFallback(userId);
         }
-      }, (error) => {
-        console.error('[OrderStore] Erro ao observar estado de conectividade:', error);
-      });
+      } else {
+        // Se há bloqueio, configurar polling imediatamente
+        setupPollingFallback(userId);
+      }
       
     } catch (err: any) {
       console.error('[OrderStore] Erro ao configurar observadores de pedidos:', err);
@@ -112,7 +134,74 @@ export const useOrderStore = defineStore('order', () => {
       loading.value = false;
     }
   };
-  
+
+  // Nova função para buscar pedidos com polling quando o onSnapshot for bloqueado
+  const setupPollingFallback = (userId: string) => {
+    console.log('[OrderStore] Configurando polling como fallback para atualizações em tempo real');
+    
+    // Limpar intervalo existente se houver
+    if (pollingInterval) {
+      clearInterval(pollingInterval);
+    }
+    
+    // Configurar polling a cada 30 segundos
+    pollingInterval = window.setInterval(async () => {
+      try {
+        await fetchOrdersWithFallback(userId);
+        console.log('[OrderStore] Atualização via polling concluída');
+      } catch (error) {
+        console.error('[OrderStore] Erro durante atualização via polling:', error);
+      }
+    }, 30000); // 30 segundos
+  };
+
+  // Nova função para buscar pedidos independentemente do método (usado tanto para carga inicial quanto para polling)
+  const fetchOrdersWithFallback = async (userId: string) => {
+    try {
+      // Buscar primeiro os pedidos com originalSellerId
+      const ordersQuery1 = query(
+        collection(db, 'orders'),
+        where('originalSellerId', '==', userId),
+        orderBy('createdAt', 'desc')
+      );
+      
+      // Buscar também os pedidos com sellerId antigo
+      const ordersQuery2 = query(
+        collection(db, 'orders'),
+        where('sellerId', '==', userId),
+        orderBy('createdAt', 'desc')
+      );
+      
+      // Executar ambas as consultas
+      const [snapshot1, snapshot2] = await Promise.all([
+        getDocs(ordersQuery1),
+        getDocs(ordersQuery2)
+      ]);
+      
+      // Processar resultados
+      const ordersFromQuery1 = new Map();
+      snapshot1.forEach((doc) => {
+        const orderData = processFirestoreDocument<Order>(doc);
+        ordersFromQuery1.set(orderData.id, orderData);
+      });
+      
+      const ordersFromQuery2 = new Map();
+      snapshot2.forEach((doc) => {
+        const orderData = processFirestoreDocument<Order>(doc);
+        ordersFromQuery2.set(orderData.id, orderData);
+      });
+      
+      // Atualizar o estado
+      updateOrdersFromSnapshots(ordersFromQuery1);
+      updateOrdersFromSnapshots(ordersFromQuery2);
+      
+      return true;
+    } catch (err) {
+      console.error('[OrderStore] Erro ao executar fetchOrdersWithFallback:', err);
+      return false;
+    }
+  };
+
   // Função auxiliar para atualizar orders de snapshots
   const updateOrdersFromSnapshots = (ordersMap: Map<string, Order>) => {
     // Combinar com pedidos existentes (preservando os que não vieram nesta consulta)
@@ -307,6 +396,14 @@ export const useOrderStore = defineStore('order', () => {
     );
   };
 
+  // Limpar intervalo de polling ao destruir a store
+  const cleanup = () => {
+    if (pollingInterval) {
+      clearInterval(pollingInterval);
+      pollingInterval = null;
+    }
+  };
+
   // Inicializar busca de pedidos
   if (authStore.currentUser) {
     fetchUserOrders();
@@ -323,7 +420,8 @@ export const useOrderStore = defineStore('order', () => {
     pendingOrdersCount,
     isOnline,
     fetchOrdersBySellerIds,
-    getOrdersBySellerIds
+    getOrdersBySellerIds,
+    cleanup
   };
 });
 
