@@ -140,3 +140,15 @@ export const generateDocumentId = (prefix: string, username: string): string => 
   
   return `${prefix}_${normalizedUsername}_${timestamp}_${uniqueSuffix}`;
 };
+
+/**
+ * Capitaliza o nome do mês em uma string de data formatada em português
+ * Exemplo: "30 de abril de 2023" -> "30 de Abril de 2023"
+ * @param dateString String de data com mês em português
+ * @returns String com o mês capitalizado
+ */
+export const capitalizeMonth = (dateString: string): string => {
+  return dateString.replace(/de ([a-zà-ú]+)/g, (_, monthName) => {
+    return `de ${monthName.charAt(0).toUpperCase()}${monthName.slice(1)}`;
+  });
+};

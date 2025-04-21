@@ -6,6 +6,7 @@ import RaffleEditor from '../../components/raffle/RaffleEditor.vue';
 import RaffleDisplay from '../../components/raffle/RaffleDisplay.vue';
 import { UserRole } from '../../types/user';
 import { fetchRaffleData, saveRaffleData, type RaffleData } from '../../services/raffle';
+import { createDefaultRaffle } from '../../utils/raffleFactory'; // Importando a função factory
 
 const authStore = useAuthStore();
 const loading = ref(true);
@@ -39,19 +40,8 @@ const fetchRaffleDataFromFirestore = async () => {
     if (data) {
       raffleData.value = data;
     } else {
-      // Se não há dados no Firestore, criar um modelo padrão
-      raffleData.value = {
-        id: 'current_raffle',
-        title: 'Sorteio Beneficente UMADRIMC',
-        imageUrl: 'https://via.placeholder.com/600x400?text=Item+do+Sorteio',
-        description: 'Participe do nosso sorteio beneficente e concorra a prêmios incríveis!',
-        raffleDate: new Date().toISOString().split('T')[0], // Data atual formatada como YYYY-MM-DD
-        price: 10.00,
-        isCompleted: false,
-        winningNumber: null,
-        winner: null,
-        seller: null
-      };
+      // Usando o factory para criar o modelo padrão
+      raffleData.value = createDefaultRaffle();
       
       // Se for admin, salvar esse modelo padrão no Firestore
       if (isAdmin.value) {

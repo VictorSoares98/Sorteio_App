@@ -1,19 +1,11 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { DateTime } from 'luxon'; // Importar o Luxon para tratamento correto de datas
+import { capitalizeMonth } from '../../utils/formatters'; // Importando a função do utilitário
 
 const props = defineProps<{
   raffleData: any;
 }>();
-
-// Função auxiliar para capitalizar o nome do mês na data formatada
-const capitalizeMonth = (dateString: string): string => {
-  // Padrão regex para encontrar a preposição "de" seguida pelo nome do mês
-  // Exemplo: "30 de abril de 2023" -> "30 de Abril de 2023"
-  return dateString.replace(/de ([a-zà-ú]+)/g, (_, monthName) => {
-    return `de ${monthName.charAt(0).toUpperCase()}${monthName.slice(1)}`;
-  });
-};
 
 // Formatar a data para exibição com tratamento correto de fuso horário
 const formattedDate = computed(() => {
@@ -29,7 +21,7 @@ const formattedDate = computed(() => {
       year: 'numeric'
     });
   
-  // Aplicar capitalização no mês
+  // Aplicar capitalização no mês usando a função do utilitário
   return capitalizeMonth(formattedDateString);
 });
 
