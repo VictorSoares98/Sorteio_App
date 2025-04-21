@@ -1,7 +1,10 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, computed } from 'vue';
 import { imageToBase64 } from '../../services/raffle';
 import Modal from '../ui/Modal.vue';
+import VueDatePicker from '@vuepic/vue-datepicker';
+import '@vuepic/vue-datepicker/dist/main.css';
+import { DateTime } from 'luxon';
 
 const props = defineProps<{
   raffleData: any;
@@ -14,6 +17,7 @@ const editedData = ref({ ...props.raffleData });
 const imageLoading = ref(false);
 const imageError = ref<string | null>(null);
 const priceInput = ref('');
+const dateError = ref<string | null>(null);
 
 // Valores pré-definidos para o preço do bilhete
 const priceOptions = [1, 2, 5, 10, 20, 50];
@@ -25,6 +29,112 @@ const MAX_PRICE_LIMIT = 1000000; // 1 milhão em reais
 const showModal = ref(false);
 const modalMessage = ref('');
 const isValid = ref(false);
+
+// Configuração do datepicker em português
+const datepickerLocale = {
+  months: ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'],
+  weekdays: ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'],
+  weekdaysShort: ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'],
+  firstDay: 0, // Domingo como primeiro dia
+};
+
+// Configurações avançadas para o datepicker
+const minDate = computed(() => {
+  // Data mínima é hoje
+  return DateTime.now().toJSDate();
+});
+
+const maxDate = computed(() => {
+  // Data máxima é 1 ano no futuro
+  return DateTime.now().plus({ years: 1 }).toJSDate();
+});
+
+// Lista de feriados nacionais brasileiros (estática para o ano atual e o próximo)
+const getFeriados = (): Date[] => {
+  const anoAtual = new Date().getFullYear();
+  const proximoAno = anoAtual + 1;
+  
+  // Lista estática de feriados nacionais para os próximos dois anos
+  // Formato: mm/dd/yyyy
+  const feriadosStrings = [
+    // Ano atual
+    `01/01/${anoAtual}`, // Confraternização Universal
+    `02/20/${anoAtual}`, // Carnaval
+    `04/07/${anoAtual}`, // Sexta-feira Santa
+    `04/21/${anoAtual}`, // Tiradentes
+    `05/01/${anoAtual}`, // Dia do Trabalho
+    `06/15/${anoAtual}`, // Corpus Christi
+    `09/07/${anoAtual}`, // Independência do Brasil
+    `10/12/${anoAtual}`, // Nossa Senhora Aparecida
+    `11/02/${anoAtual}`, // Finados
+    `11/15/${anoAtual}`, // Proclamação da República
+    `12/25/${anoAtual}`, // Natal
+    // Próximo ano
+    `01/01/${proximoAno}`, // Confraternização Universal próximo ano
+  ];
+  
+  return feriadosStrings.map(dateStr => new Date(dateStr));
+};
+
+// Feriados convertidos para datas
+const feriados = getFeriados();
+
+// Função para verificar se uma data é feriado 
+// NOTA: Mantida apenas para referência futura - não utilizada atualmente para bloquear dias
+const isFeriado = (date: Date): boolean => {
+  if (!date || !(date instanceof Date) || isNaN(date.getTime())) {
+    return false; // Retorna falso para datas inválidas
+  }
+  
+  return feriados.some(feriado => 
+    feriado.getDate() === date.getDate() &&
+    feriado.getMonth() === date.getMonth() &&
+    feriado.getFullYear() === date.getFullYear()
+  );
+};
+
+// Função personalizada para verificar se um dia da semana deve ser desabilitado
+// Não bloqueia mais fins de semana (nenhum dia da semana será bloqueado)
+const isWeekDayDisabled = (date: Date): boolean => {
+  // Verificar se o dia é feriado (apenas para referência, não afeta a desabilitação)
+  const ehFeriado = isFeriado(date);
+  
+  // Para fins de depuração, podemos verificar quais dias são feriados
+  if (ehFeriado) {
+    console.debug(`Data ${date.toLocaleDateString('pt-BR')} é feriado, mas está permitida`);
+  }
+  
+  // Independentemente de ser feriado ou não, permitir todos os dias
+  return false;
+};
+
+// Verificar se a data é válida
+const isDateValid = (date: Date | null): boolean => {
+  if (!date) return false;
+  
+  const jsDate = date instanceof Date ? date : new Date(date);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  
+  // Data não pode ser no passado
+  if (jsDate < today) {
+    dateError.value = 'A data do sorteio não pode ser no passado';
+    return false;
+  }
+  
+  // Data não pode ser mais de um ano no futuro
+  const maxAllowedDate = new Date();
+  maxAllowedDate.setFullYear(maxAllowedDate.getFullYear() + 1);
+  
+  if (jsDate > maxAllowedDate) {
+    dateError.value = 'A data do sorteio não pode ser mais de 1 ano no futuro';
+    return false;
+  }
+  
+  // Se passou todas as validações, limpar erro e retornar válido
+  dateError.value = null;
+  return true;
+};
 
 // Validar dados antes de salvar
 const validateForm = () => {
@@ -54,6 +164,20 @@ const validateForm = () => {
     return false;
   }
   
+  // Validação avançada de data adicionada aqui
+  try {
+    const raffleDate = new Date(editedData.value.raffleDate);
+    if (!isDateValid(raffleDate)) {
+      modalMessage.value = dateError.value || 'Data de sorteio inválida';
+      showModal.value = true;
+      return false;
+    }
+  } catch (error) {
+    modalMessage.value = 'Formato de data inválido';
+    showModal.value = true;
+    return false;
+  }
+  
   // Validar preço mínimo
   if (editedData.value.price <= 0) {
     modalMessage.value = 'O preço do bilhete de Sorteio não pode ser zero (0,00)';
@@ -73,6 +197,11 @@ const validateForm = () => {
 
 // Preparar para salvar alterações
 const prepareToSave = () => {
+  // Verificar especificamente se a data está vazia para destacar o campo com erro
+  if (!editedData.value.raffleDate.trim()) {
+    dateError.value = 'A data do sorteio é obrigatória';
+  }
+  
   if (validateForm()) {
     modalMessage.value = 'Deseja salvar as alterações realizadas no sorteio?';
     isValid.value = true;
@@ -183,6 +312,24 @@ const selectPriceValue = (value: number) => {
   priceInput.value = formatPriceToBRL(value);
 };
 
+// Lidar com alterações na data do datepicker
+const handleDateChange = (newDate: Date | null) => {
+  dateError.value = null; // Limpar erros anteriores
+  
+  if (newDate) {
+    // Validar a data antes de aceitar
+    if (isDateValid(newDate)) {
+      // Converter para formato ISO YYYY-MM-DD
+      editedData.value.raffleDate = DateTime.fromJSDate(newDate).toISODate() || '';
+    } else {
+      // Se a data for inválida, não atualizar o modelo
+      // A mensagem de erro já foi definida em isDateValid
+    }
+  } else {
+    editedData.value.raffleDate = '';
+  }
+};
+
 onMounted(() => {
   if (editedData.value.price) {
     priceInput.value = formatPriceToBRL(editedData.value.price);
@@ -199,7 +346,7 @@ onMounted(() => {
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1" for="title">
-            Título do Sorteio
+            Título do Sorteio <span class="text-danger">*</span>
           </label>
           <input 
             id="title"
@@ -212,14 +359,32 @@ onMounted(() => {
         
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1" for="date">
-            Data do Sorteio
+            Data do Sorteio <span class="text-danger">*</span>
           </label>
-          <input 
+          <VueDatePicker 
             id="date"
             v-model="editedData.raffleDate"
-            type="date"
-            class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
+            locale="pt-BR"
+            :locale-config="datepickerLocale"
+            :format="'dd/MM/yyyy'"
+            model-type="iso-string"
+            placeholder="Selecione uma data"
+            auto-apply
+            :enable-time-picker="false"
+            :min-date="minDate"
+            :max-date="maxDate"
+            :disabled-days="isWeekDayDisabled"
+            :class="{ 'error-date': dateError }"
+            input-class-name="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
+            @update:model-value="handleDateChange"
+            required
           />
+          <p v-if="dateError" class="text-xs text-danger mt-1">
+            {{ dateError }}
+          </p>
+          <p v-else class="text-xs text-gray-500 mt-1">
+            Escolha uma data entre hoje e um ano no futuro.
+          </p>
         </div>
       </div>
       
@@ -398,3 +563,15 @@ onMounted(() => {
     </Modal>
   </div>
 </template>
+
+<style scoped>
+.error-date :deep(input) {
+  border-color: #e3342f !important;
+  background-color: #fff5f5 !important;
+}
+
+.error-date :deep(.dp__input_wrap) {
+  box-shadow: 0 0 0 1px #e3342f;
+  border-radius: 0.375rem;
+}
+</style>
