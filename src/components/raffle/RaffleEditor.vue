@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, defineAsyncComponent } from 'vue';
+import { ref, onMounted, computed, defineAsyncComponent, watch } from 'vue';
 import Modal from '../ui/Modal.vue';
 // Implementação de lazy-loading para o datepicker
 const VueDatePicker = defineAsyncComponent(() => 
@@ -40,6 +40,8 @@ const {
 
 // Criar cópia dos dados para edição
 const editedData = ref({ ...props.raffleData });
+// Controlar se o horário específico está habilitado
+const enableSpecificTime = ref(!!props.raffleData.raffleTime);
 const priceInput = ref('');
 
 // Valores pré-definidos para o preço do bilhete
@@ -127,9 +129,18 @@ const prepareToSave = () => {
     dateError.value = 'A data do sorteio é obrigatória';
   }
   
+  // Validar o formato do horário antes de salvar
+  validateRaffleTime();
+  
   const validationResult = validateForm(editedData.value);
   
   if (validationResult.isValid) {
+    // Log para depuração dos valores que serão salvos
+    console.log('[RaffleEditor] Dados que serão salvos:', JSON.stringify({
+      date: editedData.value.raffleDate,
+      time: editedData.value.raffleTime
+    }));
+    
     modalMessage.value = 'Deseja salvar as alterações realizadas no sorteio?';
     isValid.value = true;
     showModal.value = true;
@@ -240,6 +251,114 @@ const handleDateChange = (newDate: Date | string | null) => {
   }
 };
 
+// Nova função para lidar com mudanças no horário
+const handleTimeChange = (newTime: string | Date | null) => {
+  if (newTime) {
+    // Se for um objeto Date, extrair apenas a parte de horas e minutos
+    if (newTime instanceof Date) {
+      const hours = String(newTime.getHours()).padStart(2, '0');
+      const minutes = String(newTime.getMinutes()).padStart(2, '0');
+      editedData.value.raffleTime = `${hours}:${minutes}`;
+      console.log(`[RaffleEditor] Horário definido a partir de Date: ${editedData.value.raffleTime}`);
+    } else if (typeof newTime === 'string') {
+      // Validar e padronizar o formato da string de hora
+      const timeRegex = /^([0-1]?[0-9]|2[0-3]):([0-5][0-9])(:([0-5][0-9]))?$/;
+      if (timeRegex.test(newTime)) {
+        // Extrair apenas horas e minutos, ignorando segundos
+        const [hours, minutes] = newTime.split(':').map(Number);
+        // Garantir formato HH:MM sempre
+        editedData.value.raffleTime = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+        console.log(`[RaffleEditor] Horário definido a partir de string: ${editedData.value.raffleTime}`);
+      } else {
+        console.warn(`[RaffleEditor] Formato de hora inválido: ${newTime}, usando 12:00 como padrão`);
+        editedData.value.raffleTime = '12:00';
+      }
+    }
+  } else {
+    editedData.value.raffleTime = null;
+    console.log('[RaffleEditor] Horário removido/limpo');
+  }
+};
+
+// Observar mudanças no checkbox de horário específico
+watch(enableSpecificTime, (newValue) => {
+  if (!newValue) {
+    // Se o checkbox for desmarcado, limpar o horário
+    editedData.value.raffleTime = null;
+    console.log('[RaffleEditor] Checkbox desmarcado, horário removido');
+  } else if (!editedData.value.raffleTime) {
+    // Se o checkbox for marcado e não houver horário definido, definir um horário padrão (12:00)
+    editedData.value.raffleTime = '12:00';
+    console.log('[RaffleEditor] Checkbox marcado, horário padrão definido: 12:00');
+  }
+});
+
+// Função para validar o tempo antes de salvar
+const validateRaffleTime = (): boolean => {
+  if (!enableSpecificTime.value) {
+    // Se não estiver habilitado, não precisa validar
+    editedData.value.raffleTime = null;
+    return true;
+  }
+  
+  if (!editedData.value.raffleTime) {
+    // Se horário estiver habilitado mas estiver vazio, usar padrão
+    editedData.value.raffleTime = '12:00';
+    console.log('[RaffleEditor] Horário não definido, usando padrão: 12:00');
+    return true;
+  }
+  
+  // Verificar se o raffleTime é um objeto e convertê-lo para string no formato HH:MM
+  if (typeof editedData.value.raffleTime === 'object') {
+    try {
+      // Verificar se é um objeto Date usando método seguro para TypeScript
+      const timeValue = editedData.value.raffleTime as unknown;
+      
+      if (timeValue instanceof Date) {
+        const hours = String(timeValue.getHours()).padStart(2, '0');
+        const minutes = String(timeValue.getMinutes()).padStart(2, '0');
+        editedData.value.raffleTime = `${hours}:${minutes}`;
+        console.log(`[RaffleEditor] Convertido objeto Date para string: ${editedData.value.raffleTime}`);
+      } 
+      // Se for outro tipo de objeto (como retornado pelo DatePicker)
+      else {
+        // Usar uma abordagem segura para TypeScript para acessar propriedades potenciais
+        const timeObj = timeValue as Record<string, any>;
+        
+        // Extrair horas e minutos, dependendo da estrutura do objeto
+        let hours: number, minutes: number;
+        
+        if (typeof timeObj.getHours === 'function') {
+          // Usa API tipo Date
+          hours = timeObj.getHours();
+          minutes = timeObj.getMinutes();
+        } else {
+          // Usa propriedades diretas
+          hours = timeObj.hours || 0;
+          minutes = timeObj.minutes || 0;
+        }
+        
+        // Formatar como string HH:MM
+        editedData.value.raffleTime = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+        console.log(`[RaffleEditor] Convertido objeto genérico para string: ${editedData.value.raffleTime}`);
+      }
+    } catch (error) {
+      console.error('[RaffleEditor] Erro ao converter objeto de horário:', error);
+      editedData.value.raffleTime = '12:00';
+    }
+  }
+  
+  // Agora que garantimos que é uma string, validar o formato HH:MM
+  const timeRegex = /^([0-1]?[0-9]|2[0-3]):([0-5][0-9])$/;
+  if (typeof editedData.value.raffleTime !== 'string' || !timeRegex.test(editedData.value.raffleTime)) {
+    console.error(`[RaffleEditor] Formato de horário inválido: ${editedData.value.raffleTime}, corrigindo para 12:00`);
+    // Corrigir para o formato padrão
+    editedData.value.raffleTime = '12:00';
+  }
+  
+  return true;
+};
+
 onMounted(() => {
   if (editedData.value.price) {
     priceInput.value = formatPriceToBRL(editedData.value.price);
@@ -290,6 +409,41 @@ onMounted(() => {
             model-type="yyyy-MM-dd"
             required
           />
+          
+          <!-- Checkbox para habilitar horário específico -->
+          <div class="mt-2 flex items-center">
+            <input 
+              id="enable-specific-time" 
+              v-model="enableSpecificTime" 
+              type="checkbox" 
+              class="form-checkbox h-4 w-4 text-primary border-gray-300 rounded"
+            />
+            <label for="enable-specific-time" class="ml-2 block text-sm text-gray-700">
+              Adicionar horário específico para o sorteio
+            </label>
+          </div>
+          
+          <!-- Seletor de hora (visível apenas quando o checkbox está marcado) -->
+          <div v-if="enableSpecificTime" class="mt-3">
+            <label class="block text-sm font-medium text-gray-700 mb-1" for="raffle-time-input">
+              Horário do Sorteio
+            </label>
+            <VueDatePicker 
+              uid="raffle-time-input"
+              id="time"
+              v-model="editedData.raffleTime"
+              time-picker
+              :enable-seconds="false"
+              :only-time="true"
+              :format="'HH:mm'"
+              :locale-config="datepickerLocale"
+              input-class-name="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
+              @update:model-value="handleTimeChange"
+              placeholder="Selecione o horário"
+              auto-apply
+            />
+          </div>
+          
           <p v-if="dateError" class="text-xs text-danger mt-1">
             {{ dateError }}
           </p>

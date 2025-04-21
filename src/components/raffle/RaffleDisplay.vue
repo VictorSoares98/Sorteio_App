@@ -12,6 +12,7 @@ interface RaffleDataProps {
   description: string;
   imageUrl: string;
   raffleDate: string;
+  raffleTime?: string | null; // Adicionando o campo de horário
   price: number;
   isCompleted: boolean;
   winningNumber?: string;
@@ -36,8 +37,33 @@ const formattedDate = computed(() => {
   if (!props.raffleData.raffleDate) return '';
   
   // Usar Luxon para lidar corretamente com a data sem ajuste de fuso
-  // Utilizando o método fromISO com setZone para garantir que a data seja exata
-  const formattedDateString = DateTime.fromISO(props.raffleData.raffleDate, { zone: 'UTC' })
+  let dateTime = DateTime.fromISO(props.raffleData.raffleDate, { zone: 'UTC' });
+  
+  // Se houver horário específico definido E for uma string válida, adicioná-lo à data
+  if (props.raffleData.raffleTime && typeof props.raffleData.raffleTime === 'string') {
+    // Extrair horas e minutos da string HH:mm
+    const [hours, minutes] = props.raffleData.raffleTime.split(':').map(Number);
+    
+    // Adicionar as horas e minutos ao DateTime
+    dateTime = dateTime.set({ hour: hours, minute: minutes });
+    
+    // Formatar com data e hora
+    const formattedDateTime = dateTime
+      .setLocale('pt-BR')
+      .toLocaleString({
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+      
+    // Aplicar capitalização no mês usando a função do utilitário
+    return capitalizeMonth(formattedDateTime);
+  }
+  
+  // Se não houver horário específico, exibir apenas a data
+  const formattedDateString = dateTime
     .setLocale('pt-BR')
     .toLocaleString({
       day: 'numeric',
@@ -47,6 +73,21 @@ const formattedDate = computed(() => {
   
   // Aplicar capitalização no mês usando a função do utilitário
   return capitalizeMonth(formattedDateString);
+});
+
+// Novo computed property para exibir apenas o horário de forma destacada
+const highlightedTime = computed(() => {
+  if (!props.raffleData.raffleTime || typeof props.raffleData.raffleTime !== 'string') {
+    return null;
+  }
+  
+  // Extrair horas e minutos da string HH:mm
+  const [hours, minutes] = props.raffleData.raffleTime.split(':').map(Number);
+  
+  // Criar objeto DateTime apenas para formatar o horário
+  const timeObj = DateTime.fromObject({ hour: hours, minute: minutes });
+  
+  return timeObj.toFormat('HH:mm');
 });
 
 // Verificar se o sorteio já foi realizado
@@ -123,6 +164,15 @@ const isPastDate = computed(() => {
       <div class="mb-4 text-center">
         <span class="font-medium text-gray-600">Data do sorteio:</span>
         <span class="text-primary font-bold ml-2">{{ formattedDate }}</span>
+      </div>
+      
+      <!-- Horário específico do sorteio (exibido apenas quando disponível) -->
+      <div v-if="highlightedTime" class="mb-6 text-center">
+        <div class="bg-primary/10 py-3 px-6 rounded-lg inline-block">
+          <!-- <span class="block text-sm uppercase tracking-wide text-gray-600 mb-1">Horário:</span> -->
+          <span class="text-primary text-3xl md:text-4xl font-bold tracking-wide">{{ highlightedTime }}</span>
+          <span class="block text-xs text-gray-500 mt-1">horário de Brasília</span>
+        </div>
       </div>
       
       <!-- Descrição do item -->

@@ -1,22 +1,26 @@
-import type { RaffleData } from '../services/raffle';
+import { type RaffleData } from '../services/raffle';
 
 /**
- * Cria um objeto de sorteio padrão com valores iniciais
- * @param customProps Propriedades customizadas para substituir os valores padrão
- * @returns Um objeto RaffleData com valores padrão
+ * Cria um objeto de dados de sorteio padrão
+ * @returns Objeto de sorteio com valores padrão
  */
-export const createDefaultRaffle = (customProps: Partial<RaffleData> = {}): RaffleData => {
+export const createDefaultRaffle = (): RaffleData => {
+  // Obter a data atual formatada como YYYY-MM-DD
+  const today = new Date();
+  const formattedDate = today.toISOString().split('T')[0];
+  
   return {
     id: 'current_raffle',
-    title: 'Sorteio',
-    imageUrl: 'https://via.placeholder.com/600x400?text=Item+do+Sorteio',
-    description: 'Participe do nosso sorteio beneficente e concorra a prêmios incríveis!',
-    raffleDate: new Date().toISOString().split('T')[0], // Data atual formatada como YYYY-MM-DD
-    price: 10.00,
+    title: 'Sorteio Beneficente UMADRIMC',
+    description: 'Participe do sorteio beneficente da UMADRIMC. O valor arrecadado será utilizado para investimentos na obra.',
+    imageUrl: '',
+    raffleDate: formattedDate,
+    raffleTime: null, // Novo campo para horário específico
+    price: 1,
     isCompleted: false,
     winningNumber: null,
     winner: null,
-    seller: null,
-    ...customProps
+    seller: null
+    // Mantendo todos os campos originais
   };
 };

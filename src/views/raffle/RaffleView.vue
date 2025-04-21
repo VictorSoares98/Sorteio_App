@@ -82,6 +82,17 @@ const saveRaffleChanges = async (updatedData: RaffleData) => {
     loading.value = true;
     error.value = null;
     
+    // Verificar formato do horário antes de salvar (segurança adicional)
+    if (updatedData.raffleTime) {
+      const timeRegex = /^([0-1]?[0-9]|2[0-3]):([0-5][0-9])$/;
+      if (!timeRegex.test(updatedData.raffleTime)) {
+        console.warn(`[RaffleView] Formato de horário inválido ao salvar: ${updatedData.raffleTime}, corrigindo.`);
+        updatedData.raffleTime = '12:00'; // Valor padrão seguro
+      } else {
+        console.log(`[RaffleView] Salvando horário: ${updatedData.raffleTime}`);
+      }
+    }
+    
     // Salvar no Firestore
     await saveRaffleData(updatedData);
     

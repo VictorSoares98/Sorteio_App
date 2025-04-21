@@ -8,6 +8,7 @@ export interface RaffleData {
   description: string;
   imageUrl: string;
   raffleDate: string;
+  raffleTime?: string | null; // Novo campo para armazenar horário específico
   price: number;
   isCompleted: boolean;
   winningNumber?: string | null;
