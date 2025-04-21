@@ -30,12 +30,13 @@ const showModal = ref(false);
 const modalMessage = ref('');
 const isValid = ref(false);
 
-// Configuração do datepicker em português
+// Configuração do datepicker em português com configuração segura para Luxon
 const datepickerLocale = {
   months: ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'],
   weekdays: ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'],
   weekdaysShort: ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'],
   firstDay: 0, // Domingo como primeiro dia
+  format: 'dd/MM/yyyy' // Definir o formato explicitamente aqui
 };
 
 // Configurações avançadas para o datepicker
@@ -313,14 +314,21 @@ const selectPriceValue = (value: number) => {
 };
 
 // Lidar com alterações na data do datepicker
-const handleDateChange = (newDate: Date | null) => {
+const handleDateChange = (newDate: Date | string | null) => {
   dateError.value = null; // Limpar erros anteriores
   
   if (newDate) {
+    // Converter string para Date se necessário
+    const dateObj = typeof newDate === 'string' ? new Date(newDate) : newDate;
+    
     // Validar a data antes de aceitar
-    if (isDateValid(newDate)) {
-      // Converter para formato ISO YYYY-MM-DD
-      editedData.value.raffleDate = DateTime.fromJSDate(newDate).toISODate() || '';
+    if (isDateValid(dateObj)) {
+      // Converter para formato ISO YYYY-MM-DD (garantir formato consistente)
+      if (typeof newDate === 'string') {
+        editedData.value.raffleDate = newDate;
+      } else {
+        editedData.value.raffleDate = dateObj.toISOString().split('T')[0];
+      }
     } else {
       // Se a data for inválida, não atualizar o modelo
       // A mensagem de erro já foi definida em isDateValid
@@ -358,18 +366,16 @@ onMounted(() => {
         </div>
         
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1" for="date">
+          <label class="block text-sm font-medium text-gray-700 mb-1" for="raffle-date-input">
             Data do Sorteio <span class="text-danger">*</span>
           </label>
           <VueDatePicker 
+            uid="raffle-date-input"
             id="date"
             v-model="editedData.raffleDate"
             locale="pt-BR"
             :locale-config="datepickerLocale"
-            :format="'dd/MM/yyyy'"
-            model-type="iso-string"
-            placeholder="Selecione uma data"
-            auto-apply
+            format="dd/MM/yyyy"
             :enable-time-picker="false"
             :min-date="minDate"
             :max-date="maxDate"
@@ -377,6 +383,9 @@ onMounted(() => {
             :class="{ 'error-date': dateError }"
             input-class-name="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
             @update:model-value="handleDateChange"
+            placeholder="Selecione uma data"
+            auto-apply
+            model-type="yyyy-MM-dd"
             required
           />
           <p v-if="dateError" class="text-xs text-danger mt-1">

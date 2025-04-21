@@ -1,20 +1,36 @@
 <script setup lang="ts">
 import { computed } from 'vue';
+import { DateTime } from 'luxon'; // Importar o Luxon para tratamento correto de datas
 
 const props = defineProps<{
   raffleData: any;
 }>();
 
-// Formatar a data para exibição
+// Função auxiliar para capitalizar o nome do mês na data formatada
+const capitalizeMonth = (dateString: string): string => {
+  // Padrão regex para encontrar a preposição "de" seguida pelo nome do mês
+  // Exemplo: "30 de abril de 2023" -> "30 de Abril de 2023"
+  return dateString.replace(/de ([a-zà-ú]+)/g, (_, monthName) => {
+    return `de ${monthName.charAt(0).toUpperCase()}${monthName.slice(1)}`;
+  });
+};
+
+// Formatar a data para exibição com tratamento correto de fuso horário
 const formattedDate = computed(() => {
   if (!props.raffleData.raffleDate) return '';
   
-  const date = new Date(props.raffleData.raffleDate);
-  return new Intl.DateTimeFormat('pt-BR', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric'
-  }).format(date);
+  // Usar Luxon para lidar corretamente com a data sem ajuste de fuso
+  // Utilizando o método fromISO com setZone para garantir que a data seja exata
+  const formattedDateString = DateTime.fromISO(props.raffleData.raffleDate, { zone: 'UTC' })
+    .setLocale('pt-BR')
+    .toLocaleString({
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric'
+    });
+  
+  // Aplicar capitalização no mês
+  return capitalizeMonth(formattedDateString);
 });
 
 // Verificar se o sorteio já foi realizado
@@ -28,8 +44,9 @@ const isCompleted = computed(() => {
 const isPastDate = computed(() => {
   if (!props.raffleData.raffleDate) return false;
   
-  const raffleDate = new Date(props.raffleData.raffleDate);
-  const today = new Date();
+  // Usar Luxon para comparações de data também
+  const raffleDate = DateTime.fromISO(props.raffleData.raffleDate, { zone: 'UTC' }).startOf('day');
+  const today = DateTime.now().startOf('day');
   
   return raffleDate < today && !isCompleted.value;
 });
