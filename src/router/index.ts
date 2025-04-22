@@ -75,6 +75,18 @@ const routes: AppRouteRecordRaw[] = [
     meta: { requiresAuth: true, requiresAdmin: true, title: 'Administração' }
   },
   
+  // Adicionar redirecionamento para a rota em português
+  {
+    path: '/register',
+    redirect: '/cadastro'
+  },
+  
+  // Adicionar redirecionamento para a rota de esqueci senha
+  {
+    path: '/forgot-password',
+    redirect: '/esqueci-senha'
+  },
+  
   // Rota para tratar URLs inválidas
   {
     path: '/:pathMatch(.*)*',

@@ -161,7 +161,7 @@ const togglePasswordVisibility = () => {
     </button>
     
     <div class="mt-4 text-center text-sm">
-      <router-link to="/register" class="text-primary hover:underline">
+      <router-link to="/cadastro" class="text-primary hover:underline">
         Não tem uma conta? Registre-se
       </router-link>
     </div>
