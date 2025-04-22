@@ -1,29 +1,27 @@
 import { createRouter, createWebHistory } from 'vue-router';
-import type { RouteRecordRaw, NavigationGuardNext, RouteLocationNormalized } from 'vue-router';
+import type { RouteRecordRaw } from 'vue-router';
 import { auth, db } from '../firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import { UserRole } from '../types/user';
 import { isAdmin } from '../utils/permissions';
 import { onAuthStateChanged } from 'firebase/auth';
 import type { User } from 'firebase/auth';
-import { useAuthStore } from '../stores/authStore'; // Importação necessária para o novo guard
 import ForgotPasswordView from '../views/auth/ForgotPasswordView.vue';
 
-// Interface para metadados de rota personalizados
-interface RouteMeta {
-  requiresAuth?: boolean;
-  requiresAdmin?: boolean;
-  title?: string;
-  requiresGuest?: boolean;
+// Melhor abordagem: Estender a interface RouteMeta no módulo do vue-router
+// Isso fará com que o TypeScript reconheça automaticamente seus meta personalizados
+declare module 'vue-router' {
+  interface RouteMeta {
+    requiresAuth?: boolean;
+    requiresAdmin?: boolean;
+    title?: string;
+    requiresGuest?: boolean;
+  }
 }
 
-// Estender RouteRecordRaw para incluir nossos metadados personalizados
-type AppRouteRecordRaw = RouteRecordRaw & {
-  meta?: RouteMeta;
-};
-
+// Agora podemos usar RouteRecordRaw diretamente, sem necessidade de tipagem personalizada
 // Define as rotas da aplicação com importações dinâmicas para melhor code splitting
-const routes: AppRouteRecordRaw[] = [
+const routes: RouteRecordRaw[] = [
   {
     path: '/',
     name: 'inicio',
@@ -40,13 +38,13 @@ const routes: AppRouteRecordRaw[] = [
   },
   {
     path: '/cadastro',
-    name: 'cadastro',  // Já estava traduzido
+    name: 'cadastro',
     component: () => import(/* webpackChunkName: "auth" */ '../views/auth/RegisterView.vue'),
     meta: { title: 'Cadastro', requiresGuest: true }
   },
   {
     path: '/esqueci-senha',
-    name: 'esqueci-senha',  // Já estava traduzido
+    name: 'esqueci-senha',
     component: ForgotPasswordView,
     meta: { requiresGuest: true, title: 'Esqueci Minha Senha' }
   },
@@ -54,7 +52,7 @@ const routes: AppRouteRecordRaw[] = [
   // Rotas de Perfil
   {
     path: '/perfil',
-    name: 'perfil',  // Já estava traduzido
+    name: 'perfil',
     component: () => import(/* webpackChunkName: "profile" */ '../views/profile/ProfileView.vue'),
     meta: { requiresAuth: true, title: 'Perfil' }
   },
@@ -62,7 +60,7 @@ const routes: AppRouteRecordRaw[] = [
   // Nova rota para a página de sorteio
   {
     path: '/sorteio',
-    name: 'sorteio',  // Já estava traduzido
+    name: 'sorteio',
     component: () => import(/* webpackChunkName: "raffle" */ '../views/raffle/RaffleView.vue'),
     meta: { requiresAuth: false, title: 'Sorteio' }
   },
@@ -70,18 +68,17 @@ const routes: AppRouteRecordRaw[] = [
   // Rotas de Administração
   {
     path: '/painel',
-    name: 'painel',  // Já estava traduzido
+    name: 'painel',
     component: () => import(/* webpackChunkName: "admin" */ '../views/admin/AdminView.vue'),
     meta: { requiresAuth: true, requiresAdmin: true, title: 'Administração' }
   },
   
-  // Adicionar redirecionamento para a rota em português
+  // Redirecionamentos
   {
     path: '/register',
     redirect: '/cadastro'
   },
   
-  // Adicionar redirecionamento para a rota de esqueci senha
   {
     path: '/forgot-password',
     redirect: '/esqueci-senha'
@@ -90,7 +87,7 @@ const routes: AppRouteRecordRaw[] = [
   // Rota para tratar URLs inválidas
   {
     path: '/:pathMatch(.*)*',
-    name: 'nao-encontrado',  // Já estava traduzido
+    name: 'nao-encontrado',
     component: () => import(/* webpackChunkName: "error" */ '../views/NotFoundView.vue'),
     meta: { title: 'Página não encontrada' }
   }
@@ -120,17 +117,29 @@ const getCurrentUser = () => {
   });
 };
 
-// Verificar parâmetro de afiliação na URL
-router.beforeEach((to, _from, next) => {
-  // Verificar se há código de afiliado na query
-  const refCode = to.query.ref as string;
+// Contador para debug de chamadas múltiplas de beforeEach
+let guardCallCount = 0;
+
+// Consolidando todos os beforeEach em um único guard mais organizado
+router.beforeEach(async (to, from, next) => {
+  // Debug para identificar chamadas múltiplas
+  guardCallCount++;
+  console.log(`[Router] Navegação #${guardCallCount}: ${from.path} → ${to.path}`);
   
+  // 1. Atualizar título da página
+  document.title = to.meta.title?.toString() || 'Tá nas Mãos de Deus';
+  
+  // 2. Verificar código de afiliado (primeira prioridade)
+  const refCode = to.query.ref as string;
   if (refCode) {
     // Salvar código no localStorage para usar após registro/login
-    localStorage.setItem('pendingAffiliateCode', refCode);
-    console.log(`[Router] Código de afiliação detectado: ${refCode}`);
+    if (!localStorage.getItem('pendingAffiliateCode') || 
+        localStorage.getItem('pendingAffiliateCode') !== refCode) {
+      localStorage.setItem('pendingAffiliateCode', refCode);
+      console.log(`[Router] Código de afiliação detectado e salvo: ${refCode}`);
+    }
     
-    // Se estiver indo para página inicial ou login, redirecionar para registro
+    // Se estiver indo para página inicial ou login, redirecionar para registro com o código
     if (to.path === '/' || to.path === '/login') {
       console.log('[Router] Redirecionando para página de registro com código de afiliado');
       return next({ 
@@ -140,87 +149,42 @@ router.beforeEach((to, _from, next) => {
     }
   }
   
-  next();
-});
-
-// Navegação com proteção de rotas
-router.beforeEach(async (
-  to: RouteLocationNormalized,
-  _from: RouteLocationNormalized,
-  next: NavigationGuardNext
-) => {
-  // Atualizar o título da página dinamicamente
-  document.title = `${to.meta.title || 'Tá nas Mãos de Deus'}`;
+  // 3. Verificar estado de autenticação
+  const currentUser = await getCurrentUser();
   
-  const requiresAuth = to.matched.some(record => record.meta.requiresAuth);
-  const requiresAdmin = to.matched.some(record => record.meta.requiresAdmin);
-  
-  // Verificar se está indo para página de autenticação e já está logado
-  const currentUser = await getCurrentUser() as User | null;
-  
-  if ((to.path === '/login' || to.path === '/cadastro') && currentUser) {
-    console.log('[Router] Usuário já autenticado, redirecionando para home');
+  // 4. Verificar rotas que requerem usuário não autenticado (requiresGuest)
+  if (to.matched.some(record => record.meta.requiresGuest) && currentUser) {
+    console.log('[Router] Usuário já autenticado tentando acessar página para visitantes');
     return next({ name: 'inicio' });
   }
   
-  // Resto da lógica de proteção de rotas
-  if (requiresAuth && !currentUser) {
-    // Salvar a URL para redirecionamento após login
+  // 5. Verificar rotas que requerem autenticação
+  if (to.matched.some(record => record.meta.requiresAuth) && !currentUser) {
     console.log(`[Router] Redirecionando para login, URL original: ${to.fullPath}`);
-    next({ 
+    return next({ 
       name: 'login', 
       query: { redirect: to.fullPath } 
     });
-  } else if (requiresAdmin && currentUser) {
-    // Verificar se o usuário é admin
+  }
+  
+  // 6. Verificar rotas que requerem admin (somente se o usuário estiver autenticado)
+  if (to.matched.some(record => record.meta.requiresAdmin) && currentUser) {
     try {
       const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
       const userData = userDoc.data();
       
-      if (isAdmin(userData?.role as UserRole)) {
-        next();
-      } else {
-        // Não é admin, redirecionar para home
+      if (!isAdmin(userData?.role as UserRole)) {
         console.log('[Router] Usuário não é admin, redirecionando para home');
-        next({ name: 'inicio' });
+        return next({ name: 'inicio' });
       }
     } catch (error) {
-      console.error('Erro ao verificar permissões:', error);
-      next({ name: 'inicio' });
-    }
-  } else {
-    next();
-  }
-});
-
-// Configurar guards de navegação
-router.beforeEach(async (to, from, next) => {
-  // Se está navegando para a página inicial e tem afiliação pendente,
-  // garantir que os dados de usuário estejam atualizados
-  if (to.path === '/' && (sessionStorage.getItem('newAffiliation') === 'true' || from.path === '/cadastro' || from.path === '/login')) {
-    console.log('[Router] Detectada possível nova afiliação, atualizando dados do usuário');
-    console.log('[Router] Estado newAffiliation:', sessionStorage.getItem('newAffiliation'));
-    console.log('[Router] Origem da navegação:', from.path);
-    
-    const authStore = useAuthStore();
-    if (authStore.isAuthenticated) {
-      try {
-        // Forçar atualização dos dados do usuário
-        await authStore.fetchUserData(true);
-        console.log('[Router] Dados do usuário atualizados com sucesso');
-      } catch (err) {
-        console.error('[Router] Erro ao atualizar dados de usuário:', err);
-      }
+      console.error('[Router] Erro ao verificar permissões:', error);
+      return next({ name: 'inicio' });
     }
   }
   
-  next();
-});
-
-// Add global navigation guard for debugging
-router.beforeEach((to, from, next) => {
-  console.log(`Navigation from ${from.path} to ${to.path}`);
-  next();
+  // 7. Se passou por todas as verificações, permitir acesso
+  return next();
 });
 
 export default router;

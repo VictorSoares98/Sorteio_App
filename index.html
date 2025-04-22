@@ -6,6 +6,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Tá nas Mãos de Deus</title>
     <base href="/" />
+    <!-- Script para corrigir problemas de WebSocket em desenvolvimento -->
+    <script src="/ws-fallback.js"></script>
     <script>
       // Código para recuperar redirecionamentos do 404.html
       (function() {
@@ -14,6 +16,13 @@
           sessionStorage.removeItem('spaRedirect');
           history.replaceState(null, null, redirect);
           console.log('[SPA Redirect] Redirecionado de 404 para:', redirect);
+        }
+        
+        // Desativar HMR/WebSockets em produção
+        if (window.location.hostname !== 'localhost' && 
+            window.location.hostname !== '127.0.0.1') {
+          window.__VITE_IS_PROD__ = true;
+          console.log('[App] Ambiente de produção detectado, desativando HMR');
         }
       })();
     </script>

@@ -90,18 +90,26 @@ window.addEventListener('error', (event) => {
   console.error('[App Error]', event.error);
 });
 
-// Inicializar serviço de conectividade
-initConnectivityService();
-
-// Inicializar aplicação
+// Inicializar aplicação com ordem específica para evitar problemas
 try {
-  console.log('[App] Criando instância do Vue');
-  const app = createApp(App)
-  const pinia = createPinia()
-  app.use(pinia)
-  app.use(router)
-
-  // Adicionar manipulador global de erros mais detalhado e robusto
+  // 1. Criar pinia primeiro para que os stores possam ser acessados
+  const pinia = createPinia();
+  
+  // 2. Criar a aplicação e usar pinia imediatamente
+  const app = createApp(App);
+  app.use(pinia);
+  
+  // 3. Inicializar serviço de conectividade
+  initConnectivityService();
+  
+  // 4. Adicionar router depois que pinia estiver disponível
+  app.use(router);
+  
+  // 5. Inicializar o authStore com o router antes de montar a aplicação
+  const authStore = useAuthStore();
+  authStore.init(router);
+  
+  // 6. Adicionar manipulador global de erros mais detalhado e robusto
   app.config.errorHandler = (err, instance, info) => {
     console.error('[Vue Error]', err);
     
@@ -136,13 +144,10 @@ try {
       });
     }
   };
-
-  // Inicializar o authStore com o router antes de montar a aplicação
-  const authStore = useAuthStore()
-  authStore.init(router)
-
+  
+  // 7. Montar a aplicação
   console.log('[App] Montando aplicação no elemento #app');
-  app.mount('#app')
+  app.mount('#app');
   console.log('[App] Aplicação montada com sucesso');
   
   // Remover loader quando a aplicação estiver montada

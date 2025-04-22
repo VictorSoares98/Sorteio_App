@@ -13,7 +13,7 @@ const orderStore = useOrderStore()
 
 // Verifica se a rota atual é uma página de autenticação
 const isAuthPage = computed(() => {
-  return route.path === '/login' || route.path === '/register'
+  return route.path === '/login' || route.path === '/cadastro'
 })
 
 // Variável para controlar se já verificamos o usuário
@@ -35,12 +35,22 @@ watch(() => !authStore.isAuthenticated, (isLoggedOut) => {
   }
 });
 
-// Remover qualquer código de onMounted que esteja fazendo fetchUserData(true)
+// Verificar afiliações após navegação para a página inicial
 onMounted(() => {
   console.log('[App] App montado');
-  // Verifica autenticação inicial
-  if (authStore.isAuthenticated) {
-    console.log('[App] Usuário autenticado na montagem do componente App');
+
+  // Se está na página inicial e tem newAffiliation, atualizar dados do usuário
+  if (route.path === '/' && sessionStorage.getItem('newAffiliation') === 'true') {
+    if (authStore.isAuthenticated) {
+      console.log('[App] Detectada possível nova afiliação');
+      authStore.fetchUserData(true)
+        .then(() => {
+          console.log('[App] Dados do usuário atualizados com sucesso');
+        })
+        .catch(err => {
+          console.error('[App] Erro ao atualizar dados de usuário:', err);
+        });
+    }
   }
 })
 
