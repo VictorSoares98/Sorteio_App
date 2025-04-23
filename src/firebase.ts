@@ -1,12 +1,24 @@
+/**
+ * Configuração do Firebase com suporte a múltiplos ambientes e emuladores.
+ * Este arquivo centraliza a inicialização e configuração do Firebase para toda a aplicação.
+ */
+
 import { initializeApp } from 'firebase/app';
-import { getAuth, setPersistence, browserLocalPersistence } from 'firebase/auth';
+import { getAuth, setPersistence, browserLocalPersistence, connectAuthEmulator } from 'firebase/auth';
 import { 
   initializeFirestore, 
   CACHE_SIZE_UNLIMITED, 
   persistentLocalCache, 
   persistentMultipleTabManager,
+  connectFirestoreEmulator,
   type Firestore 
 } from 'firebase/firestore';
+import { 
+  getCurrentEnvironment, 
+  shouldUseEmulator, 
+  getFirestoreEmulatorHost, 
+  getAuthEmulatorHost 
+} from './utils/environment';
 
 const firebaseConfig = {
     apiKey: "AIzaSyDZvWlQfdskmFmyiRHxjldX6VsY_2JlnRw",
@@ -32,19 +44,41 @@ try {
     })
   });
 
-  console.log("Persistência Firestore configurada com sucesso!");
+  console.log(`[Firebase] Persistência Firestore configurada com sucesso! (${getCurrentEnvironment()})`);
 } catch (err) {
-  console.error("Erro ao configurar persistência Firestore:", err);
+  console.error("[Firebase] Erro ao configurar persistência Firestore:", err);
   
   // Inicializar Firestore sem persistência como fallback
   db = initializeFirestore(app, {});
-  console.warn("Firestore inicializado sem persistência local.");
+  console.warn("[Firebase] Firestore inicializado sem persistência local.");
 }
 
 // Configurar persistência local para autenticação
 setPersistence(auth, browserLocalPersistence)
   .catch((error) => {
-    console.error("Erro ao configurar persistência de autenticação:", error);
+    console.error("[Firebase] Erro ao configurar persistência de autenticação:", error);
   });
 
+// Conectar aos emuladores se estiver em ambiente de desenvolvimento ou teste
+if (shouldUseEmulator()) {
+  const firestoreHost = getFirestoreEmulatorHost();
+  const authHost = getAuthEmulatorHost();
+  
+  if (firestoreHost) {
+    const [host, portStr] = firestoreHost.split(':');
+    const port = parseInt(portStr, 10);
+    if (host && !isNaN(port)) {
+      console.log(`[Firebase] Conectando ao emulador Firestore em ${host}:${port}`);
+      connectFirestoreEmulator(db, host, port);
+    }
+  }
+  
+  if (authHost) {
+    const url = `http://${authHost}`;
+    console.log(`[Firebase] Conectando ao emulador Auth em ${url}`);
+    connectAuthEmulator(auth, url, { disableWarnings: true });
+  }
+}
+
 export { auth, db };
+export const environment = getCurrentEnvironment();

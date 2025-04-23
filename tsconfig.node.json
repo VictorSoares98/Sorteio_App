@@ -5,6 +5,9 @@
     "lib": ["ES2023"],
     "module": "ESNext",
     "skipLibCheck": true,
+    "composite": true,
+    "allowSyntheticDefaultImports": true,
+    "types": ["vitest/globals"],
 
     /* Bundler mode */
     "moduleResolution": "bundler",
@@ -20,5 +23,10 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true
   },
-  "include": ["vite.config.ts"]
+  "include": [
+    "vite.config.ts",
+    "vitest.config.ts",
+    "vitest.workspace.ts",
+    "__tests__/**/*.ts"
+  ]
 }

@@ -50,4 +50,37 @@ describe('Button.vue', () => {
     expect(wrapper.classes()).toContain('btn-lg');
     expect(wrapper.classes()).toContain('w-full');
   });
+
+  // Novos testes visuais
+  it('renderiza corretamente o estado de carregamento', () => {
+    const wrapper = mount(Button, {
+      props: {
+        loading: true
+      },
+      slots: {
+        default: 'Processando'
+      }
+    });
+
+    expect(wrapper.find('.animate-spin').exists()).toBe(true);
+    expect(wrapper.text()).toContain('Processando');
+    expect(wrapper.html()).toMatchSnapshot('button-loading');
+  });
+
+  it('renderiza diferentes variantes visuais corretamente', () => {
+    const variants = ['primary', 'outline', 'danger'];
+    const snapshots: Record<string, string> = {};
+    
+    for (const variant of variants) {
+      const wrapper = mount(Button, {
+        props: { variant: variant as any },
+        slots: { default: `Botão ${variant}` }
+      });
+      
+      expect(wrapper.classes()).toContain(`btn-${variant}`);
+      snapshots[variant] = wrapper.html();
+    }
+    
+    expect(snapshots).toMatchSnapshot('button-variants');
+  });
 });

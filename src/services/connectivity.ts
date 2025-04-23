@@ -1,9 +1,9 @@
 import { ref } from 'vue';
 
 // Estado reativo para a conectividade
-const isOnline = ref(navigator.onLine);
+export const isOnline = ref(navigator.onLine);
 // Novo estado para rastrear se serviços externos estão bloqueados
-const isServiceBlocked = ref(false);
+export const isServiceBlocked = ref(false);
 // Estado para rastrear se o aviso já foi mostrado
 const hasShownBlockWarning = ref(false);
 
