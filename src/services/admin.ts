@@ -4,6 +4,7 @@ import { UserRole } from '../types/user';
 import type { SalesData } from '../types/user';
 import type { Order } from '../types/order';
 import { updateOrderPayment } from './orders';
+import { syncAvailableNumbersWithSoldOnes } from './raffleNumbers';
 
 export const fetchSalesReport = async () => {
   try {
@@ -191,14 +192,12 @@ export const resetAllSales = async (): Promise<boolean> => {
     console.log(`Reset completado: ${totalDeleted} vendas excluídas`);
     
     // 3. Atualizar a coleção de números disponíveis para refletir que todos estão disponíveis novamente
-    // You need to import raffleService or fix this line
-    // await raffleService.syncAvailableNumbersWithSoldOnes();
+    await syncAvailableNumbersWithSoldOnes();
     
     return true;
   } catch (error) {
     console.error('Erro ao resetar vendas:', error);
     throw new Error('Não foi possível resetar as vendas. Tente novamente mais tarde.');
   }
-// We no longer need this function since we're importing writeBatch from firebase/firestore
 }
 

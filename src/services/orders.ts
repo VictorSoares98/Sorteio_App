@@ -4,6 +4,8 @@ import { PaymentMethod, type Order, type OrderFormData } from '../types/order';
 import { generateDocumentId } from '../utils/formatters';
 import * as raffleService from './raffleNumbers';
 import { timestampToDate, processFirestoreDocument } from '../utils/firebaseUtils';
+import * as raffleBatchService from './raffleBatchService';
+import { isBatchSystemInitialized } from './raffleNumbers';
 
 export const fetchUserOrders = async (userId: string): Promise<Order[]> => {
   try {
@@ -130,6 +132,19 @@ export const createOrder = async (
       ...newOrder,
       createdAt: serverTimestamp()
     });
+    
+    // Atualizar status dos números no sistema de batches se estiver ativo
+    if (await isBatchSystemInitialized()) {
+      await raffleBatchService.markNumbersAsSold(
+        generatedNumbers,
+        {
+          orderId: newOrderId,
+          buyerId: sellerId,
+          buyerName: orderData.buyerName,
+          sellerId: sellerNameId
+        }
+      );
+    }
     
     return newOrderId;
   } catch (error) {

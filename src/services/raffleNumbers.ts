@@ -1,4 +1,4 @@
-import { collection, getDocs, query, where, writeBatch, doc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
+import { collection, getDocs, query, where, doc, serverTimestamp, updateDoc, getDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { 
   MAX_AVAILABLE_NUMBERS, 
@@ -7,6 +7,25 @@ import {
   MAX_NUMBERS_PER_REQUEST, 
   APP_SEED 
 } from '../utils/constants';
+import { NUMBER_STATUS } from '../utils/batchConstants';
+import * as batchService from './raffleBatchService';
+import { useNumberStore } from './numberCacheService';
+import { getBatchIdForNumber } from '../utils/batchUtils'; // Adicionar importação direta
+
+/**
+ * Função exportada para verificar se o sistema de batches está inicializado
+ * Outros módulos podem usar isso para decidir qual fluxo seguir
+ */
+export const isBatchSystemInitialized = async (): Promise<boolean> => {
+  try {
+    const batch1Ref = doc(db, 'raffle_batches', 'batch_1');
+    const batch1Doc = await getDoc(batch1Ref);
+    return batch1Doc.exists();
+  } catch (err) {
+    console.error('[raffleNumbers] Erro ao verificar status do sistema de batches:', err);
+    return false;
+  }
+};
 
 /**
  * Função base para buscar números vendidos com ou sem filtros
@@ -20,7 +39,12 @@ const fetchSoldNumbersBase = async (
   }
 ): Promise<string[]> => {
   try {
-    // Iniciar construção da query base
+    // Verificar se estamos usando o novo sistema de batches
+    if (await isBatchSystemInitialized()) {
+      return await fetchSoldNumbersFromBatches(filters);
+    }
+    
+    // Implementação legada (mantida para compatibilidade)
     let ordersRef = collection(db, 'orders');
     let ordersQuery = query(ordersRef);
     
@@ -93,6 +117,66 @@ const fetchSoldNumbersBase = async (
     throw new Error('Não foi possível verificar os números já vendidos.');
   }
 };
+
+/**
+ * Busca números vendidos usando o sistema de batches
+ */
+async function fetchSoldNumbersFromBatches(filters?: { 
+  afterDate?: Date, 
+  limit?: number,
+  sellerId?: string
+}): Promise<string[]> {
+  // Se temos filtro de vendedor, precisamos consultar pedidos
+  if (filters?.sellerId) {
+    // Buscar pedidos do vendedor
+    let ordersRef = collection(db, 'orders');
+    const sellerQuery1 = query(ordersRef, where('sellerId', '==', filters.sellerId));
+    const sellerQuery2 = query(ordersRef, where('originalSellerId', '==', filters.sellerId));
+
+    // Executar ambas as consultas
+    const [snapshot1, snapshot2] = await Promise.all([
+      getDocs(sellerQuery1),
+      getDocs(sellerQuery2)
+    ]);
+    
+    const soldNumbers: string[] = [];
+    const processedOrderIds = new Set<string>();
+    
+    // Processar snapshot1
+    snapshot1.forEach(doc => {
+      if (!processedOrderIds.has(doc.id)) {
+        processedOrderIds.add(doc.id);
+        const orderData = doc.data();
+        
+        if (orderData.generatedNumbers && Array.isArray(orderData.generatedNumbers)) {
+          soldNumbers.push(...orderData.generatedNumbers);
+        }
+      }
+    });
+    
+    // Processar snapshot2
+    snapshot2.forEach(doc => {
+      if (!processedOrderIds.has(doc.id)) {
+        processedOrderIds.add(doc.id);
+        const orderData = doc.data();
+        
+        if (orderData.generatedNumbers && Array.isArray(orderData.generatedNumbers)) {
+          soldNumbers.push(...orderData.generatedNumbers);
+        }
+      }
+    });
+    
+    // Aplicar limite se necessário
+    if (filters.limit && soldNumbers.length > filters.limit) {
+      return soldNumbers.slice(0, filters.limit);
+    }
+    
+    return soldNumbers;
+  }
+
+  // Se não temos filtros específicos, usar getAllSoldNumbers do batchService
+  return await batchService.getAllSoldNumbers();
+}
 
 /**
  * Busca todos os números já vendidos diretamente do Firestore sem usar cache
@@ -199,6 +283,23 @@ export const generateUniqueNumbers = async (count: number): Promise<string[]> =>
     throw new Error(`Quantidade inválida. Deve estar entre 1 e ${MAX_NUMBERS_PER_REQUEST}.`);
   }
   
+  // Se o sistema de batches estiver inicializado, usar o método otimizado
+  if (await isBatchSystemInitialized()) {
+    try {
+      const numberStore = useNumberStore();
+      const numbers = await batchService.generateRandomAvailableNumbers(count);
+      
+      // Invalidar cache após gerar novos números
+      numberStore.invalidateCache();
+      
+      return numbers;
+    } catch (error) {
+      console.error('Erro ao gerar números usando batches:', error);
+      throw error;
+    }
+  }
+  
+  // Implementação legada (mantida para compatibilidade)
   // Verificar se temos números suficientes disponíveis no sistema
   const soldNumbers = await fetchSoldNumbers();
   if (soldNumbers.length >= MAX_AVAILABLE_NUMBERS) {
@@ -280,6 +381,13 @@ export const isNumberAvailable = async (number: string): Promise<boolean> => {
     throw new Error(`Formato de número inválido: ${number}`);
   }
   
+  // Se o sistema de batches estiver inicializado, usar o método otimizado
+  if (await isBatchSystemInitialized()) {
+    const numberStatus = await batchService.getNumberStatus(number);
+    return numberStatus?.status === NUMBER_STATUS.AVAILABLE;
+  }
+  
+  // Implementação legada (mantida para compatibilidade)
   // Verificar se o número já foi vendido
   const soldNumbers = await fetchSoldNumbers();
   return !soldNumbers.includes(number);
@@ -291,6 +399,13 @@ export const isNumberAvailable = async (number: string): Promise<boolean> => {
  */
 export const getAvailableNumbersCount = async (): Promise<number> => {
   try {
+    // Se o sistema de batches estiver inicializado, usar o método otimizado
+    if (await isBatchSystemInitialized()) {
+      const statusCounts = await batchService.getNumbersStatusCount();
+      return statusCounts[NUMBER_STATUS.AVAILABLE] || 0;
+    }
+    
+    // Implementação legada (mantida para compatibilidade)
     // Obter números vendidos
     const soldNumbers = await fetchSoldNumbers();
     
@@ -306,77 +421,29 @@ export const getAvailableNumbersCount = async (): Promise<number> => {
 
 /**
  * Implementação otimizada para inicializar a coleção de números disponíveis
- * Esta função cria uma referência de todos os números disponíveis no sistema
+ * Esta função agora inicializa a estrutura de batches
  */
 export const initAvailableNumbersCollection = async (): Promise<void> => {
   try {
-    // 1. Buscar números já vendidos (utilizando função base já existente)
-    const soldNumbers = await fetchSoldNumbers();
-    const soldSet = new Set(soldNumbers);
-    
-    console.log(`Iniciando geração de ${MAX_AVAILABLE_NUMBERS - soldSet.size} números disponíveis`);
-    
-    // 2. Criar referência à coleção de disponíveis
-    const availableRef = collection(db, 'available_numbers');
-    
-    // 3. Processar em batches com tamanho ótimo para Firestore
-    const BATCH_SIZE = 500; // Máximo recomendado pelo Firestore
-    let batchCount = 0;
-    let currentBatch = writeBatch(db);
-    let processedCount = 0;
-    
-    // Função auxiliar para commitar batch atual e criar nova
-    const commitAndCreateNewBatch = async () => {
-      await currentBatch.commit();
-      currentBatch = writeBatch(db);
-      batchCount = 0;
-      
-      // Pequena pausa para evitar sobrecarregar o Firestore
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      console.log(`Processados ${processedCount} números`);
-    };
-    
-    // 4. Usar abordagem de incremento para processar apenas números disponíveis
-    for (let i = MIN_AVAILABLE_NUMBERS; i <= MAX_AVAILABLE_NUMBERS; i++) {
-      const formattedNumber = i.toString().padStart(NUMBER_DIGIT_COUNT, '0');
-      
-      // Pular números já vendidos
-      if (soldSet.has(formattedNumber)) {
-        continue;
-      }
-      
-      // Adicionar ao batch atual
-      const numRef = doc(availableRef, formattedNumber);
-      currentBatch.set(numRef, {
-        number: formattedNumber,
-        available: true,
-        createdAt: serverTimestamp()
-      });
-      
-      batchCount++;
-      processedCount++;
-      
-      // Se atingir o limite de batch, comitar e criar novo
-      if (batchCount >= BATCH_SIZE) {
-        await commitAndCreateNewBatch();
-      }
+    // Verificar se o sistema de batches já está inicializado
+    if (await isBatchSystemInitialized()) {
+      console.log('Sistema de batches já inicializado.');
+      return;
     }
     
-    // Comitar última batch se tiver algo
-    if (batchCount > 0) {
-      await currentBatch.commit();
-    }
+    // Inicializar estrutura de batches
+    await batchService.initializeBatchStructure();
     
-    // 5. Criar um documento de metadata para rastrear última sincronização
-    await setDoc(doc(db, 'system', 'numbers_metadata'), {
+    // Atualizar metadata no sistema legado
+    await updateDoc(doc(db, 'system', 'numbers_metadata'), {
       lastSync: serverTimestamp(),
-      totalAvailable: MAX_AVAILABLE_NUMBERS - soldNumbers.length,
-      totalSold: soldNumbers.length,
-      updatedAt: serverTimestamp()
+      totalAvailable: MAX_AVAILABLE_NUMBERS,
+      totalSold: 0,
+      updatedAt: serverTimestamp(),
+      // Adicionar flag indicando que estamos usando o sistema de batches
+      usingBatchSystem: true
     });
     
-    console.log(`✅ Coleção de números disponíveis inicializada com ${MAX_AVAILABLE_NUMBERS - soldNumbers.length} números`);
   } catch (err) {
     console.error('Erro ao inicializar coleção de números disponíveis:', err);
     throw new Error('Não foi possível inicializar o sistema de números.');
@@ -385,11 +452,18 @@ export const initAvailableNumbersCollection = async (): Promise<void> => {
 
 /**
  * Versão otimizada da sincronização de números disponíveis com vendidos
- * Remove os números vendidos da coleção de disponíveis
+ * Agora utiliza o sistema de batches para maior eficiência
  */
 export const syncAvailableNumbersWithSoldOnes = async (): Promise<void> => {
   try {
     console.log('Iniciando sincronização de números...');
+    
+    // Se o sistema de batches ainda não foi inicializado, inicialize-o agora
+    if (!(await isBatchSystemInitialized())) {
+      console.log('Sistema de batches não encontrado. Inicializando...');
+      await initAvailableNumbersCollection();
+      return;
+    }
     
     // 1. Buscar números já vendidos usando a função base otimizada
     const soldNumbers = await fetchSoldNumbers();
@@ -397,7 +471,7 @@ export const syncAvailableNumbersWithSoldOnes = async (): Promise<void> => {
     if (soldNumbers.length === 0) {
       console.log('Nenhum número vendido para sincronizar');
       
-      // Atualizar metadata mesmo sem mudanças
+      // Atualizar metadata
       await updateDoc(doc(db, 'system', 'numbers_metadata'), {
         lastSync: serverTimestamp(),
         totalAvailable: MAX_AVAILABLE_NUMBERS,
@@ -410,38 +484,39 @@ export const syncAvailableNumbersWithSoldOnes = async (): Promise<void> => {
     
     console.log(`Encontrados ${soldNumbers.length} números vendidos para sincronizar`);
     
-    // 2. Referência à coleção de números disponíveis
-    const availableRef = collection(db, 'available_numbers');
+    // 2. Agrupar números por batch
+    const numbersByBatch: Record<string, string[]> = {};
     
-    // 3. Processar em batches com tamanho ideal
-    const BATCH_SIZE = 500;
-    let batchCount = 0;
-    let currentBatch = writeBatch(db);
-    let processedCount = 0;
-    
-    // Processar cada número vendido para remover da lista de disponíveis
-    for (const number of soldNumbers) {
-      const numRef = doc(availableRef, number);
-      currentBatch.delete(numRef);
-      
-      batchCount++;
-      processedCount++;
-      
-      // Se atingir o limite de batch, comitar e criar novo
-      if (batchCount >= BATCH_SIZE) {
-        await currentBatch.commit();
-        currentBatch = writeBatch(db);
-        batchCount = 0;
-        
-        // Pausa para evitar sobrecarregar
-        await new Promise(resolve => setTimeout(resolve, 500));
-        console.log(`Processados ${processedCount} números`);
+    soldNumbers.forEach(number => {
+      try {
+        // Usar a função importada diretamente do módulo de utilitários
+        const batchId = getBatchIdForNumber(number);
+        if (!numbersByBatch[batchId]) {
+          numbersByBatch[batchId] = [];
+        }
+        numbersByBatch[batchId].push(number);
+      } catch (error) {
+        console.error(`Erro ao processar número ${number}:`, error);
       }
-    }
+    });
     
-    // Comitar última batch se tiver algo
-    if (batchCount > 0) {
-      await currentBatch.commit();
+    // 3. Processar cada batch
+    for (const [batchId, numbers] of Object.entries(numbersByBatch)) {
+      const updates: Record<string, any> = {
+        'lastUpdated': serverTimestamp()
+      };
+      
+      // Marcar cada número como vendido
+      numbers.forEach(number => {
+        updates[`numbers.${number}`] = {
+          status: NUMBER_STATUS.SOLD,
+          soldAt: new Date() // Para números sem data específica de venda
+        };
+      });
+      
+      // Atualizar o batch
+      await updateDoc(doc(db, 'raffle_batches', batchId), updates);
+      console.log(`Processados ${numbers.length} números no batch ${batchId}`);
     }
     
     // 4. Atualizar metadata
@@ -452,9 +527,26 @@ export const syncAvailableNumbersWithSoldOnes = async (): Promise<void> => {
       updatedAt: serverTimestamp()
     });
     
-    console.log(`✅ Sincronização concluída. Removidos ${soldNumbers.length} números vendidos da coleção de disponíveis`);
+    console.log(`✅ Sincronização concluída. ${soldNumbers.length} números processados no total.`);
   } catch (err) {
     console.error('Erro ao sincronizar números vendidos:', err);
     throw new Error('Não foi possível sincronizar os números vendidos.');
+  }
+};
+
+/**
+ * Função para limpar as reservas expiradas periodicamente
+ */
+export const cleanupExpiredReservations = async (): Promise<number> => {
+  try {
+    if (!(await isBatchSystemInitialized())) {
+      console.log('Sistema de batches não inicializado, nada a fazer');
+      return 0;
+    }
+    
+    return await batchService.clearExpiredReservations();
+  } catch (error) {
+    console.error('Erro ao limpar reservas expiradas:', error);
+    return 0;
   }
 };
