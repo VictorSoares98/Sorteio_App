@@ -9,7 +9,7 @@ import { getNumberStatus, getNumbersStatusCount } from './raffleBatchService';
  */
 export const useNumberStore = defineStore('numbers', () => {
   // Cache de status de números
-  const numbersCache = ref<Map<string, { status: string, timestamp: number }>>(new Map());
+  const numbersCache = ref<Map<string, { status: string, timestamp: number, local?: boolean }>>(new Map());
   
   // Cache de estatísticas
   const statsCache = ref<{
@@ -87,10 +87,63 @@ export const useNumberStore = defineStore('numbers', () => {
     numbersCache.value.clear();
     statsCache.value = null;
   };
+
+  /**
+   * Atualiza o cache local com números específicos marcados como indisponíveis
+   * Útil para modo offline quando temos operações pendentes
+   */
+  const updateLocalCache = (numbers: string[]) => {
+    const now = Date.now();
+    
+    // Marcar estes números como indisponíveis no cache local
+    numbers.forEach(number => {
+      numbersCache.value.set(number, {
+        status: NUMBER_STATUS.PENDING, // Usar PENDING para operações locais não confirmadas
+        timestamp: now,
+        local: true // Flag para indicar que esta é uma entrada local não confirmada
+      });
+    });
+    
+    // Também atualizar estatísticas de cache
+    if (statsCache.value) {
+      // Assumir conservadoramente que todos são vendas pendentes
+      statsCache.value = {
+        ...statsCache.value,
+        available: Math.max(0, statsCache.value.available - numbers.length),
+        pending: statsCache.value.pending + numbers.length,
+        timestamp: now
+      };
+    }
+    
+    console.log(`[NumberCache] Cache local atualizado com ${numbers.length} números marcados como pendentes`);
+    
+    // Agendar reconciliação com o servidor
+    setTimeout(() => reconcileCacheWithServer(numbers), 5000); // 5 segundos de atraso
+  };
+
+  /**
+   * Reconciliar o cache local com o estado do servidor
+   */
+  const reconcileCacheWithServer = async (numbers: string[]) => {
+    try {
+      const now = Date.now();
+      for (const number of numbers) {
+        const status = await getNumberStatus(number);
+        numbersCache.value.set(number, {
+          status: status?.status || NUMBER_STATUS.AVAILABLE,
+          timestamp: now
+        });
+      }
+      console.log(`[NumberCache] Cache reconciliado com o servidor para ${numbers.length} números`);
+    } catch (error) {
+      console.error('[NumberCache] Falha ao reconciliar cache com o servidor:', error);
+    }
+  };
   
   return {
     isNumberAvailable,
     getNumberStats,
-    invalidateCache
+    invalidateCache,
+    updateLocalCache // Adicionar o novo método
   };
 });

@@ -11,7 +11,9 @@ import {
   Timestamp,
   runTransaction,
   enableNetwork,
-  disableNetwork
+  disableNetwork,
+  onSnapshot,
+  QuerySnapshot
 } from 'firebase/firestore';
 import { db } from '../firebase';
 import {
@@ -27,7 +29,84 @@ import {
   formatBatchNumber
 } from '../utils/batchUtils';
 import { useNumberStore } from './numberCacheService';
-import { isOnline } from '../services/connectivity';
+import { isOnline, isServiceBlocked, updateConnectionState } from '../services/connectivity';
+import { isNetworkError, categorizeNetworkError } from '../types/errors';
+
+// Utilitários para reduzir código duplicado
+
+/**
+ * Valida o formato dos números fornecidos
+ * @param numbers Lista de números a serem validados
+ * @returns Array de números com formato inválido
+ */
+function validateNumbersFormat(numbers: string[]): string[] {
+  return numbers.filter(number => {
+    try {
+      // Tentar formatar para verificar se é válido
+      typeof number === 'number' ? formatBatchNumber(number) : number;
+      return false;
+    } catch (err) {
+      return true;
+    }
+  });
+}
+
+/**
+ * Agrupa números por batch para minimizar operações
+ * @param numbers Lista de números para agrupar
+ * @returns Mapa de batchId para lista de números
+ */
+function groupNumbersByBatch(numbers: string[]): Record<string, string[]> {
+  const numbersByBatch: Record<string, string[]> = {};
+  
+  numbers.forEach(number => {
+    const batchId = getBatchIdForNumber(number);
+    if (!numbersByBatch[batchId]) {
+      numbersByBatch[batchId] = [];
+    }
+    numbersByBatch[batchId].push(number);
+  });
+  
+  return numbersByBatch;
+}
+  
+/**
+ * Agrupa operações pendentes por raffleId para processar em batch
+ * @param operations Lista de operações pendentes do mesmo tipo
+ * @returns Operações agrupadas por raffleId
+ */
+function groupOperationsByRaffleId<T extends { raffleId?: string }>(operations: T[]): Record<string, T[]> {
+  const grouped: Record<string, T[]> = {};
+  
+  operations.forEach(op => {
+    // Usar "default" como chave para operações sem raffleId
+    const key = op.raffleId || 'default';
+    
+    if (!grouped[key]) {
+      grouped[key] = [];
+    }
+    
+    grouped[key].push(op);
+  });
+  
+  return grouped;
+}
+
+/**
+ * Obtém QuerySnapshot de batches com opção de filtro por raffleId
+ * @param raffleId ID opcional do sorteio
+ * @returns Promise com QuerySnapshot dos batches
+ */
+async function getBatchesQuerySnapshot(raffleId?: string): Promise<QuerySnapshot> {
+  const batchesRef = collection(db, BATCH_COLLECTION);
+  
+  if (raffleId) {
+    const batchesQuery = query(batchesRef, where('raffleId', '==', raffleId));
+    return await getDocs(batchesQuery);
+  } else {
+    return await getDocs(batchesRef);
+  }
+}
 
 /**
  * Interface para representar um número dentro de um batch
@@ -54,93 +133,299 @@ export interface BatchDocument {
   raffleId?: string; // Opcional para suporte a múltiplos sorteios
 }
 
+/**
+ * Interface para detalhes de ordem ao marcar números como vendidos
+ */
+export interface OrderDetails {
+  orderId: string;
+  buyerId?: string;
+  buyerName?: string;
+  sellerId?: string;
+}
+
 // Armazenamento de operações pendentes para sincronização quando voltar online
 const pendingOperations = {
   reserveNumbers: [] as {numbers: string[], expiryMinutes: number, raffleId?: string}[],
-  markAsSold: [] as {numbers: string[], orderDetails: any, raffleId?: string}[]
+  markAsSold: [] as {numbers: string[], orderDetails: OrderDetails, raffleId?: string}[]
 };
 
 // Flag para controlar se já estamos tentando sincronizar
 let isSyncingPendingOperations = false;
 
+// Rastrear estado real de conectividade do Firestore
+let firestoreConnectivityUnsubscribe: (() => void) | null = null;
+
 /**
  * Tenta processar operações pendentes quando a conexão é restabelecida
+ * @returns Promise<boolean> Indica se a sincronização foi bem-sucedida
  */
-export async function syncPendingOperations(): Promise<void> {
-  if (isSyncingPendingOperations || !isOnline.value) return;
+export async function syncPendingOperations(): Promise<boolean> {
+  if (isSyncingPendingOperations || !isOnline.value) return false;
   
   try {
     isSyncingPendingOperations = true;
     console.log('[RaffleBatch] Iniciando sincronização de operações pendentes');
     
-    // Processar reservas pendentes
-    const pendingReserves = [...pendingOperations.reserveNumbers];
+    // Agrupar reservas pendentes por raffleId para melhor eficiência
+    const pendingReservesByRaffleId = groupOperationsByRaffleId(pendingOperations.reserveNumbers);
     pendingOperations.reserveNumbers = [];
     
-    for (const op of pendingReserves) {
-      try {
-        console.log(`[RaffleBatch] Sincronizando reserva de ${op.numbers.length} números`);
-        await reserveNumbers(op.numbers, op.expiryMinutes, op.raffleId);
-      } catch (e) {
-        console.error('[RaffleBatch] Falha ao sincronizar reserva:', e);
-        // Readicionar à fila em caso de falha
-        pendingOperations.reserveNumbers.push(op);
+    let allSuccess = true;
+    
+    // Usar Promise.allSettled para processar as operações de forma paralela
+    // mas sem que uma falha impeça as outras de prosseguir
+    const reserveResults = await Promise.allSettled(
+      // Para cada raffleId, processa as operações relacionadas
+      Object.entries(pendingReservesByRaffleId).flatMap(([raffleId, operations]) => 
+        operations.map(async op => {
+          try {
+            console.log(`[RaffleBatch] Sincronizando reserva de ${op.numbers.length} números para raffleId: ${raffleId !== 'default' ? raffleId : 'padrão'}`);
+            return await reserveNumbers(op.numbers, op.expiryMinutes, raffleId !== 'default' ? raffleId : undefined);
+          } catch (e) {
+            console.error('[RaffleBatch] Falha ao sincronizar reserva:', e);
+            // Readicionar à fila em caso de falha
+            pendingOperations.reserveNumbers.push(op);
+            return false;
+          }
+        })
+      )
+    );
+    
+    // Verificar resultados das reservas
+    for (const result of reserveResults) {
+      if (result.status === 'rejected' || (result.status === 'fulfilled' && !result.value)) {
+        allSuccess = false;
       }
     }
     
-    // Processar marcações de vendas pendentes
-    const pendingMarks = [...pendingOperations.markAsSold];
+    // Agrupar marcações de vendas pendentes por raffleId para melhor eficiência
+    const pendingMarksByRaffleId = groupOperationsByRaffleId(pendingOperations.markAsSold);
     pendingOperations.markAsSold = [];
     
-    for (const op of pendingMarks) {
-      try {
-        console.log(`[RaffleBatch] Sincronizando marcação de ${op.numbers.length} números como vendidos`);
-        await markNumbersAsSold(op.numbers, op.orderDetails, op.raffleId);
-      } catch (e) {
-        console.error('[RaffleBatch] Falha ao sincronizar marcação de venda:', e);
-        // Readicionar à fila em caso de falha
-        pendingOperations.markAsSold.push(op);
+    // Usar Promise.allSettled para processar as operações de forma paralela
+    const markResults = await Promise.allSettled(
+      // Para cada raffleId, processa as operações relacionadas
+      Object.entries(pendingMarksByRaffleId).flatMap(([raffleId, operations]) =>
+        operations.map(async op => {
+          try {
+            console.log(`[RaffleBatch] Sincronizando marcação de ${op.numbers.length} números como vendidos para raffleId: ${raffleId !== 'default' ? raffleId : 'padrão'}`);
+            return await markNumbersAsSold(op.numbers, op.orderDetails, raffleId !== 'default' ? raffleId : undefined);
+          } catch (e) {
+            console.error('[RaffleBatch] Falha ao sincronizar marcação de venda:', e);
+            // Readicionar à fila em caso de falha
+            pendingOperations.markAsSold.push(op);
+            return false;
+          }
+        })
+      )
+    );
+    
+    // Verificar resultados das marcações
+    for (const result of markResults) {
+      if (result.status === 'rejected' || (result.status === 'fulfilled' && !result.value)) {
+        allSuccess = false;
       }
     }
-    
-    console.log('[RaffleBatch] Sincronização de operações pendentes concluída');
+
+    console.log(`[RaffleBatch] Sincronização de operações pendentes concluída. Sucesso total: ${allSuccess}`);
+    return allSuccess;
   } catch (error) {
     console.error('[RaffleBatch] Erro durante sincronização de operações pendentes:', error);
+    return false;
   } finally {
     isSyncingPendingOperations = false;
   }
 }
 
 /**
- * Gerencia a conectividade do Firestore para o sistema de batches
- * Permite forçar o modo offline ou online
+ * Verifica e processa operações pendentes quando apropriado
+ * @param forceSync Força a sincronização mesmo se não estiver online
+ * @returns Promise<boolean> Indica se a verificação foi realizada
  */
-export async function setNetworkMode(online: boolean): Promise<void> {
+export async function checkPendingOperations(forceSync: boolean = false): Promise<boolean> {
+  // Não prosseguir se já estiver sincronizando ou não estiver online (a menos que forceSync seja true)
+  if (isSyncingPendingOperations || (!isOnline.value && !forceSync)) {
+    return false;
+  }
+  
+  // Verificar se há operações pendentes
+  const hasPendingOperations = 
+    pendingOperations.reserveNumbers.length > 0 || 
+    pendingOperations.markAsSold.length > 0;
+  
+  if (hasPendingOperations) {
+    return await syncPendingOperations();
+  }
+  
+  return true;
+}
+
+/**
+ * Gerencia a conectividade do Firestore para o sistema de batches
+ * Permite forçar o modo offline ou online e sincroniza com o estado global da aplicação
+ * @param online Define se o modo deve ser online (true) ou offline (false)
+ * @returns Promise<boolean> Indica se a operação foi bem-sucedida
+ */
+export async function setNetworkMode(online: boolean): Promise<boolean> {
   try {
     if (online) {
       console.log('[RaffleBatch] Habilitando rede do Firestore');
       await enableNetwork(db);
-      await syncPendingOperations();
+      // Atualizar estado global de conectividade
+      updateConnectionState(true);
+      // Iniciar monitoramento da conexão real do Firestore se ainda não estiver ativo
+      setupFirestoreConnectivityMonitoring();
+      // Tentar sincronizar operações pendentes
+      await checkPendingOperations();
+      return true;
     } else {
       console.log('[RaffleBatch] Desabilitando rede do Firestore (modo offline forçado)');
       await disableNetwork(db);
+      // Atualizar estado global de conectividade
+      updateConnectionState(false);
+      // Limpar monitoramento de conectividade quando desligamos intencionalmente
+      cleanupFirestoreConnectivityMonitoring();
+      return true;
     }
   } catch (error) {
     console.error(`[RaffleBatch] Erro ao ${online ? 'habilitar' : 'desabilitar'} a rede:`, error);
+    
+    // Em caso de erro ao habilitar a rede, verificar se é um problema de bloqueio
+    if (online && error instanceof Error && 
+        (error.message.includes('network') || error.message.includes('permission'))) {
+      console.warn('[RaffleBatch] Possível bloqueio de rede detectado');
+      isServiceBlocked.value = true;
+    }
+    return false;
   }
 }
 
-// Configurar listener para mudanças no estado de conexão
+/**
+ * Configura monitoramento em tempo real da conectividade do Firestore
+ * usando o documento especial '.info/connected'
+ * @returns Uma função para limpar o monitoramento
+ */
+function setupFirestoreConnectivityMonitoring(): (() => void) | null {
+  // Evitar múltiplas instâncias
+  if (firestoreConnectivityUnsubscribe) return firestoreConnectivityUnsubscribe;
+  
+  try {
+    console.log('[RaffleBatch] Iniciando monitoramento de conectividade do Firestore');
+    firestoreConnectivityUnsubscribe = onSnapshot(
+      doc(db, '.info', 'connected'),
+      (snapshot) => {
+        const isConnected = !!snapshot.data()?.connected;
+        console.log(`[RaffleBatch] Estado de conexão Firestore: ${isConnected ? 'conectado' : 'desconectado'}`);
+        
+        // Atualizar estado global apenas se mudou
+        if (isOnline.value !== isConnected) {
+          updateConnectionState(isConnected);
+          
+          // Se ficamos online, tentar sincronizar
+          if (isConnected && !isSyncingPendingOperations) {
+            // Usar um timeout para evitar problemas de concorrência
+            setTimeout(() => checkPendingOperations(), 1000);
+          }
+        }
+      },
+      (error) => {
+        console.error('[RaffleBatch] Erro no monitoramento de conectividade:', error);
+        // Se houver erro no monitoramento, provavelmente estamos offline
+        updateConnectionState(false);
+      }
+    );
+    
+    return firestoreConnectivityUnsubscribe;
+  } catch (error) {
+    console.error('[RaffleBatch] Falha ao configurar monitoramento de conectividade:', error);
+    return null;
+  }
+}
+
+/**
+ * Limpa o monitoramento de conectividade do Firestore
+ */
+function cleanupFirestoreConnectivityMonitoring(): void {
+  if (firestoreConnectivityUnsubscribe) {
+    firestoreConnectivityUnsubscribe();
+    firestoreConnectivityUnsubscribe = null;
+    console.log('[RaffleBatch] Monitoramento de conectividade do Firestore finalizado');
+  }
+}
+
+/**
+ * Gerencia a reconexão quando o estado de rede é restaurado
+ */
+async function handleNetworkReconnection(): Promise<void> {
+  console.log('[RaffleBatch] Gerenciando reconexão de rede');
+  
+  // Se os serviços externos estiverem bloqueados, não tentar reconexão normal
+  if (isServiceBlocked.value) {
+    console.warn('[RaffleBatch] Serviços externos bloqueados, usando modo de fallback');
+    // No futuro poderíamos implementar um fallback específico aqui
+    return;
+  }
+  
+  // Usar um pequeno timeout para evitar múltiplas tentativas simultâneas
+  await new Promise(resolve => setTimeout(resolve, 500));
+  
+  const success = await setNetworkMode(true);
+  
+  if (success) {
+    // Assegurar que as operações pendentes sejam verificadas após a rede ser restabelecida
+    await checkPendingOperations();
+  }
+}
+
+// Configurar listener para mudanças no estado de conexão com tratamento de debounce
 if (typeof window !== 'undefined') {
+  // Usar um sistema de debounce para evitar múltiplos eventos rápidos
+  let reconnectionTimer: number | null = null;
+  
   window.addEventListener('online', async () => {
-    console.log('[RaffleBatch] Conexão detectada, tentando sincronizar operações pendentes');
-    await setNetworkMode(true);
+    console.log('[RaffleBatch] Evento online detectado pelo navegador');
+    
+    // Limpar timer anterior se existir
+    if (reconnectionTimer !== null) {
+      clearTimeout(reconnectionTimer);
+    }
+    
+    // Configurar novo timer para debounce
+    reconnectionTimer = window.setTimeout(async () => {
+      await handleNetworkReconnection();
+      reconnectionTimer = null;
+    }, 1000);
   });
   
   window.addEventListener('offline', async () => {
-    console.log('[RaffleBatch] Desconexão detectada, modo offline ativo');
-    // Não precisamos desabilitar a rede explicitamente aqui, o Firestore detectará automaticamente
-    // Mas registramos o evento para debug
+    console.log('[RaffleBatch] Evento offline detectado pelo navegador');
+    
+    // Limpar qualquer timer pendente de reconexão
+    if (reconnectionTimer !== null) {
+      clearTimeout(reconnectionTimer);
+      reconnectionTimer = null;
+    }
+    
+    await setNetworkMode(false);
+  });
+  
+  // Iniciar monitoramento da conectividade do Firestore quando o módulo é carregado
+  // (apenas se estamos online de acordo com o navegador)
+  if (navigator.onLine) {
+    // Pequeno atraso para assegurar que tudo está estável
+    setTimeout(() => {
+      setupFirestoreConnectivityMonitoring();
+    }, 1000);
+  }
+  
+  // Garantir limpeza ao descartar a janela
+  window.addEventListener('beforeunload', () => {
+    cleanupFirestoreConnectivityMonitoring();
+    
+    // Limpar qualquer timer pendente
+    if (reconnectionTimer !== null) {
+      clearTimeout(reconnectionTimer);
+    }
   });
 }
 
@@ -295,16 +580,9 @@ export async function updateNumberStatus(
  */
 export async function getAllSoldNumbers(raffleId?: string): Promise<string[]> {
   const soldNumbers: string[] = [];
-  const batchesRef = collection(db, BATCH_COLLECTION);
   
-  // Aplicar filtro de raffleId se especificado
-  let batchesSnapshot;
-  if (raffleId) {
-    const batchesQuery = query(batchesRef, where('raffleId', '==', raffleId));
-    batchesSnapshot = await getDocs(batchesQuery);
-  } else {
-    batchesSnapshot = await getDocs(batchesRef);
-  }
+  // Usar função utilitária para obter batches com filtro
+  const batchesSnapshot = await getBatchesQuerySnapshot(raffleId);
   
   batchesSnapshot.forEach((batchDoc) => {
     const batchData = batchDoc.data() as BatchDocument;
@@ -346,16 +624,8 @@ export async function reserveNumbers(
       return false;
     }
 
-    // Validar formato dos números
-    const invalidFormats = numbers.filter(number => {
-      try {
-        // Tentar formatar para verificar se é válido
-        typeof number === 'number' ? formatBatchNumber(number) : number;
-        return false;
-      } catch (err) {
-        return true;
-      }
-    });
+    // Validar formato dos números usando função utilitária
+    const invalidFormats = validateNumbersFormat(numbers);
 
     if (invalidFormats.length > 0) {
       console.error(`Números com formato inválido: ${invalidFormats.join(', ')}`);
@@ -376,16 +646,8 @@ export async function reserveNumbers(
       return true;
     }
     
-    // Agrupar números por batch para minimizar operações
-    const numbersByBatch: Record<string, string[]> = {};
-    
-    numbers.forEach(number => {
-      const batchId = getBatchIdForNumber(number);
-      if (!numbersByBatch[batchId]) {
-        numbersByBatch[batchId] = [];
-      }
-      numbersByBatch[batchId].push(number);
-    });
+    // Agrupar números por batch usando função utilitária
+    let numbersByBatch = groupNumbersByBatch(numbers);
     
     console.log(`[ReserveNumbers] Tentando reservar ${numbers.length} números em ${Object.keys(numbersByBatch).length} batches`);
     
@@ -426,15 +688,22 @@ export async function reserveNumbers(
         }); 
         
         if (unavailableNumbers.length > 0) {
-          // Detalhamento dos números indisponíveis com seu status atual para diagnóstico
-          const unavailableDetails = unavailableNumbers.map(number => {
-            const data = batchData.numbers[number];
-            return `${number}(${data ? data.status : 'não encontrado'})`;
-          });
+          console.log(`[ReserveNumbers] Detectados ${unavailableNumbers.length} números indisponíveis. Buscando substitutos...`);
           
-          const errorMsg = `Números não disponíveis: ${unavailableDetails.join(', ')}`;
-          console.error(`[ReserveNumbers] ${errorMsg}`);
-          throw new Error(errorMsg);
+          try {
+            const { updatedNumbers, updatedNumbersByBatch } = await handleUnavailableNumbers(
+              unavailableNumbers,
+              numbers,
+              raffleId
+            );
+            
+            numbers = updatedNumbers;
+            numbersByBatch = updatedNumbersByBatch;
+          } catch (error: unknown) {
+            console.error('[ReserveNumbers] Falha ao processar números indisponíveis:', error);
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            throw new Error(`Não foi possível substituir os números indisponíveis: ${errorMessage}`);
+          }
         }
       }
       
@@ -486,8 +755,14 @@ export async function reserveNumbers(
     
     console.error(`[ReserveNumbers] Falha na reserva de números:`, errorDetails);
     
-    // Se for um erro de rede e estivermos offline, tentar adicionar à fila de pendências
-    if (!isOnline.value || (typeof error === 'object' && error !== null && 'toString' in error && error.toString().includes('network'))) {
+    // Verificação estruturada de erro de rede
+    if (!isOnline.value || isNetworkError(error)) {
+      // Se for erro de rede, categorizar e registrar detalhes
+      if (isNetworkError(error)) {
+        const networkError = categorizeNetworkError(error);
+        console.warn(`[ReserveNumbers] Erro de rede detectado: ${networkError.code} - ${networkError.message}`);
+      }
+      
       console.log('[ReserveNumbers] Adicionando operação à fila de pendências devido a erro de rede');
       pendingOperations.reserveNumbers.push({
         numbers: [...numbers],
@@ -504,6 +779,84 @@ export async function reserveNumbers(
 }
 
 /**
+ * Encontra números disponíveis para substituir números indisponíveis
+ * @param count Quantidade de números substitutos necessários
+ * @param excludeNumbers Números a serem excluídos da busca
+ * @param raffleId ID opcional do sorteio
+ * @returns Array com números substitutos
+ */
+async function findReplacementNumbers(
+  count: number,
+  excludeNumbers: string[] = [],
+  raffleId?: string
+): Promise<string[]> {
+  // Criar conjunto de exclusão para busca eficiente
+  const excludeSet = new Set(excludeNumbers);
+  
+  // Buscar candidatos nos batches
+  const batchesSnapshot = await getBatchesQuerySnapshot(raffleId);
+  const availableNumbers: string[] = [];
+  
+  // Coletar todos os números disponíveis que não estão na lista de exclusão
+  batchesSnapshot.forEach((batchDoc) => {
+    const batchData = batchDoc.data() as BatchDocument;
+    
+    Object.entries(batchData.numbers).forEach(([number, data]) => {
+      if (data.status === NUMBER_STATUS.AVAILABLE && !excludeSet.has(number)) {
+        availableNumbers.push(number);
+      }
+    });
+  });
+  
+  // Verificar se temos números suficientes
+  if (availableNumbers.length < count) {
+    throw new Error(`Apenas ${availableNumbers.length} números disponíveis, necessários ${count}`);
+  }
+  
+  // Embaralhar e selecionar a quantidade necessária
+  const shuffled = availableNumbers.sort(() => 0.5 - Math.random());
+  return shuffled.slice(0, count);
+}
+
+/**
+ * Lida com números indisponíveis, substituindo-os por números disponíveis.
+ * @param unavailableNumbers Lista de números indisponíveis.
+ * @param currentNumbers Lista atual de números.
+ * @param raffleId ID opcional do sorteio.
+ * @returns Um objeto contendo os números atualizados e os números agrupados por batch.
+ */
+async function handleUnavailableNumbers(
+  unavailableNumbers: string[],
+  currentNumbers: string[],
+  raffleId?: string
+): Promise<{ updatedNumbers: string[]; updatedNumbersByBatch: Record<string, string[]> }> {
+  const replacements = [];
+  const neededCount = unavailableNumbers.length;
+  const allCurrentNumbers = [...currentNumbers];
+
+  const replacementNumbers = await findReplacementNumbers(neededCount, allCurrentNumbers, raffleId);
+
+  if (replacementNumbers.length < neededCount) {
+    throw new Error(`Não foi possível encontrar ${neededCount} números para substituição.`);
+  }
+
+  let replacementIndex = 0;
+  const updatedNumbers = currentNumbers.map(number => {
+    if (unavailableNumbers.includes(number)) {
+      const replacement = replacementNumbers[replacementIndex++];
+      replacements.push({ original: number, replacement });
+      return replacement;
+    }
+    return number;
+  });
+
+  const updatedNumbersByBatch = groupNumbersByBatch(updatedNumbers);
+
+  console.log(`[HandleUnavailableNumbers] Substituição realizada com sucesso: ${replacements.length} números substituídos`);
+  return { updatedNumbers, updatedNumbersByBatch };
+}
+
+/**
  * Marca um conjunto de números como vendidos
  * @param numbers Lista de números vendidos
  * @param orderDetails Detalhes da ordem (comprador, vendedor, etc)
@@ -511,12 +864,7 @@ export async function reserveNumbers(
  */
 export async function markNumbersAsSold(
   numbers: string[],
-  orderDetails: {
-    orderId: string,
-    buyerId?: string,
-    buyerName?: string,
-    sellerId?: string
-  },
+  orderDetails: OrderDetails,
   raffleId?: string
 ): Promise<boolean> {
   try {
@@ -534,16 +882,8 @@ export async function markNumbersAsSold(
       return false;
     }
 
-    // Validar formato dos números
-    const invalidFormats = numbers.filter(number => {
-      try {
-        // Tentar formatar para verificar se é válido
-        typeof number === 'number' ? formatBatchNumber(number) : number;
-        return false;
-      } catch (err) {
-        return true;
-      }
-    });
+    // Validar formato dos números usando função utilitária
+    const invalidFormats = validateNumbersFormat(numbers);
 
     if (invalidFormats.length > 0) {
       console.error(`[MarkAsSold] Números com formato inválido: ${invalidFormats.join(', ')}`);
@@ -566,16 +906,8 @@ export async function markNumbersAsSold(
     
     console.log(`[MarkAsSold] Tentando marcar ${numbers.length} números como vendidos para o pedido ${orderDetails.orderId}`);
     
-    // Agrupar números por batch para minimizar operações
-    const numbersByBatch: Record<string, string[]> = {};
-    
-    numbers.forEach(number => {
-      const batchId = getBatchIdForNumber(number);
-      if (!numbersByBatch[batchId]) {
-        numbersByBatch[batchId] = [];
-      }
-      numbersByBatch[batchId].push(number);
-    });
+    // Agrupar números por batch usando função utilitária
+    let numbersByBatch = groupNumbersByBatch(numbers);
     
     // Usar transação para garantir atomicidade
     const result = await runTransaction(db, async (transaction) => {
@@ -610,15 +942,52 @@ export async function markNumbersAsSold(
         });
         
         if (invalidNumbers.length > 0) {
-          // Adicionar detalhes sobre os números inválidos
-          const invalidDetails = invalidNumbers.map(number => {
-            const data = batchData.numbers[number];
-            return `${number}(${data ? data.status : 'não encontrado'})`;
-          });
+          console.log(`[MarkAsSold] Detectados ${invalidNumbers.length} números indisponíveis. Buscando substitutos...`);
           
-          const errorMsg = `Números já vendidos ou inexistentes: ${invalidDetails.join(', ')}`;
-          console.error(`[MarkAsSold] ${errorMsg}`);
-          return false;
+          // Criar registros dos números sendo substituídos
+          const replacements = [];
+          
+          try {
+            // Buscar números substitutos
+            const neededCount = invalidNumbers.length;
+            const allCurrentNumbers = [...numbers]; // Todos para exclusão
+            
+            const replacementNumbers = await findReplacementNumbers(
+              neededCount, 
+              allCurrentNumbers,
+              raffleId
+            );
+            
+            // Verificar se temos substitutos suficientes
+            if (replacementNumbers.length < neededCount) {
+              console.error(`[MarkAsSold] Não foi possível encontrar ${neededCount} números para substituição.`);
+              return false;
+            }
+            
+            // Substituir os números indisponíveis pelos substitutos
+            let replacementIndex = 0;
+            numbers = numbers.map(number => {
+              if (invalidNumbers.includes(number)) {
+                const replacement = replacementNumbers[replacementIndex++];
+                replacements.push({
+                  original: number,
+                  replacement
+                });
+                return replacement;
+              }
+              return number;
+            });
+            
+            // Reagrupar os números após substituição
+            numbersByBatch = groupNumbersByBatch(numbers);
+            
+            // Continuar com o processamento usando os números substituídos
+            console.log(`[MarkAsSold] Substituição realizada com sucesso: ${replacements.length} números`);
+          } catch (error: unknown) {
+            console.error('[MarkAsSold] Falha ao buscar números substitutos:', error);
+            console.error(`Falha na substituição de números: ${error instanceof Error ? error.message : String(error)}`);
+            return false;
+          }
         }
       }
       
@@ -660,7 +1029,7 @@ export async function markNumbersAsSold(
       console.warn(`[MarkAsSold] Operação não completada, verificar logs para detalhes`);
     }
     
-    return result;
+    return !!result; // Ensure we return a boolean value
   } catch (error: unknown) { // Adicionar tipagem explícita ao error
     // Tratamento de erro aprimorado com contextualização
     const errorDetails = {
@@ -677,8 +1046,14 @@ export async function markNumbersAsSold(
     
     console.error(`[MarkAsSold] Falha ao marcar números como vendidos:`, errorDetails);
     
-    // Se for um erro de rede e estivermos offline, tentar adicionar à fila de pendências
-    if (!isOnline.value || (typeof error === 'object' && error !== null && 'toString' in error && error.toString().includes('network'))) {
+    // Verificação estruturada de erro de rede
+    if (!isOnline.value || isNetworkError(error)) {
+      // Se for erro de rede, categorizar e registrar detalhes
+      if (isNetworkError(error)) {
+        const networkError = categorizeNetworkError(error);
+        console.warn(`[MarkAsSold] Erro de rede detectado: ${networkError.code} - ${networkError.message}`);
+      }
+      
       console.log('[MarkAsSold] Adicionando operação à fila de pendências devido a erro de rede');
       pendingOperations.markAsSold.push({
         numbers: [...numbers],
@@ -700,16 +1075,8 @@ export async function markNumbersAsSold(
  */
 export async function countAvailableNumbers(raffleId?: string): Promise<number> {
   try {
-    const batchesRef = collection(db, BATCH_COLLECTION);
-    
-    // Aplicar filtro de raffleId se especificado
-    let batchesSnapshot;
-    if (raffleId) {
-      const batchesQuery = query(batchesRef, where('raffleId', '==', raffleId));
-      batchesSnapshot = await getDocs(batchesQuery);
-    } else {
-      batchesSnapshot = await getDocs(batchesRef);
-    }
+    // Usar função utilitária para obter batches com filtro
+    const batchesSnapshot = await getBatchesQuerySnapshot(raffleId);
     
     let availableCount = 0;
     
@@ -741,17 +1108,8 @@ export async function generateRandomAvailableNumbers(
   raffleId?: string
 ): Promise<string[]> {
   try {
-    // Obter batches com seus números disponíveis
-    const batchesRef = collection(db, BATCH_COLLECTION);
-    
-    // Aplicar filtro de raffleId se especificado
-    let batchesSnapshot;
-    if (raffleId) {
-      const batchesQuery = query(batchesRef, where('raffleId', '==', raffleId));
-      batchesSnapshot = await getDocs(batchesQuery);
-    } else {
-      batchesSnapshot = await getDocs(batchesRef);
-    }
+    // Usar função utilitária para obter batches com filtro
+    const batchesSnapshot = await getBatchesQuerySnapshot(raffleId);
     
     // Coletar todos os números disponíveis
     const availableNumbers: string[] = [];
@@ -788,16 +1146,8 @@ export async function getNumbersStatusCount(
   raffleId?: string
 ): Promise<Record<string, number>> {
   try {
-    const batchesRef = collection(db, BATCH_COLLECTION);
-    
-    // Aplicar filtro de raffleId se especificado
-    let batchesSnapshot;
-    if (raffleId) {
-      const batchesQuery = query(batchesRef, where('raffleId', '==', raffleId));
-      batchesSnapshot = await getDocs(batchesQuery);
-    } else {
-      batchesSnapshot = await getDocs(batchesRef);
-    }
+    // Usar função utilitária para obter batches com filtro
+    const batchesSnapshot = await getBatchesQuerySnapshot(raffleId);
     
     const statusCount: Record<string, number> = {
       [NUMBER_STATUS.AVAILABLE]: 0,
@@ -832,18 +1182,10 @@ export async function getNumbersStatusCount(
  */
 export async function clearExpiredReservations(raffleId?: string): Promise<number> {
   try {
-    const batchesRef = collection(db, BATCH_COLLECTION);
+    // Usar função utilitária para obter batches com filtro
+    const batchesSnapshot = await getBatchesQuerySnapshot(raffleId);
     const now = new Date();
     let totalCleared = 0;
-    
-    // Aplicar filtro de raffleId se especificado
-    let batchesSnapshot;
-    if (raffleId) {
-      const batchesQuery = query(batchesRef, where('raffleId', '==', raffleId));
-      batchesSnapshot = await getDocs(batchesQuery);
-    } else {
-      batchesSnapshot = await getDocs(batchesRef);
-    }
     
     for (const batchDoc of batchesSnapshot.docs) {
       const batchData = batchDoc.data() as BatchDocument;

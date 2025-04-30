@@ -7,6 +7,19 @@ export const isServiceBlocked = ref(false);
 // Estado para rastrear se o aviso já foi mostrado
 const hasShownBlockWarning = ref(false);
 
+/**
+ * Atualiza o estado de conectividade globalmente
+ * Exposta para permitir sincronização com o estado real do Firestore
+ * 
+ * @param online Novo estado de conectividade
+ */
+export function updateConnectionState(online: boolean): void {
+  if (isOnline.value !== online) {
+    console.log(`[Connectivity] Atualizando estado para: ${online ? 'online' : 'offline'}`);
+    isOnline.value = online;
+  }
+}
+
 // Inicializar o serviço básico de conectividade
 export const initConnectivityService = () => {
   console.log('[Connectivity] Inicializando serviço de conectividade básico');
