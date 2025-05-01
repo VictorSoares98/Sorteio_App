@@ -1,36 +1,47 @@
 export enum UserRole {
   USER = 'user',
+  ADMIN = 'admin',
   TESOUREIRO = 'tesoureiro',
-  SECRETARIA = 'secretaria',
-  ADMIN = 'admin'
+  SECRETARIA = 'secretaria'
 }
 
 export interface User {
   id: string;
   email: string;
-  displayName: string;
-  username: string;
+  displayName?: string;
+  username?: string;
+  photoURL?: string;
   role: UserRole;
   phone?: string;
   congregation?: string;
-  photoURL?: string; // Adicionando esta propriedade para compatibilidade
+  createdAt?: Date;
+  lastLogin?: Date;
   affiliateCode?: string;
-  affiliateCodeExpiry?: Date | FirebaseTimestamp; // Atualizado para suportar ambos os tipos
-  affiliatedTo?: string;      // ID do usuário ao qual este está afiliado
+  affiliates?: string[];
+  affiliatedTo?: string;
   affiliatedToId?: string;
   affiliatedToEmail?: string;
+  
+  // Propriedades para bloqueio de usuário
+  isBlocked?: boolean;
+  blockReason?: string | null;
+  blockStartDate?: Date | null;
+  blockExpiration?: Date | null;
+  
+  // Propriedades para afiliação
   affiliatedToInfo?: {
-    id: string;
     displayName: string;
     email: string;
-    congregation?: string;
     photoURL?: string;
-  };
-  affiliates?: string[];      // IDs dos usuários afiliados a este
-  createdAt: Date;
+  }
 }
 
-// Interface para lidar com Timestamp do Firebase
+export interface UserNote {
+  userId: string;
+  note: string;
+  updatedAt: Date;
+}
+
 export interface FirebaseTimestamp {
   toDate(): Date;
   seconds: number;

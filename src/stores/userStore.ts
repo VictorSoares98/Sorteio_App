@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
-import { collection, getDocs, doc, updateDoc, getDoc, query, where } from 'firebase/firestore';
+import { collection, getDocs, doc, updateDoc, getDoc, query, where, Timestamp, setDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import type { User, UserRole } from '../types/user';
 import type { Order } from '../types/order';
@@ -12,6 +12,7 @@ export const useUserStore = defineStore('users', () => {
   const loading = ref(false);
   const error = ref<string | null>(null);
   const authStore = useAuthStore();
+  const userNotes = ref<Record<string, string>>({});
   
   // Filtros
   const searchQuery = ref('');
@@ -25,8 +26,9 @@ export const useUserStore = defineStore('users', () => {
     if (searchQuery.value) {
       const searchText = searchQuery.value.toLowerCase();
       result = result.filter(user => 
-        user.displayName.toLowerCase().includes(searchText) || 
-        user.email.toLowerCase().includes(searchText)
+        (user.displayName?.toLowerCase() || '').includes(searchText) || 
+        user.email.toLowerCase().includes(searchText) ||
+        (user.congregation?.toLowerCase().includes(searchText))
       );
     }
     
@@ -55,8 +57,17 @@ export const useUserStore = defineStore('users', () => {
       users.value = [];
       
       usersSnapshot.forEach(doc => {
-        // Usar função utilitária para processar documentos
-        users.value.push(processFirestoreDocument<User>(doc));
+        const userData = doc.data();
+        
+        // Converter timestamp para Date
+        if (userData.createdAt && userData.createdAt instanceof Timestamp) {
+          userData.createdAt = userData.createdAt.toDate();
+        }
+        
+        users.value.push({
+          id: doc.id,
+          ...userData
+        } as User);
       });
       
     } catch (err: any) {
@@ -218,6 +229,155 @@ export const useUserStore = defineStore('users', () => {
       loading.value = false;
     }
   };
+
+  // Salvar nota administrativa para um usuário
+  async function saveUserNote(userId: string, note: string) {
+    try {
+      const noteRef = doc(db, 'userNotes', userId);
+      await setDoc(noteRef, { 
+        note,
+        updatedAt: new Date()
+      });
+      
+      userNotes.value[userId] = note;
+      
+      return true;
+    } catch (err) {
+      console.error('Erro ao salvar nota do usuário:', err);
+      throw err;
+    }
+  }
+  
+  // Buscar notas de um usuário específico
+  async function fetchUserNotes(userId: string) {
+    try {
+      const noteRef = doc(db, 'userNotes', userId);
+      const noteSnap = await getDoc(noteRef);
+      
+      if (noteSnap.exists()) {
+        const noteData = noteSnap.data();
+        userNotes.value[userId] = noteData.note || '';
+      } else {
+        userNotes.value[userId] = '';
+      }
+      
+      return userNotes.value[userId];
+    } catch (err) {
+      console.error('Erro ao buscar notas do usuário:', err);
+      throw err;
+    }
+  }
+  
+  // Bloquear/desbloquear usuário
+  async function toggleUserBlock(userId: string, isBlocked: boolean, blockReason?: string, blockDuration?: number) {
+    try {
+      const userRef = doc(db, 'users', userId);
+      
+      const blockData: any = { isBlocked };
+      
+      if (isBlocked) {
+        blockData.blockReason = blockReason || '';
+        blockData.blockStartDate = new Date();
+        
+        if (blockDuration && blockDuration > 0) {
+          const expirationDate = new Date();
+          expirationDate.setDate(expirationDate.getDate() + blockDuration);
+          blockData.blockExpiration = expirationDate;
+        } else {
+          blockData.blockExpiration = null;
+        }
+      } else {
+        blockData.blockReason = null;
+        blockData.blockStartDate = null;
+        blockData.blockExpiration = null;
+      }
+      
+      await updateDoc(userRef, blockData);
+      
+      const userIndex = users.value.findIndex(u => u.id === userId);
+      if (userIndex !== -1) {
+        users.value[userIndex].isBlocked = isBlocked;
+        users.value[userIndex].blockReason = blockData.blockReason;
+        users.value[userIndex].blockStartDate = blockData.blockStartDate;
+        users.value[userIndex].blockExpiration = blockData.blockExpiration;
+      }
+      
+      return true;
+    } catch (err) {
+      console.error('Erro ao atualizar status de bloqueio do usuário:', err);
+      throw err;
+    }
+  }
+  
+  // Exportar usuários para CSV
+  async function exportUsersToCSV(data: any[], fields: { label: string, key: string }[]) {
+    try {
+      let csv = fields.map(field => `"${field.label}"`).join(',') + '\n';
+      
+      data.forEach(item => {
+        const row = fields.map(field => {
+          const value = item[field.key] !== undefined && item[field.key] !== null
+            ? String(item[field.key]).replace(/"/g, '""')
+            : '';
+          return `"${value}"`;
+        }).join(',');
+        
+        csv += row + '\n';
+      });
+      
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', `usuarios_${new Date().toISOString().slice(0,10)}.csv`);
+      link.style.visibility = 'hidden';
+      
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      return true;
+    } catch (err) {
+      console.error('Erro ao exportar para CSV:', err);
+      throw err;
+    }
+  }
+  
+  // Exportar usuários para Excel (formato simplificado via CSV)
+  async function exportUsersToExcel(data: any[], fields: { label: string, key: string }[]) {
+    try {
+      let csv = fields.map(field => `"${field.label}"`).join('\t') + '\n';
+      
+      data.forEach(item => {
+        const row = fields.map(field => {
+          const value = item[field.key] !== undefined && item[field.key] !== null
+            ? String(item[field.key]).replace(/"/g, '""')
+            : '';
+          return `"${value}"`;
+        }).join('\t');
+        
+        csv += row + '\n';
+      });
+      
+      const blob = new Blob([csv], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+      const link = document.createElement('a');
+      
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', `usuarios_${new Date().toISOString().slice(0,10)}.xls`);
+      link.style.visibility = 'hidden';
+      
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      return true;
+    } catch (err) {
+      console.error('Erro ao exportar para Excel:', err);
+      throw err;
+    }
+  }
   
   return {
     users,
@@ -226,10 +386,16 @@ export const useUserStore = defineStore('users', () => {
     error,
     searchQuery,
     roleFilter,
+    userNotes,
     fetchAllUsers,
     fetchUserById,
-    fetchUsersByRole, // Nova função adicionada
+    fetchUsersByRole,
     updateUserRole,
-    getUsersByActivity
+    getUsersByActivity,
+    saveUserNote,
+    fetchUserNotes,
+    toggleUserBlock,
+    exportUsersToCSV,
+    exportUsersToExcel
   };
 });

@@ -2,10 +2,12 @@
 import { ref, onMounted } from 'vue';
 import { useAuthStore } from '../../stores/authStore';
 import { useRouter } from 'vue-router';
+import UsersList from '../../components/admin/UsersList.vue';
 
 const authStore = useAuthStore();
 const router = useRouter();
 const isLoading = ref(true);
+const activeSection = ref<string | null>(null);
 
 // Verifica permissões de administrador ao montar o componente
 onMounted(async () => {
@@ -22,6 +24,11 @@ onMounted(async () => {
     isLoading.value = false;
   }
 });
+
+// Navega entre as seções do painel
+const showSection = (section: string) => {
+  activeSection.value = activeSection.value === section ? null : section;
+};
 </script>
 
 <template>
@@ -32,53 +39,73 @@ onMounted(async () => {
       <p>Carregando informações administrativas...</p>
     </div>
     
-    <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-6">
-      <!-- Gerenciamento de Usuários -->
-      <div class="bg-white p-6 rounded-lg shadow-md">
-        <h2 class="text-xl font-semibold mb-4 text-primary">Gerenciamento de Usuários</h2>
-        <p class="text-gray-600 mb-4">Gerencie os usuários da plataforma e suas permissões.</p>
-        
-        <button 
-          class="bg-primary hover:bg-primary-dark text-white py-2 px-4 rounded transition-colors"
-        >
-          Ver Usuários
-        </button>
+    <div v-else>
+      <!-- Mostra o componente de gerenciamento de usuários quando selecionado -->
+      <div v-if="activeSection === 'users'">
+        <div class="mb-4">
+          <button 
+            @click="showSection('menu')" 
+            class="flex items-center text-primary hover:text-primary-dark"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">
+              <path fill-rule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clip-rule="evenodd" />
+            </svg>
+            Voltar ao Menu
+          </button>
+        </div>
+        <UsersList />
       </div>
       
-      <!-- Relatórios de Vendas -->
-      <div class="bg-white p-6 rounded-lg shadow-md">
-        <h2 class="text-xl font-semibold mb-4 text-primary">Relatórios de Vendas</h2>
-        <p class="text-gray-600 mb-4">Visualize estatísticas de vendas e números sorteados.</p>
+      <!-- Menu principal do painel administrativo -->
+      <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <!-- Gerenciamento de Usuários -->
+        <div class="bg-white p-6 rounded-lg shadow-md">
+          <h2 class="text-xl font-semibold mb-4 text-primary">Gerenciamento de Usuários</h2>
+          <p class="text-gray-600 mb-4">Gerencie os usuários da plataforma e suas permissões.</p>
+          
+          <button 
+            @click="showSection('users')"
+            class="bg-primary hover:bg-primary-dark text-white py-2 px-4 rounded transition-colors"
+          >
+            Ver Usuários
+          </button>
+        </div>
         
-        <button 
-          class="bg-primary hover:bg-primary-dark text-white py-2 px-4 rounded transition-colors"
-        >
-          Ver Relatórios
-        </button>
-      </div>
-      
-      <!-- Gerenciamento de Sorteios -->
-      <div class="bg-white p-6 rounded-lg shadow-md">
-        <h2 class="text-xl font-semibold mb-4 text-primary">Gerenciar Sorteios</h2>
-        <p class="text-gray-600 mb-4">Configure datas e parâmetros dos sorteios ativos.</p>
+        <!-- Relatórios de Vendas -->
+        <div class="bg-white p-6 rounded-lg shadow-md">
+          <h2 class="text-xl font-semibold mb-4 text-primary">Relatórios de Vendas</h2>
+          <p class="text-gray-600 mb-4">Visualize estatísticas de vendas e números sorteados.</p>
+          
+          <button 
+            class="bg-primary hover:bg-primary-dark text-white py-2 px-4 rounded transition-colors"
+          >
+            Ver Relatórios
+          </button>
+        </div>
         
-        <button 
-          class="bg-primary hover:bg-primary-dark text-white py-2 px-4 rounded transition-colors"
-        >
-          Configurar Sorteio
-        </button>
-      </div>
-      
-      <!-- Configurações do Sistema -->
-      <div class="bg-white p-6 rounded-lg shadow-md">
-        <h2 class="text-xl font-semibold mb-4 text-primary">Configurações</h2>
-        <p class="text-gray-600 mb-4">Configurações gerais do sistema e da plataforma.</p>
+        <!-- Gerenciamento de Sorteios -->
+        <div class="bg-white p-6 rounded-lg shadow-md">
+          <h2 class="text-xl font-semibold mb-4 text-primary">Gerenciar Sorteios</h2>
+          <p class="text-gray-600 mb-4">Configure datas e parâmetros dos sorteios ativos.</p>
+          
+          <button 
+            class="bg-primary hover:bg-primary-dark text-white py-2 px-4 rounded transition-colors"
+          >
+            Configurar Sorteio
+          </button>
+        </div>
         
-        <button 
-          class="bg-primary hover:bg-primary-dark text-white py-2 px-4 rounded transition-colors"
-        >
-          Acessar Configurações
-        </button>
+        <!-- Configurações do Sistema -->
+        <div class="bg-white p-6 rounded-lg shadow-md">
+          <h2 class="text-xl font-semibold mb-4 text-primary">Configurações</h2>
+          <p class="text-gray-600 mb-4">Configurações gerais do sistema e da plataforma.</p>
+          
+          <button 
+            class="bg-primary hover:bg-primary-dark text-white py-2 px-4 rounded transition-colors"
+          >
+            Acessar Configurações
+          </button>
+        </div>
       </div>
     </div>
   </div>
