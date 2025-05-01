@@ -1,11 +1,16 @@
 import { ref } from 'vue';
 
+// Configurable constant for the test URL
+const TEST_URL = 'https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg';
+
 // Estado reativo para a conectividade
 export const isOnline = ref(navigator.onLine);
 // Novo estado para rastrear se serviços externos estão bloqueados
 export const isServiceBlocked = ref(false);
 // Estado para rastrear se o aviso já foi mostrado
 const hasShownBlockWarning = ref(false);
+// Variável para guardar a função de limpeza do intervalo
+let connectivityInterval: (() => void) | null = null; // Stores the cleanup function for service blocking detection
 
 /**
  * Atualiza o estado de conectividade globalmente
@@ -21,21 +26,31 @@ export function updateConnectionState(online: boolean): void {
 }
 
 // Inicializar o serviço básico de conectividade
-export const initConnectivityService = () => {
+export const initConnectivityService = (customIntervalMs: number = 60000) => {
   console.log('[Connectivity] Inicializando serviço de conectividade básico');
   
   // Configurar ouvintes de eventos de conectividade
   window.addEventListener('online', handleOnline);
   window.addEventListener('offline', handleOffline);
   
+  // Novo: ouvinte para eventos personalizados de bloqueio
+  document.addEventListener('serviceBlocked', handleServiceBlocked);
+  
   // Estado inicial
   isOnline.value = navigator.onLine;
   
   console.log(`[Connectivity] Estado inicial: ${isOnline.value ? 'online' : 'offline'}`);
   
-  // Iniciar detecção de bloqueios
-  detectServiceBlocking();
+  // Iniciar detecção passiva de bloqueios
+  connectivityInterval = detectServiceBlockingPassive(customIntervalMs, 5000, TEST_URL); // Pass the test URL explicitly
 };
+
+// Example: Ensure cleanupConnectivityService is called when the service is disposed
+if (import.meta.hot) {
+  import.meta.hot.dispose(() => {
+    cleanupConnectivityService();
+  });
+}
 
 // Manipulador para evento online
 const handleOnline = () => {
@@ -49,94 +64,94 @@ const handleOffline = () => {
   isOnline.value = false;
 };
 
+// Manipulador para eventos de bloqueio de serviço
+const handleServiceBlocked = (event: Event) => {
+  const customEvent = event as CustomEvent;
+  console.warn('[Connectivity] Serviço externo bloqueado detectado', customEvent.detail);
+  isServiceBlocked.value = true;
+  
+  if (!hasShownBlockWarning.value) {
+    // Aqui você pode implementar lógica para mostrar um aviso ao usuário
+    // apenas uma vez por sessão
+    hasShownBlockWarning.value = true;
+  }
+};
+
 // Limpar ouvintes quando não forem mais necessários
 export const cleanupConnectivityService = () => {
   console.log('[Connectivity] Limpando serviço de conectividade');
   window.removeEventListener('online', handleOnline);
   window.removeEventListener('offline', handleOffline);
+  document.removeEventListener('serviceBlocked', handleServiceBlocked);
+  
+  if (connectivityInterval) {
+    connectivityInterval(); // Call the cleanup function to clear the interval
+    connectivityInterval = null;
+  }
 };
 
-// Função para detectar bloqueios de serviços externos
-const detectServiceBlocking = async () => {
-  try {
-    // Criar um iframe oculto para testar a conexão
-    const tester = document.createElement('iframe');
-    tester.style.display = 'none';
-    document.body.appendChild(tester);
-    
-    // Registrar evento para interceptar erros de rede
-    const originalFetch = window.fetch;
-    
-    // Substituir fetch para monitorar erros em requisições a serviços externos
-    window.fetch = async function(input, init) {
-      try {
-        const response = await originalFetch.apply(this, [input, init]);
-        return response;
-      } catch (error) {
-        // Verificar se a requisição era para serviços que podem ser bloqueados
-        const url = typeof input === 'string' ? input : input instanceof Request ? input.url : '';
-        // Detectar bloqueios específicos do Firestore
-        if (url.includes('googleapis.com') || url.includes('firestore.googleapis.com')) {
-          console.warn('[Connectivity] Detectado bloqueio de recursos externos via fetch');
-          isServiceBlocked.value = true;
-          // Registrar o tipo específico de bloqueio
-          if (url.includes('firestore.googleapis.com/google.firestore.v1.Firestore/Listen')) {
-            console.warn('[Connectivity] Bloqueio específico de WebSockets do Firestore detectado');
-          }
-        }
-        throw error;
-      }
-    };
-    
-    // Monitorar erros nas requisições
-    window.addEventListener('error', function(e) {
-      if (e.target instanceof HTMLScriptElement || 
-        e.target instanceof HTMLLinkElement || 
-        e.target instanceof HTMLImageElement) {
-        if ((e.target instanceof HTMLScriptElement || e.target instanceof HTMLImageElement) && 
-            e.target.src && (e.target.src.includes('googleapis.com') || e.target.src.includes('firestore.googleapis'))) {
-          console.warn('[Connectivity] Detectado possível bloqueio de recursos externos');
-          isServiceBlocked.value = true;
-        } else if (e.target instanceof HTMLLinkElement && 
-            e.target.href && (e.target.href.includes('googleapis.com') || e.target.href.includes('firestore.googleapis'))) {
-          console.warn('[Connectivity] Detectado possível bloqueio de recursos externos');
-          isServiceBlocked.value = true;
-        }
-      }
-    }, true);
-    
-    // Detectar bloqueios específicos na comunicação WebSocket do Firestore
-    const originalWebSocket = window.WebSocket;
-    window.WebSocket = function(url: string, protocols?: string | string[]) {
-      const socket = new originalWebSocket(url, protocols);
+/**
+ * Método passivo de detecção que verifica periodicamente o acesso a serviços externos
+ * 
+ * @param intervalMs Intervalo em milissegundos entre verificações
+ * @param timeoutMs Tempo máximo de espera para cada verificação
+ * @param testUrl URL do recurso a ser testado
+ * @returns Função de limpeza para cancelar o intervalo
+ */
+const detectServiceBlockingPassive = (
+  intervalMs: number = 60000, // Default interval of 1 minute
+  timeoutMs: number = 5000, // Default timeout of 5 seconds
+  testUrl: string = TEST_URL // Configurable test URL with a default value
+): (() => void) => {
+  
+  // Função para emitir evento de mudança de estado
+  const emitBlockingEvent = (blocked: boolean) => {
+    if (isServiceBlocked.value !== blocked) {
+      isServiceBlocked.value = blocked;
       
-      if (typeof url === 'string' && 
-         (url.includes('firestore.googleapis.com') || url.includes('googleapis.com'))) {
-        socket.addEventListener('error', (event) => {
-          console.warn('[Connectivity] Erro em WebSocket para serviços Google:', event);
-          isServiceBlocked.value = true;
-        });
-      }
+      // Emitir evento personalizado para o resto da aplicação
+      const event = new CustomEvent('serviceBlockingChanged', { 
+        detail: { blocked } 
+      });
+      document.dispatchEvent(event);
       
-      return socket;
-    } as any;
-    
-    // Restaurar o WebSocket original após um período para evitar interferência
-    setTimeout(() => {
-      window.WebSocket = originalWebSocket;
-    }, 10000);
-    
-    // Limpar teste após verificação
-    setTimeout(() => {
-      try {
-        document.body.removeChild(tester);
-      } catch (e) {
-        // Ignorar erros de limpeza
-      }
-    }, 5000);
-  } catch (err) {
-    console.error('[Connectivity] Erro ao verificar bloqueio de serviços:', err);
-  }
+      console.log(`[Connectivity] Estado de bloqueio de serviço: ${blocked ? 'BLOQUEADO' : 'ACESSÍVEL'}`);
+    }
+  };
+  
+  // Verificar conectividade periodicamente com serviços externos
+  const checkInterval = setInterval(() => {
+    if (navigator.onLine) {
+      // Usar verificação de recursos estáticos em vez de API
+      const img = new Image();
+      
+      const timeout = setTimeout(() => {
+        console.warn('[Connectivity] Timeout ao carregar recurso estático Google/Firebase');
+        emitBlockingEvent(true);
+        img.src = ''; // Cancel image loading
+      }, timeoutMs);
+      
+      img.onload = () => {
+        clearTimeout(timeout);
+        // Se carregou com sucesso, o serviço está acessível
+        console.debug('[Connectivity] Verificação de conectividade: serviço acessível');
+        emitBlockingEvent(false); // Restaurar estado se estava bloqueado anteriormente
+      };
+      
+      img.onerror = () => {
+        clearTimeout(timeout);
+        // Se falhou ao carregar, pode indicar um bloqueio de firewall/proxy
+        console.warn('[Connectivity] Falha ao carregar recurso estático Google/Firebase');
+        emitBlockingEvent(true);
+      };
+      
+      // Adicionar timestamp para evitar cache
+      img.src = `${testUrl}?_t=${Date.now()}`;
+    }
+  }, intervalMs); // Verificar com o intervalo configurável
+  
+  // Retorna uma função para limpar o intervalo quando necessário
+  return () => clearInterval(checkInterval);
 };
 
 // Exportar o estado reativo

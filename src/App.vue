@@ -4,6 +4,7 @@ import { computed, onMounted, watch, ref, onUnmounted } from 'vue'
 import Navbar from './components/layout/Navbar.vue'
 import Footer from './components/layout/Footer.vue'
 import AdblockWarning from './components/ui/AdblockWarning.vue'
+import EmulatorNotice from './components/ui/EmulatorNotice.vue'
 import { useAuthStore } from './stores/authStore'
 import { useOrderStore } from './stores/orderStore'
 
@@ -88,5 +89,8 @@ onUnmounted(() => {
 
     <!-- Componente de aviso de bloqueador -->
     <AdblockWarning />
+
+    <!-- Adicionar o componente de aviso de emulador -->
+    <EmulatorNotice />
   </div>
 </template>

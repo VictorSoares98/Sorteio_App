@@ -31,6 +31,7 @@ import {
 import { useNumberStore } from './numberCacheService';
 import { isOnline, isServiceBlocked, updateConnectionState } from '../services/connectivity';
 import { isNetworkError, categorizeNetworkError } from '../types/errors';
+import { safeFetch } from './networkWrappers'; // Importar os wrappers seguros
 
 // Utilitários para reduzir código duplicado
 
@@ -227,7 +228,9 @@ export async function syncPendingOperations(): Promise<boolean> {
       }
     }
 
-    console.log(`[RaffleBatch] Sincronização de operações pendentes concluída. Sucesso total: ${allSuccess}`);
+    if (process.env.NODE_ENV !== 'production') {
+        console.log(`[RaffleBatch] Sincronização de operações pendentes concluída. Sucesso total: ${allSuccess}`);
+    }
     return allSuccess;
   } catch (error) {
     console.error('[RaffleBatch] Erro durante sincronização de operações pendentes:', error);
@@ -691,7 +694,7 @@ export async function reserveNumbers(
           console.log(`[ReserveNumbers] Detectados ${unavailableNumbers.length} números indisponíveis. Buscando substitutos...`);
           
           try {
-            const { updatedNumbers, updatedNumbersByBatch } = await handleUnavailableNumbers(
+            const { updatedNumbers, updatedNumbersByBatch } = await processUnavailableNumbers(
               unavailableNumbers,
               numbers,
               raffleId
@@ -779,6 +782,56 @@ export async function reserveNumbers(
 }
 
 /**
+ * Processa números indisponíveis substituindo-os por novos números disponíveis
+ * @param unavailableNumbers Lista de números indisponíveis
+ * @param currentNumbers Lista completa de números atual
+ * @param raffleId ID opcional do sorteio
+ * @returns Objeto com números atualizados e agrupamento por batch
+ */
+async function processUnavailableNumbers(
+  unavailableNumbers: string[],
+  currentNumbers: string[],
+  raffleId?: string
+): Promise<{ updatedNumbers: string[], updatedNumbersByBatch: Record<string, string[]> }> {
+  // Criar um conjunto dos números indisponíveis para busca eficiente
+  const unavailableSet = new Set(unavailableNumbers);
+  
+  console.log(`[ProcessUnavailable] Processando ${unavailableNumbers.length} números indisponíveis`);
+  
+  // Filtrar a lista atual para remover os números indisponíveis
+  const availableNumbers = currentNumbers.filter(num => !unavailableSet.has(num));
+  
+  // Buscar números substitutos, excluindo os que já estamos usando
+  const replacementNumbers = await findReplacementNumbers(
+    unavailableNumbers.length,
+    currentNumbers,
+    raffleId
+  );
+  
+  if (replacementNumbers.length < unavailableNumbers.length) {
+    throw new Error(
+      `Não foi possível encontrar substitutos suficientes. ` +
+      `Necessários: ${unavailableNumbers.length}, Encontrados: ${replacementNumbers.length}`
+    );
+  }
+  
+  console.log(`[ProcessUnavailable] Encontrados ${replacementNumbers.length} números substitutos`);
+  
+  // Criar nova lista combinando os disponíveis com os substitutos
+  const updatedNumbers = [...availableNumbers, ...replacementNumbers];
+  
+  // Reagrupar por batch para operações eficientes
+  const updatedNumbersByBatch = groupNumbersByBatch(updatedNumbers);
+  
+  console.log(`[ProcessUnavailable] Lista atualizada contém ${updatedNumbers.length} números em ${Object.keys(updatedNumbersByBatch).length} batches`);
+  
+  return {
+    updatedNumbers,
+    updatedNumbersByBatch
+  };
+}
+
+/**
  * Encontra números disponíveis para substituir números indisponíveis
  * @param count Quantidade de números substitutos necessários
  * @param excludeNumbers Números a serem excluídos da busca
@@ -814,46 +867,12 @@ async function findReplacementNumbers(
   }
   
   // Embaralhar e selecionar a quantidade necessária
-  const shuffled = availableNumbers.sort(() => 0.5 - Math.random());
-  return shuffled.slice(0, count);
-}
-
-/**
- * Lida com números indisponíveis, substituindo-os por números disponíveis.
- * @param unavailableNumbers Lista de números indisponíveis.
- * @param currentNumbers Lista atual de números.
- * @param raffleId ID opcional do sorteio.
- * @returns Um objeto contendo os números atualizados e os números agrupados por batch.
- */
-async function handleUnavailableNumbers(
-  unavailableNumbers: string[],
-  currentNumbers: string[],
-  raffleId?: string
-): Promise<{ updatedNumbers: string[]; updatedNumbersByBatch: Record<string, string[]> }> {
-  const replacements = [];
-  const neededCount = unavailableNumbers.length;
-  const allCurrentNumbers = [...currentNumbers];
-
-  const replacementNumbers = await findReplacementNumbers(neededCount, allCurrentNumbers, raffleId);
-
-  if (replacementNumbers.length < neededCount) {
-    throw new Error(`Não foi possível encontrar ${neededCount} números para substituição.`);
+  // Implement Fisher–Yates shuffle for better randomness
+  for (let i = availableNumbers.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [availableNumbers[i], availableNumbers[j]] = [availableNumbers[j], availableNumbers[i]];
   }
-
-  let replacementIndex = 0;
-  const updatedNumbers = currentNumbers.map(number => {
-    if (unavailableNumbers.includes(number)) {
-      const replacement = replacementNumbers[replacementIndex++];
-      replacements.push({ original: number, replacement });
-      return replacement;
-    }
-    return number;
-  });
-
-  const updatedNumbersByBatch = groupNumbersByBatch(updatedNumbers);
-
-  console.log(`[HandleUnavailableNumbers] Substituição realizada com sucesso: ${replacements.length} números substituídos`);
-  return { updatedNumbers, updatedNumbersByBatch };
+  return availableNumbers.slice(0, count);
 }
 
 /**
@@ -1227,5 +1246,19 @@ export async function clearExpiredReservations(raffleId?: string): Promise<numbe
   } catch (error) {
     console.error('Erro ao limpar reservas expiradas:', error);
     return 0;
+  }
+}
+
+/**
+ * Exemplo de função utilizando safeFetch
+ * @param url URL do serviço a ser verificado
+ */
+export async function checkServiceStatus(url: string): Promise<boolean> {
+  try {
+    const response = await safeFetch(url);
+    return response.ok;
+  } catch (error) {
+    console.error('[RaffleBatch] Erro ao verificar status:', error);
+    return false;
   }
 }
