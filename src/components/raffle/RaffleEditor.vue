@@ -122,6 +122,14 @@ const isWeekDayDisabled = (date: Date): boolean => {
   return false;
 };
 
+// Definir as opções de visibilidade
+const visibilityOptions = [
+  { value: 'universal', label: 'Universal - Visível para todos' },
+  { value: 'private', label: 'Privado - Apenas você pode ver' },
+  { value: 'affiliates', label: 'Afiliados - Visível para sua rede' },
+  { value: 'admin', label: 'Administrativo - Visível para administradores' }
+];
+
 // Preparar para salvar alterações
 const prepareToSave = () => {
   // Verificar especificamente se a data está vazia para destacar o campo com erro
@@ -381,7 +389,7 @@ onMounted(() => {
             id="title"
             v-model="editedData.title"
             type="text"
-            class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
+            class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary h-[42px]"
             placeholder="Ex: Sorteio Beneficente UMADRIMC"
           />
         </div>
@@ -401,8 +409,8 @@ onMounted(() => {
             :min-date="minDate"
             :max-date="maxDate"
             :disabled-days="isWeekDayDisabled"
-            :class="{ 'error-date': dateError }"
-            input-class-name="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
+            :class="{ 'error-date': dateError, 'datepicker-custom': true }"
+            input-class-name="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary h-[42px]"
             @update:model-value="handleDateChange"
             placeholder="Selecione uma data"
             auto-apply
@@ -437,7 +445,8 @@ onMounted(() => {
               :only-time="true"
               :format="'HH:mm'"
               :locale-config="datepickerLocale"
-              input-class-name="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
+              class="datepicker-custom"
+              input-class-name="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary h-[42px]"
               @update:model-value="handleTimeChange"
               placeholder="Selecione o horário"
               auto-apply
@@ -469,7 +478,7 @@ onMounted(() => {
               id="price"
               v-model="priceInput"
               type="text"
-              class="w-full h-10 pl-10 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
+              class="w-full px-3 py-2 pl-10 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary h-[42px]"
               @input="handlePriceInput"
               @blur="formatPrice"
               placeholder="0,00"
@@ -494,6 +503,24 @@ onMounted(() => {
             </button>
           </div>
         </div>
+      </div>
+      
+      <!-- Visibilidade do sorteio -->
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">
+          Visibilidade do Sorteio
+        </label>
+        <select
+          v-model="editedData.visibility"
+          class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary h-[42px]"
+        >
+          <option v-for="option in visibilityOptions" :key="option.value" :value="option.value">
+            {{ option.label }}
+          </option>
+        </select>
+        <p class="text-xs text-gray-500 mt-1">
+          Defina quem pode ver este sorteio no sistema
+        </p>
       </div>
       
       <!-- Descrição do prêmio -->
@@ -630,6 +657,23 @@ onMounted(() => {
 </template>
 
 <style scoped>
+/* Estilos específicos para o datepicker para garantir altura correta e alinhamento vertical */
+.datepicker-custom :deep(.dp__input) {
+  height: 42px !important;
+  display: flex !important;
+  align-items: center !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+}
+
+.datepicker-custom :deep(.dp__input_wrap) {
+  margin-bottom: 0 !important;
+}
+
+.datepicker-custom :deep(.dp__pointer) {
+  height: 42px !important;
+}
+
 .error-date :deep(input) {
   border-color: #e3342f !important;
   background-color: #fff5f5 !important;
@@ -640,3 +684,4 @@ onMounted(() => {
   border-radius: 0.375rem;
 }
 </style>
+``` 

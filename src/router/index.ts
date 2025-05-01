@@ -64,6 +64,17 @@ const routes: RouteRecordRaw[] = [
     component: () => import(/* webpackChunkName: "raffle" */ '../views/raffle/RaffleView.vue'),
     meta: { requiresAuth: false, title: 'Sorteio' }
   },
+
+  // Nova rota para sorteio específico por ID
+  {
+    path: '/sorteio/:id',
+    name: 'raffle-details',
+    component: () => import('../views/raffle/RaffleView.vue'),
+    meta: {
+      requiresAuth: false,
+      title: 'Sorteio Específico'
+    }
+  },
   
   // Rotas de Administração
   {

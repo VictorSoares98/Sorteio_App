@@ -1,16 +1,18 @@
-import { doc, getDoc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, serverTimestamp, collection, getDocs, addDoc, deleteDoc, query, orderBy, limit } from 'firebase/firestore';
 import { db } from '../firebase';
 
 // Interface para dados do sorteio
 export interface RaffleData {
+  createdBy: any;
   id: string;
   title: string;
   description: string;
   imageUrl: string;
   raffleDate: string;
-  raffleTime?: string | null; // Novo campo para armazenar horário específico
+  raffleTime?: string | null; // Horário específico do sorteio
   price: number;
   isCompleted: boolean;
+  isActive: boolean; // Novo campo para definir o sorteio ativo
   winningNumber?: string | null;
   winner?: {
     name: string;
@@ -24,6 +26,11 @@ export interface RaffleData {
   } | null;
   updatedAt?: any;
   createdAt?: any;
+  visibility?: 'universal' | 'private' | 'affiliates' | 'admin';
+  isCancelled?: boolean;
+  isPaused?: boolean;
+  cancelReason?: string;
+  pauseReason?: string;
 }
 
 // ID do documento do sorteio no Firestore
@@ -60,18 +67,79 @@ export const imageToBase64 = (file: File): Promise<string> => {
  */
 export const fetchRaffleData = async (): Promise<RaffleData | null> => {
   try {
-    const raffleRef = doc(db, 'raffles', RAFFLE_DOC_ID);
-    const raffleSnap = await getDoc(raffleRef);
+    // Buscar o sorteio marcado como ativo
+    const rafflesRef = collection(db, 'raffles');
+    const q = query(rafflesRef, orderBy('updatedAt', 'desc'), limit(1));
+    const querySnapshot = await getDocs(q);
     
-    if (raffleSnap.exists()) {
-      return raffleSnap.data() as RaffleData;
-    } else {
-      console.log('Nenhum sorteio encontrado');
-      return null;
+    if (!querySnapshot.empty) {
+      const raffleDoc = querySnapshot.docs[0];
+      return { id: raffleDoc.id, ...raffleDoc.data() } as RaffleData;
     }
+    
+    // Retornar o legado se não encontrar na coleção
+    const legacyRaffleRef = doc(db, 'raffles', RAFFLE_DOC_ID);
+    const legacyRaffleSnap = await getDoc(legacyRaffleRef);
+    
+    if (legacyRaffleSnap.exists()) {
+      return legacyRaffleSnap.data() as RaffleData;
+    }
+    
+    console.log('Nenhum sorteio encontrado');
+    return null;
   } catch (error) {
     console.error('Erro ao buscar dados do sorteio:', error);
     throw new Error('Não foi possível carregar os dados do sorteio.');
+  }
+};
+
+/**
+ * Busca um sorteio específico pelo ID
+ * @param raffleId ID do sorteio
+ * @returns Promise com os dados do sorteio ou null se não existir
+ */
+export const fetchRaffleById = async (raffleId: string): Promise<RaffleData | null> => {
+  try {
+    const raffleRef = doc(db, 'raffles', raffleId);
+    const raffleSnap = await getDoc(raffleRef);
+    
+    if (raffleSnap.exists()) {
+      return { id: raffleSnap.id, ...raffleSnap.data() } as RaffleData;
+    }
+    
+    return null;
+  } catch (error) {
+    console.error(`Erro ao buscar sorteio ${raffleId}:`, error);
+    throw new Error('Não foi possível carregar os dados do sorteio.');
+  }
+};
+
+/**
+ * Busca todos os sorteios
+ * @param activeOnly Se true, retorna apenas sorteios ativos
+ * @returns Promise com array de sorteios
+ */
+export const fetchAllRaffles = async (activeOnly: boolean = false): Promise<RaffleData[]> => {
+  try {
+    const rafflesRef = collection(db, 'raffles');
+    const q = query(rafflesRef, orderBy('createdAt', 'desc'));
+    const querySnapshot = await getDocs(q);
+    
+    const raffles: RaffleData[] = [];
+    
+    querySnapshot.forEach(doc => {
+      const data = doc.data();
+      const raffle = { id: doc.id, ...data } as RaffleData;
+      
+      if (!activeOnly || raffle.isActive) {
+        raffles.push(raffle);
+      }
+    });
+    
+    return raffles;
+  } catch (error) {
+    console.error('Erro ao buscar sorteios:', error);
+    throw new Error('Não foi possível carregar a lista de sorteios.');
   }
 };
 
@@ -82,22 +150,18 @@ export const fetchRaffleData = async (): Promise<RaffleData | null> => {
  */
 export const saveRaffleData = async (raffleData: RaffleData): Promise<void> => {
   try {
-    const raffleRef = doc(db, 'raffles', RAFFLE_DOC_ID);
-    
-    // Verificar se o sorteio já existe
-    const raffleSnap = await getDoc(raffleRef);
-    
-    if (raffleSnap.exists()) {
+    if (raffleData.id) {
       // Atualizar sorteio existente
+      const raffleRef = doc(db, 'raffles', raffleData.id);
       await updateDoc(raffleRef, {
         ...raffleData,
         updatedAt: serverTimestamp()
       });
     } else {
       // Criar novo sorteio
-      await setDoc(raffleRef, {
+      await addDoc(collection(db, 'raffles'), {
         ...raffleData,
-        id: RAFFLE_DOC_ID,
+        id: undefined, // Remover o campo ID para que o Firestore gere um automático
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       });
@@ -105,5 +169,214 @@ export const saveRaffleData = async (raffleData: RaffleData): Promise<void> => {
   } catch (error) {
     console.error('Erro ao salvar dados do sorteio:', error);
     throw new Error('Não foi possível salvar os dados do sorteio.');
+  }
+};
+
+/**
+ * Cria um novo sorteio
+ * @param raffleData Dados do sorteio (parcial)
+ * @returns Promise com o ID do novo sorteio
+ */
+export const createNewRaffle = async (raffleData: Partial<RaffleData>): Promise<string> => {
+  try {
+    // Garantir que é marcado como não completo ao criar
+    const newRaffleData = {
+      ...raffleData,
+      isCompleted: false,
+      isActive: false
+    };
+    
+    const docRef = await addDoc(collection(db, 'raffles'), {
+      ...newRaffleData,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
+    });
+    
+    return docRef.id;
+  } catch (error) {
+    console.error('Erro ao criar novo sorteio:', error);
+    throw new Error('Não foi possível criar um novo sorteio.');
+  }
+};
+
+/**
+ * Define um sorteio específico como o ativo
+ * @param raffleId ID do sorteio a ser definido como ativo
+ * @returns Promise<boolean> indicando sucesso ou falha
+ */
+export const setActiveRaffle = async (raffleId: string): Promise<boolean> => {
+  try {
+    // Primeiro, desativar todos os sorteios
+    const rafflesRef = collection(db, 'raffles');
+    const querySnapshot = await getDocs(rafflesRef);
+    
+    const batch = Promise.all(querySnapshot.docs.map(doc => {
+      return updateDoc(doc.ref, { 
+        isActive: doc.id === raffleId,
+        updatedAt: serverTimestamp()
+      });
+    }));
+    
+    await batch;
+    return true;
+  } catch (error) {
+    console.error('Erro ao definir sorteio ativo:', error);
+    throw new Error('Não foi possível ativar o sorteio selecionado.');
+  }
+};
+
+/**
+ * Exclui um sorteio
+ * @param raffleId ID do sorteio a ser excluído
+ * @returns Promise<boolean> indicando sucesso ou falha
+ */
+export const deleteRaffle = async (raffleId: string): Promise<boolean> => {
+  try {
+    // Verificar se o sorteio está ativo
+    const raffleData = await fetchRaffleById(raffleId);
+    
+    if (!raffleData) {
+      throw new Error('Sorteio não encontrado.');
+    }
+    
+    if (raffleData?.isActive) {
+      throw new Error('Não é possível excluir um sorteio ativo. Defina outro como ativo primeiro.');
+    }
+    
+    // Excluir o sorteio com tratamento de erro melhorado
+    try {
+      await deleteDoc(doc(db, 'raffles', raffleId));
+      return true;
+    } catch (error) {
+      // Tratamento específico para erros do BloomFilter
+      if (error instanceof Error && 
+          (error.message.includes('BloomFilter') || 
+           error.toString().includes('BloomFilterError'))) {
+        console.warn('Erro de BloomFilter detectado durante exclusão:', error);
+        throw new Error('Erro de conexão ao excluir o sorteio. Tente novamente em alguns instantes.');
+      }
+      throw error;
+    }
+  } catch (error) {
+    console.error('Erro ao excluir sorteio:', error);
+    throw error instanceof Error 
+      ? error 
+      : new Error('Não foi possível excluir o sorteio.');
+  }
+};
+
+/**
+ * Cancela um sorteio
+ * @param raffleId ID do sorteio a ser cancelado
+ * @param reason Motivo do cancelamento
+ * @returns Promise<boolean> indicando sucesso ou falha
+ */
+export const cancelRaffle = async (raffleId: string, reason: string): Promise<boolean> => {
+  try {
+    // Verificar se o sorteio existe
+    const raffleData = await fetchRaffleById(raffleId);
+    
+    if (!raffleData) {
+      throw new Error('Sorteio não encontrado.');
+    }
+    
+    // Não permitir cancelar um sorteio já concluído
+    if (raffleData.isCompleted) {
+      throw new Error('Não é possível cancelar um sorteio já concluído.');
+    }
+    
+    // Atualizar o sorteio
+    const raffleRef = doc(db, 'raffles', raffleId);
+    await updateDoc(raffleRef, {
+      isCancelled: true,
+      isActive: false, // Desativa automaticamente
+      isPaused: false, // Garante que não está pausado
+      cancelReason: reason,
+      updatedAt: serverTimestamp()
+    });
+    
+    return true;
+  } catch (error) {
+    console.error('Erro ao cancelar sorteio:', error);
+    throw new Error('Não foi possível cancelar o sorteio: ' + (error as Error).message);
+  }
+};
+
+/**
+ * Pausa um sorteio ativo
+ * @param raffleId ID do sorteio a ser pausado
+ * @param reason Motivo da pausa
+ * @returns Promise<boolean> indicando sucesso ou falha
+ */
+export const pauseRaffle = async (raffleId: string, reason: string): Promise<boolean> => {
+  try {
+    // Verificar se o sorteio existe
+    const raffleData = await fetchRaffleById(raffleId);
+    
+    if (!raffleData) {
+      throw new Error('Sorteio não encontrado.');
+    }
+    
+    // Não permitir pausar um sorteio já concluído ou já pausado
+    if (raffleData.isCompleted) {
+      throw new Error('Não é possível pausar um sorteio já concluído.');
+    }
+    
+    if (raffleData.isPaused) {
+      throw new Error('Este sorteio já está pausado.');
+    }
+    
+    // Atualizar o sorteio
+    const raffleRef = doc(db, 'raffles', raffleId);
+    await updateDoc(raffleRef, {
+      isPaused: true,
+      isActive: false, // Desativa o sorteio ao pausar
+      pauseReason: reason,
+      updatedAt: serverTimestamp()
+    });
+    
+    return true;
+  } catch (error) {
+    console.error('Erro ao pausar sorteio:', error);
+    throw new Error('Não foi possível pausar o sorteio: ' + (error as Error).message);
+  }
+};
+
+/**
+ * Retoma um sorteio pausado
+ * @param raffleId ID do sorteio a ser retomado
+ * @returns Promise<boolean> indicando sucesso ou falha
+ */
+export const resumeRaffle = async (raffleId: string): Promise<boolean> => {
+  try {
+    // Verificar se o sorteio existe
+    const raffleData = await fetchRaffleById(raffleId);
+    
+    if (!raffleData) {
+      throw new Error('Sorteio não encontrado.');
+    }
+    
+    // Não permitir retomar um sorteio que não está pausado ou já concluído
+    if (!raffleData.isPaused) {
+      throw new Error('Este sorteio não está pausado.');
+    }
+    
+    if (raffleData.isCompleted) {
+      throw new Error('Não é possível retomar um sorteio já concluído.');
+    }
+    
+    // Atualizar o sorteio
+    const raffleRef = doc(db, 'raffles', raffleId);
+    await updateDoc(raffleRef, {
+      isPaused: false,
+      isActive: true, // Ativa o sorteio ao retomar
+      pauseReason: null,
+      updatedAt: serverTimestamp()
+    });
+    
+    return true;
+  } catch (error) {
+    console.error('Erro ao retomar sorteio:', error);
+    throw new Error('Não foi possível retomar o sorteio: ' + (error as Error).message);
   }
 };

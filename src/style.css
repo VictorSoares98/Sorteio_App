@@ -232,6 +232,20 @@ body {
     @apply w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary resize-y;
     min-height: 100px;
   }
+
+  /* Classe para inputs padronizados em altura */
+  .form-input-h42 {
+    @apply w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary h-[42px];
+  }
+  
+  /* Classe específica para datepickers com altura padronizada */
+  .datepicker-standardized :deep(.dp__input) {
+    height: 42px !important;
+    display: flex !important;
+    align-items: center !important;
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+  }
 }
 
 /* Botões com as novas cores */

@@ -9,18 +9,21 @@ export const createDefaultRaffle = (): RaffleData => {
   const today = new Date();
   const formattedDate = today.toISOString().split('T')[0];
   
+  // Criar novo sorteio com valores padrão atualizados
   return {
-    id: 'current_raffle',
-    title: 'Sorteio Beneficente UMADRIMC',
-    description: 'Participe do sorteio beneficente da UMADRIMC. O valor arrecadado será utilizado para investimentos na obra.',
+    id: '', // ID vazio para novos sorteios
+    title: 'Criar Sorteio',
+    description: '',
     imageUrl: '',
     raffleDate: formattedDate,
-    raffleTime: null, // Novo campo para horário específico
+    raffleTime: null, // Campo para horário específico
     price: 1,
     isCompleted: false,
+    isActive: false, // Por padrão não é ativo
     winningNumber: null,
     winner: null,
-    seller: null
-    // Mantendo todos os campos originais
+    seller: null,
+    createdBy: '', // Adicionar propriedade obrigatória
+    visibility: 'private' // Visibilidade padrão
   };
 };
