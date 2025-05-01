@@ -3,6 +3,7 @@ import { ref, onMounted } from 'vue';
 import { useAuthStore } from '../../stores/authStore';
 import { useRouter } from 'vue-router';
 import UsersList from '../../components/admin/UsersList.vue';
+import SalesReportDashboard from '../../components/reports/SalesReportDashboard.vue';
 
 const authStore = useAuthStore();
 const router = useRouter();
@@ -56,6 +57,22 @@ const showSection = (section: string) => {
         <UsersList />
       </div>
       
+      <!-- Adicionar visualização de relatório de vendas -->
+      <div v-else-if="activeSection === 'reports'">
+        <div class="mb-4">
+          <button 
+            @click="showSection('menu')" 
+            class="flex items-center text-primary hover:text-primary-dark"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">
+              <path fill-rule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clip-rule="evenodd" />
+            </svg>
+            Voltar ao Menu
+          </button>
+        </div>
+        <SalesReportDashboard />
+      </div>
+      
       <!-- Menu principal do painel administrativo -->
       <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-6">
         <!-- Gerenciamento de Usuários -->
@@ -77,6 +94,7 @@ const showSection = (section: string) => {
           <p class="text-gray-600 mb-4">Visualize estatísticas de vendas e números sorteados.</p>
           
           <button 
+            @click="showSection('reports')"
             class="bg-primary hover:bg-primary-dark text-white py-2 px-4 rounded transition-colors"
           >
             Ver Relatórios

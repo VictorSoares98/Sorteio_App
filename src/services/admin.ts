@@ -1,24 +1,55 @@
-import { collection, getDocs, doc, getDoc, updateDoc, writeBatch } from 'firebase/firestore';
+import { collection, getDocs, doc, getDoc, updateDoc, writeBatch, query, where, orderBy } from 'firebase/firestore';
 import { db } from '../firebase';
 import { UserRole } from '../types/user';
 import type { SalesData } from '../types/user';
 import type { Order } from '../types/order';
 import { updateOrderPayment } from './orders';
 import { syncAvailableNumbersWithSoldOnes } from './raffleNumbers';
+import { saveToCache, getFromCache } from './reportCache';
+
+/**
+ * Interface para relatórios comparativos entre períodos
+ */
+export interface ComparativeSalesReport {
+  current: {
+    totalSales: number;
+    salesByDay: Record<string, number>;
+    uniqueBuyers: number;
+    uniqueSellers: number;
+    totalOrders: number;
+  };
+  previous: {
+    totalSales: number;
+    salesByDay: Record<string, number>;
+    uniqueBuyers: number;
+    uniqueSellers: number;
+    totalOrders: number;
+  };
+  growth: {
+    salesGrowth: number;
+    buyersGrowth: number;
+    sellersGrowth: number;
+    ordersGrowth: number;
+  };
+  topSellers: Array<{
+    id: string;
+    name: string;
+    count: number;
+    growth: number;
+  }>;
+  paymentMethodDistribution: Record<string, number>;
+}
 
 export const fetchSalesReport = async () => {
   try {
-    // Buscar pedidos
     const ordersRef = collection(db, 'orders');
     const ordersSnapshot = await getDocs(ordersRef);
     
-    // Dados agregados
     const allOrders: Order[] = [];
     const soldNumbers: string[] = [];
     const sellerMap: Map<string, number> = new Map();
     const buyers: Set<string> = new Set();
     
-    // Processar cada pedido
     ordersSnapshot.forEach(doc => {
       const data = doc.data();
       const order = {
@@ -28,20 +59,16 @@ export const fetchSalesReport = async () => {
       
       allOrders.push(order);
       
-      // Adicionar números vendidos
       if (Array.isArray(order.generatedNumbers)) {
         soldNumbers.push(...order.generatedNumbers);
       }
       
-      // Extrair o ID do vendedor para contagem, preferindo originalSellerId se disponível
       const sellerId = order.originalSellerId || order.sellerId;
       sellerMap.set(sellerId, (sellerMap.get(sellerId) || 0) + 1);
       
-      // Adicionar comprador à lista
       buyers.add(order.buyerName);
     });
     
-    // Preparar dados de relatório
     return {
       totalOrders: allOrders.length,
       totalSoldNumbers: soldNumbers.length,
@@ -69,10 +96,8 @@ export const fetchUserSalesData = async (): Promise<Map<string, SalesData>> => {
     
     const userSalesMap = new Map<string, SalesData>();
     
-    // Processar cada pedido
     ordersSnapshot.forEach(doc => {
       const data = doc.data() as Order;
-      // Usar originalSellerId se disponível, caso contrário usa sellerId
       const sellerId = data.originalSellerId || data.sellerId;
       
       if (!userSalesMap.has(sellerId)) {
@@ -112,7 +137,6 @@ export const updateOrderPaymentStatus = async (orderId: string, isPaid: boolean)
 
 export const updateUserRole = async (userId: string, newRole: UserRole): Promise<boolean> => {
   try {
-    // Verificar se o usuário tem afiliados antes de permitir papel administrativo
     const userRef = doc(db, 'users', userId);
     const userDoc = await getDoc(userRef);
     
@@ -124,7 +148,6 @@ export const updateUserRole = async (userId: string, newRole: UserRole): Promise
     const userData = userDoc.data();
     const hasAffiliates = userData.affiliates && userData.affiliates.length > 0;
     
-    // Se estiver tentando atribuir papel administrativo a usuário sem afiliados
     if (!hasAffiliates && 
         (newRole === UserRole.ADMIN || 
          newRole === UserRole.SECRETARIA || 
@@ -149,7 +172,6 @@ export const resetAllSales = async (): Promise<boolean> => {
   try {
     console.log('Iniciando processo de reset de vendas');
     
-    // 1. Obter referência à coleção de pedidos
     const ordersRef = collection(db, 'orders');
     const ordersSnapshot = await getDocs(ordersRef);
     
@@ -158,8 +180,7 @@ export const resetAllSales = async (): Promise<boolean> => {
       return true;
     }
     
-    // 2. Excluir todos os documentos em lotes
-    const batchSize = 450; // Firestore tem limite de 500 operações por lote
+    const batchSize = 450;
     let batch = writeBatch(db);
     let count = 0;
     let totalDeleted = 0;
@@ -171,19 +192,16 @@ export const resetAllSales = async (): Promise<boolean> => {
       count++;
       totalDeleted++;
       
-      // Se atingir o tamanho do lote, comitar e criar novo lote
       if (count >= batchSize) {
         await batch.commit();
         console.log(`Lote de ${count} documentos excluídos`);
         batch = writeBatch(db);
         count = 0;
         
-        // Pequena pausa para evitar sobrecarregar o Firestore
         await new Promise(resolve => setTimeout(resolve, 500));
       }
     }
     
-    // Comitar o último lote se tiver operações pendentes
     if (count > 0) {
       await batch.commit();
       console.log(`Último lote com ${count} documentos excluídos`);
@@ -191,7 +209,6 @@ export const resetAllSales = async (): Promise<boolean> => {
     
     console.log(`Reset completado: ${totalDeleted} vendas excluídas`);
     
-    // 3. Atualizar a coleção de números disponíveis para refletir que todos estão disponíveis novamente
     await syncAvailableNumbersWithSoldOnes();
     
     return true;
@@ -199,5 +216,223 @@ export const resetAllSales = async (): Promise<boolean> => {
     console.error('Erro ao resetar vendas:', error);
     throw new Error('Não foi possível resetar as vendas. Tente novamente mais tarde.');
   }
-}
+};
+
+/**
+ * Recupera dados de relatórios com suporte a cache
+ * @param dateRange Intervalo de datas para o relatório
+ * @param forceRefresh Força atualização mesmo se existir cache
+ * @returns Dados do relatório
+ */
+export const fetchSalesReportWithDateRange = async (
+  dateRange: { startDate: Date; endDate: Date; cacheKey: string },
+  forceRefresh = false
+): Promise<ComparativeSalesReport> => {
+  const { cacheKey } = dateRange;
+  
+  if (!forceRefresh) {
+    const cachedData = getFromCache<ComparativeSalesReport>(cacheKey);
+    if (cachedData) {
+      console.log('[Admin] Usando dados em cache para relatório:', cacheKey);
+      return cachedData;
+    }
+  }
+  
+  console.log('[Admin] Buscando dados de relatório do Firestore para:', cacheKey);
+  
+  const { startDate, endDate } = dateRange;
+  const duration = endDate.getTime() - startDate.getTime();
+  const previousStartDate = new Date(startDate.getTime() - duration);
+  const previousEndDate = new Date(endDate.getTime() - duration);
+  
+  try {
+    const currentPeriodData = await fetchRawOrdersForPeriod(startDate, endDate);
+    const previousPeriodData = await fetchRawOrdersForPeriod(previousStartDate, previousEndDate);
+    const report = processOrderDataForComparison(currentPeriodData, previousPeriodData);
+    saveToCache(cacheKey, report);
+    return report;
+  } catch (error) {
+    console.error('[Admin] Erro ao buscar relatório de vendas:', error);
+    throw new Error('Não foi possível obter os dados de relatório. Tente novamente mais tarde.');
+  }
+};
+
+/**
+ * Busca pedidos brutos para um período específico
+ */
+const fetchRawOrdersForPeriod = async (startDate: Date, endDate: Date): Promise<any[]> => {
+  const adjustedEndDate = new Date(endDate);
+  adjustedEndDate.setHours(23, 59, 59, 999);
+  
+  const ordersRef = collection(db, 'orders');
+  const q = query(
+    ordersRef,
+    where('createdAt', '>=', startDate),
+    where('createdAt', '<=', adjustedEndDate),
+    orderBy('createdAt', 'desc')
+  );
+  
+  try {
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  } catch (error) {
+    console.error('[Admin] Erro ao buscar pedidos para período:', error);
+    throw error;
+  }
+};
+
+/**
+ * Processa dados brutos de pedidos para gerar relatório comparativo
+ */
+const processOrderDataForComparison = (
+  currentPeriodOrders: any[],
+  previousPeriodOrders: any[]
+): ComparativeSalesReport => {
+  const current = processOrdersForPeriod(currentPeriodOrders);
+  const previous = processOrdersForPeriod(previousPeriodOrders);
+  
+  const salesGrowth = calculateGrowthRate(current.totalSales, previous.totalSales);
+  const buyersGrowth = calculateGrowthRate(current.uniqueBuyers, previous.uniqueBuyers);
+  const sellersGrowth = calculateGrowthRate(current.uniqueSellers, previous.uniqueSellers);
+  const ordersGrowth = calculateGrowthRate(current.totalOrders, previous.totalOrders);
+  
+  const topSellers = processTopSellers(currentPeriodOrders, previousPeriodOrders);
+  const paymentMethodDistribution = processPaymentMethods(currentPeriodOrders);
+  
+  return {
+    current,
+    previous,
+    growth: {
+      salesGrowth,
+      buyersGrowth,
+      sellersGrowth,
+      ordersGrowth
+    },
+    topSellers,
+    paymentMethodDistribution
+  };
+};
+
+/**
+ * Processa pedidos para um período específico
+ */
+const processOrdersForPeriod = (orders: any[]) => {
+  let totalSales = 0;
+  const uniqueBuyerIds = new Set<string>();
+  const uniqueSellerIds = new Set<string>();
+  const salesByDay: Record<string, number> = {};
+  
+  orders.forEach(order => {
+    const numbersSold = order.generatedNumbers?.length || 0;
+    totalSales += numbersSold;
+    
+    if (order.buyerId) uniqueBuyerIds.add(order.buyerId);
+    if (order.sellerId) uniqueSellerIds.add(order.sellerId);
+    
+    const date = order.createdAt instanceof Date ? 
+      order.createdAt : 
+      (order.createdAt?.toDate ? order.createdAt.toDate() : new Date(order.createdAt));
+    
+    const dayKey = `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
+    
+    if (!salesByDay[dayKey]) {
+      salesByDay[dayKey] = 0;
+    }
+    salesByDay[dayKey] += numbersSold;
+  });
+  
+  return {
+    totalSales,
+    uniqueBuyers: uniqueBuyerIds.size,
+    uniqueSellers: uniqueSellerIds.size,
+    totalOrders: orders.length,
+    salesByDay
+  };
+};
+
+/**
+ * Calcula taxa de crescimento entre dois valores
+ */
+const calculateGrowthRate = (current: number, previous: number): number => {
+  if (previous === 0) return current > 0 ? 100 : 0;
+  return Number((((current - previous) / previous) * 100).toFixed(1));
+};
+
+/**
+ * Processa top vendedores com métricas de crescimento
+ */
+const processTopSellers = (currentOrders: any[], previousOrders: any[]) => {
+  const currentSellerSales: Record<string, { count: number; name: string }> = {};
+  
+  currentOrders.forEach(order => {
+    if (!order.sellerId) return;
+    
+    const sellerId = order.sellerId;
+    const sellerName = order.sellerName || 'Desconhecido';
+    const numbersSold = order.generatedNumbers?.length || 0;
+    
+    if (!currentSellerSales[sellerId]) {
+      currentSellerSales[sellerId] = { count: 0, name: sellerName };
+    }
+    
+    currentSellerSales[sellerId].count += numbersSold;
+  });
+  
+  const previousSellerSales: Record<string, number> = {};
+  
+  previousOrders.forEach(order => {
+    if (!order.sellerId) return;
+    
+    const sellerId = order.sellerId;
+    const numbersSold = order.generatedNumbers?.length || 0;
+    
+    if (!previousSellerSales[sellerId]) {
+      previousSellerSales[sellerId] = 0;
+    }
+    
+    previousSellerSales[sellerId] += numbersSold;
+  });
+  
+  const sellersWithGrowth = Object.keys(currentSellerSales).map(id => {
+    const current = currentSellerSales[id].count;
+    const previous = previousSellerSales[id] || 0;
+    const growth = calculateGrowthRate(current, previous);
+    
+    return {
+      id,
+      name: currentSellerSales[id].name,
+      count: current,
+      growth
+    };
+  });
+  
+  return sellersWithGrowth
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 10);
+};
+
+/**
+ * Processa distribuição de métodos de pagamento
+ */
+const processPaymentMethods = (orders: any[]): Record<string, number> => {
+  const methods: Record<string, number> = {
+    pix: 0,
+    cash: 0,
+    other: 0
+  };
+  
+  orders.forEach(order => {
+    const method = order.paymentMethod || 'other';
+    
+    if (method === 'pix') {
+      methods.pix += 1;
+    } else if (method === 'cash' || method === 'dinheiro') {
+      methods.cash += 1;
+    } else {
+      methods.other += 1;
+    }
+  });
+  
+  return methods;
+};
 
