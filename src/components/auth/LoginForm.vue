@@ -38,10 +38,15 @@ const loginWithGoogle = async () => {
   try {
     const success = await authStore.loginWithGoogle(redirectPath.value);
     
-    // Se o login não teve sucesso devido ao popup fechado, pegue a mensagem do store
+    // Se retornou false e é um caso de redirecionamento, não fazemos nada
     if (success === false) {
-      errorMessage.value = authStore.error || 'Login cancelado. Tente novamente quando estiver pronto.';
+      // Verifica se há mensagem de erro (caso seja popup fechado ou outro erro)
+      if (authStore.error) {
+        errorMessage.value = authStore.error || 'Login cancelado. Tente novamente quando estiver pronto.';
+      }
+      return;
     }
+    
     // Se foi bem-sucedido, não precisa fazer nada - o authStore já redireciona
   } catch (error: any) {
     // Outros erros não tratados

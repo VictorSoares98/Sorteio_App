@@ -10,6 +10,7 @@ import {
   updateProfile,
   GoogleAuthProvider,
   signInWithPopup,
+  signInWithRedirect,
   sendPasswordResetEmail,
   updatePassword,
   reauthenticateWithCredential,
@@ -19,6 +20,7 @@ import { doc, getDoc, setDoc, serverTimestamp, onSnapshot, updateDoc } from 'fir
 import { auth, db } from '../firebase';
 import { type User, UserRole } from '../types/user';
 import { convertTimestampsInObject, processFirestoreDocument } from '../utils/firebaseUtils';
+import { isMobileDevice, isEmbeddedBrowser, isPrivateBrowsing } from '../utils/deviceUtils';
 
 export const useAuthStore = defineStore('auth', () => {
   const currentUser = ref<User | null>(null);
@@ -77,8 +79,36 @@ export const useAuthStore = defineStore('auth', () => {
       provider.addScope('email');
       provider.addScope('profile');
       
-      const result = await signInWithPopup(auth, provider);
-      const googleUser = result.user;
+      // Use redirect fallback for mobile devices, embedded browsers, or private browsing
+      // as these environments may not support popups reliably.
+      const useRedirect = isMobileDevice() || isEmbeddedBrowser() || isPrivateBrowsing();
+      
+      let googleUser;
+      
+      if (useRedirect) {
+        await signInWithRedirect(auth, provider);
+        return false;
+      } else {
+        try {
+          const result = await signInWithPopup(auth, provider);
+          googleUser = result.user;
+        } catch (popupError: any) {
+          console.warn('[AuthStore] Erro com popup, tentando redirecionamento:', popupError.code);
+          
+          if (
+            popupError.code === 'auth/popup-blocked' || 
+            popupError.code === 'auth/popup-closed-by-user' ||
+            popupError.message?.includes('Cross-Origin-Opener-Policy')
+          ) {
+            // When useRedirect is true, signInWithRedirect is called to initiate a redirection flow.
+            // Affiliate processing is bypassed in this case as the flow is interrupted.
+            await signInWithRedirect(auth, provider);
+            return false;
+          }
+          
+          throw popupError;
+        }
+      }
       
       const userRef = doc(db, 'users', googleUser.uid);
       const userDoc = await getDoc(userRef);
@@ -97,24 +127,7 @@ export const useAuthStore = defineStore('auth', () => {
           authProvider: 'google'
         });
         
-        if (pendingAffiliateCode) {
-          console.log('[AuthStore] Processando afiliação para novo usuário Google com código:', pendingAffiliateCode);
-          try {
-            const profileModule = await import('../services/profile');
-            const affiliationResult = await profileModule.affiliateToUser(googleUser.uid, pendingAffiliateCode, false);
-            
-            // Adicionar verificação de sucesso e definir flag newAffiliation
-            if (affiliationResult.success) {
-              console.log('[AuthStore] Afiliação Google processada com sucesso:', affiliationResult);
-              // Definir flag para exibir notificação
-              sessionStorage.setItem('newAffiliation', 'true');
-            }
-            
-            localStorage.removeItem('pendingAffiliateCode');
-          } catch (affiliateError) {
-            console.error('[AuthStore] Erro ao processar afiliação:', affiliateError);
-          }
-        }
+        await processAffiliateCode(googleUser.uid, pendingAffiliateCode);
       }
       
       await fetchUserData();
@@ -158,9 +171,6 @@ export const useAuthStore = defineStore('auth', () => {
     }
   };
 
-  /**
-   * Registra um novo usuário
-   */
   const register = async (email: string, password: string, userData: { 
     displayName: string;
     username?: string;
@@ -170,16 +180,13 @@ export const useAuthStore = defineStore('auth', () => {
     error.value = null;
     
     try {
-      // Criar usuário com Firebase Auth
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
       
-      // Atualizar displayName do usuário
       await updateProfile(user, {
         displayName: userData.displayName
       });
       
-      // Criar documento do usuário no Firestore
       const userDoc = {
         uid: user.uid,
         email: user.email,
@@ -201,30 +208,9 @@ export const useAuthStore = defineStore('auth', () => {
       
       await setDoc(doc(db, 'users', user.uid), userDoc);
       
-      // Verificar se há um código de afiliado pendente no localStorage
       const pendingAffiliateCode = localStorage.getItem('pendingAffiliateCode');
-      if (pendingAffiliateCode) {
-        console.log('[AuthStore] Processando código de afiliado pendente:', pendingAffiliateCode);
-        try {
-          // Importar função de afiliação sob demanda para não sobrecarregar o bundle inicial
-          const profileModule = await import('../services/profile');
-          const affiliationResult = await profileModule.affiliateToUser(user.uid, pendingAffiliateCode, false);
-          
-          if (affiliationResult.success) {
-            console.log('[AuthStore] Afiliação processada com sucesso:', affiliationResult);
-            // Definir flag de nova afiliação para exibir notificação
-            sessionStorage.setItem('newAffiliation', 'true');
-            // Remover código de afiliado do localStorage após uso bem-sucedido
-            localStorage.removeItem('pendingAffiliateCode');
-          } else {
-            console.error('[AuthStore] Erro na afiliação:', affiliationResult.message);
-          }
-        } catch (affiliateError) {
-          console.error('[AuthStore] Exceção ao processar afiliação:', affiliateError);
-        }
-      }
+      await processAffiliateCode(user.uid, pendingAffiliateCode);
       
-      // Buscar dados completos do usuário após criação
       await fetchUserData(true);
       
       return true;
@@ -243,9 +229,6 @@ export const useAuthStore = defineStore('auth', () => {
     }
   };
 
-  /**
-   * Busca os dados do usuário atual no Firestore
-   */
   const fetchUserData = async (forceRefresh = false): Promise<User | null> => {
     if (!firebaseUser.value) {
       console.log('[AuthStore] Não há usuário logado para buscar dados');
@@ -255,16 +238,13 @@ export const useAuthStore = defineStore('auth', () => {
     try {
       console.log('[AuthStore] Buscando dados do usuário', firebaseUser.value.uid);
       
-      // Adicionar uma verificação para prevenir buscas desnecessárias
       if (!forceRefresh && currentUser.value) {
         console.log('[AuthStore] Usando dados em cache');
         return currentUser.value;
       }
       
-      // Buscar dados diretamente do Firestore para garantir dados atualizados
       if (forceRefresh) {
         console.log('[AuthStore] Forçando atualização dos dados');
-        // Limpar cache se existir
         userDataCache.delete(firebaseUser.value.uid);
       }
       
@@ -276,11 +256,9 @@ export const useAuthStore = defineStore('auth', () => {
         return null;
       }
       
-      // Processar e armazenar dados
       const userData = processFirestoreDocument<User>(docSnap);
       currentUser.value = userData;
       
-      // Atualizar cache com timestamp para controle de dados antigos
       userDataCache.set(firebaseUser.value.uid, {
         data: userData,
         timestamp: Date.now()
@@ -288,18 +266,14 @@ export const useAuthStore = defineStore('auth', () => {
       
       console.log('[AuthStore] Dados do usuário carregados com sucesso, papel:', userData.role);
       
-      // Verificar se o usuário tem afiliados mas não tem papel administrativo
-      // Isso serve como uma verificação adicional de segurança
       if (userData.affiliates && 
           userData.affiliates.length > 0 && 
           userData.role === UserRole.USER) {
         console.warn('[AuthStore] Usuário com afiliados mas sem papel administrativo. Tentando corrigir...');
         try {
-          // Corrigir o papel diretamente
           await updateDoc(docRef, {
             role: UserRole.ADMIN
           });
-          // Recarregar os dados após a correção
           return await fetchUserData(true);
         } catch (fixError) {
           console.error('[AuthStore] Falha ao corrigir papel do usuário:', fixError);
@@ -313,11 +287,9 @@ export const useAuthStore = defineStore('auth', () => {
     }
   };
 
-  // Modificar o setupUserDataListener para evitar múltiplos listeners
   const setupUserDataListener = () => {
     if (!firebaseUser.value) return null;
     
-    // Limpar listener anterior se existir
     if (userDataUnsubscribe) {
       console.log('[AuthStore] Removendo listener anterior');
       userDataUnsubscribe();
@@ -340,7 +312,6 @@ export const useAuthStore = defineStore('auth', () => {
     return userDataUnsubscribe;
   };
 
-  // Modificar o watchEffect para ser mais cuidadoso
   let isSettingUpListener = false;
   watchEffect(() => {
     if (firebaseUser.value && isAuthenticated.value && !isSettingUpListener) {
@@ -377,9 +348,6 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  /**
-   * Envia um email de recuperação de senha
-   */
   const sendPasswordResetEmailAction = async (email: string): Promise<boolean> => {
     try {
       await sendPasswordResetEmail(auth, email);
@@ -402,9 +370,6 @@ export const useAuthStore = defineStore('auth', () => {
     }
   };
 
-  /**
-   * Reautentica o usuário atual (necessário para operações sensíveis)
-   */
   const reauthenticateUser = async (password: string): Promise<boolean> => {
     try {
       const user = auth.currentUser;
@@ -433,9 +398,6 @@ export const useAuthStore = defineStore('auth', () => {
     }
   };
 
-  /**
-   * Atualiza a senha do usuário atual
-   */
   const updatePasswordAction = async (newPassword: string): Promise<boolean> => {
     try {
       const user = auth.currentUser;
@@ -460,6 +422,26 @@ export const useAuthStore = defineStore('auth', () => {
       throw new Error(errorMessage);
     }
   };
+
+  async function processAffiliateCode(userId: string, affiliateCode: string | null): Promise<void> {
+    if (!affiliateCode) return;
+
+    console.log('[AuthStore] Processando código de afiliado:', affiliateCode);
+    try {
+      const profileModule = await import('../services/profile');
+      const affiliationResult = await profileModule.affiliateToUser(userId, affiliateCode, false);
+
+      if (affiliationResult.success) {
+        console.log('[AuthStore] Afiliação processada com sucesso:', affiliationResult);
+        sessionStorage.setItem('newAffiliation', 'true');
+        localStorage.removeItem('pendingAffiliateCode');
+      } else {
+        console.error('[AuthStore] Erro na afiliação:', affiliationResult.message);
+      }
+    } catch (affiliateError) {
+      console.error('[AuthStore] Exceção ao processar afiliação:', affiliateError);
+    }
+  }
 
   return {
     currentUser,

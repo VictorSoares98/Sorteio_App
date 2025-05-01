@@ -7,6 +7,8 @@ import AdblockWarning from './components/ui/AdblockWarning.vue'
 import EmulatorNotice from './components/ui/EmulatorNotice.vue'
 import { useAuthStore } from './stores/authStore'
 import { useOrderStore } from './stores/orderStore'
+import { getRedirectResult } from 'firebase/auth';
+import { auth } from './firebase';
 
 const route = useRoute()
 const authStore = useAuthStore()
@@ -54,6 +56,20 @@ onMounted(() => {
     }
   }
 })
+
+// Verificar se há resultado de um redirecionamento de autenticação
+onMounted(async () => {
+  try {
+    const result = await getRedirectResult(auth);
+    if (result && !authStore.isAuthenticated) {
+      console.log('[App] Redirecionamento de autenticação detectado');
+      // Se temos um resultado de redirecionamento e o usuário ainda não está autenticado, recarregar os dados do usuário
+      await authStore.fetchUserData(true);
+    }
+  } catch (error) {
+    console.error('[App] Erro ao processar resultado de redirecionamento:', error);
+  }
+});
 
 // Limpar recursos e event listeners quando o componente é desmontado
 onUnmounted(() => {
