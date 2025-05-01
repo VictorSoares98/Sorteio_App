@@ -379,6 +379,41 @@ export const useUserStore = defineStore('users', () => {
     }
   }
   
+  // Adicionar um novo usuário à lista (para atualização em tempo real)
+  const addUser = (userData: any) => {
+    // Verificar se o usuário já existe na lista
+    const existingUserIndex = users.value.findIndex(user => user.id === userData.id);
+    if (existingUserIndex === -1) {
+      // Converter timestamp para Date se necessário
+      if (userData.createdAt && userData.createdAt instanceof Timestamp) {
+        userData.createdAt = userData.createdAt.toDate();
+      }
+      // Adicionar o novo usuário à lista
+      users.value.push(userData as User);
+    }
+  };
+  
+  // Atualizar um usuário existente na lista (para atualização em tempo real)
+  const updateUser = (userData: any) => {
+    const index = users.value.findIndex(user => user.id === userData.id);
+    if (index !== -1) {
+      // Converter timestamp para Date se necessário
+      if (userData.createdAt && userData.createdAt instanceof Timestamp) {
+        userData.createdAt = userData.createdAt.toDate();
+      }
+      // Mesclar os dados atualizados
+      users.value[index] = { ...users.value[index], ...userData };
+    }
+  };
+  
+  // Remover um usuário da lista por ID (para atualização em tempo real)
+  const removeUser = (userId: string) => {
+    const index = users.value.findIndex(user => user.id === userId);
+    if (index !== -1) {
+      users.value.splice(index, 1);
+    }
+  };
+  
   return {
     users,
     filteredUsers,
@@ -396,6 +431,9 @@ export const useUserStore = defineStore('users', () => {
     fetchUserNotes,
     toggleUserBlock,
     exportUsersToCSV,
-    exportUsersToExcel
+    exportUsersToExcel,
+    addUser,       // Nova função adicionada
+    updateUser,    // Nova função adicionada
+    removeUser     // Nova função adicionada
   };
 });

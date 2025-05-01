@@ -116,6 +116,34 @@
     background-color: var(--color-primary);
     color: white !important;
   }
+
+  /* Classes para textareas */
+  .min-h-textarea {
+    min-height: 100px;
+  }
+  
+  .min-h-textarea-lg {
+    min-height: 150px;
+  }
+
+  /* Adicionar variante xs para telas muito pequenas */
+  @media (min-width: 480px) {
+    .xs\:inline {
+      display: inline;
+    }
+    
+    .xs\:hidden {
+      display: none;
+    }
+    
+    .xs\:block {
+      display: block;
+    }
+    
+    .xs\:flex {
+      display: flex;
+    }
+  }
 }
 
 /* Estilos personalizados abaixo do Tailwind */
@@ -197,6 +225,12 @@ body {
   /* Adicionar a classe form-checkbox aqui */
   .form-checkbox {
     @apply h-4 w-4 text-primary border-gray-300 rounded focus:ring-primary;
+  }
+
+  /* Classe para textareas de altura mínima */
+  .form-textarea {
+    @apply w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary resize-y;
+    min-height: 100px;
   }
 }
 

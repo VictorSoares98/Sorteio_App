@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, computed, onUnmounted } from 'vue';
 import { useUserStore } from '../../stores/userStore';
 import { UserRole } from '../../types/user';
 import Card from '../ui/Card.vue';
@@ -9,6 +9,12 @@ import UserNoteModal from '../modals/UserNoteModal.vue';
 import UserHierarchyView from './UserHierarchyView.vue';
 import UserBlockModal from '../modals/UserBlockModal.vue';
 import { formatDate } from '../../utils/formatters';
+// Importação do Datepicker
+import Datepicker from '@vuepic/vue-datepicker';
+import '@vuepic/vue-datepicker/dist/main.css';
+// Importações para o Firestore
+import { collection, onSnapshot, query } from 'firebase/firestore';
+import { db } from '../../firebase';
 
 // Store
 const userStore = useUserStore();
@@ -22,12 +28,15 @@ const actionError = ref<string | null>(null);
 const showNoteModal = ref(false);
 const showBlockModal = ref(false);
 const showHierarchyView = ref(false);
-const dateStart = ref<string>('');
-const dateEnd = ref<string>('');
+// Substituição dos campos de data por objetos Date
+const startDate = ref<Date | null>(null);
+const endDate = ref<Date | null>(null);
 const activeFilter = ref<string>('all');
 const hierarchyFilter = ref<string>('all');
 const showAdvancedFilters = ref(false);
 const exportLoading = ref(false);
+// Variável para armazenar o unsubscribe da listener em tempo real
+const unsubscribeListener = ref<(() => void) | null>(null);
 
 // Mapear nomes das funções para exibição
 const roleNames = {
@@ -67,29 +76,28 @@ const roleBadgeColors = {
 const filteredUsers = computed(() => {
   let users = [...userStore.filteredUsers];
   
-  // Pré-processar datas de início e fim
-  const start = dateStart.value ? new Date(dateStart.value) : null;
-  const end = dateEnd.value ? new Date(dateEnd.value) : null;
-  if (end) end.setHours(23, 59, 59, 999); // Fim do dia
-  
-  // Filtrar por data de registro
-  if (start) {
+  // Filtrar por data de registro usando os objetos Date
+  if (startDate.value) {
     users = users.filter(user => {
       const createdAt = user.createdAt instanceof Date ? user.createdAt : 
         (user.createdAt && (typeof user.createdAt === 'string' || typeof user.createdAt === 'number')) 
         ? new Date(user.createdAt) 
         : new Date();
-      return createdAt >= start;
+      return createdAt >= (startDate.value as Date);
     });
   }
   
-  if (end) {
+  if (endDate.value) {
+    // Ajustar o fim do dia para incluir todas as entradas do dia selecionado
+    const endOfDay = new Date(endDate.value);
+    endOfDay.setHours(23, 59, 59, 999);
+    
     users = users.filter(user => {
       const createdAt = user.createdAt instanceof Date ? user.createdAt : 
         (user.createdAt && (typeof user.createdAt === 'string' || typeof user.createdAt === 'number')) 
         ? new Date(user.createdAt) 
         : new Date();
-      return createdAt <= end;
+      return createdAt <= (endOfDay as Date);
     });
   }
   
@@ -118,14 +126,60 @@ const filteredUsers = computed(() => {
   return users;
 });
 
-// Carregar usuários ao montar o componente
+// Configuração do listener em tempo real para a coleção de usuários
+const setupRealtimeListener = () => {
+  console.log('[UsersList] Configurando listener em tempo real para usuários');
+  // Limpar listener existente se houver
+  if (unsubscribeListener.value) {
+    unsubscribeListener.value();
+  }
+  
+  // Criar uma query para a coleção de usuários
+  const usersRef = collection(db, 'users');
+  const q = query(usersRef);
+  
+  // Configurar o listener
+  unsubscribeListener.value = onSnapshot(q, (snapshot) => {
+    console.log('[UsersList] Alterações detectadas na coleção de usuários');
+    snapshot.docChanges().forEach(change => {
+      const user = { id: change.doc.id, ...change.doc.data() };
+      if (change.type === 'added') {
+        userStore.addUser(user);
+      } else if (change.type === 'modified') {
+        userStore.updateUser(user);
+      } else if (change.type === 'removed') {
+        userStore.removeUser(user.id);
+      }
+    });
+  }, (error) => {
+    console.error('[UsersList] Erro no listener de usuários:', error);
+    actionError.value = 'Falha ao monitorar alterações nos usuários.';
+  });
+};
+
+// Carregar usuários ao montar o componente e configurar listener
 onMounted(() => {
   fetchUsers();
+  // Configurar o listener em tempo real após carregar os usuários inicialmente
+  setupRealtimeListener();
+});
+
+// Limpar o listener quando o componente for desmontado
+onUnmounted(() => {
+  if (unsubscribeListener.value) {
+    console.log('[UsersList] Removendo listener de usuários');
+    unsubscribeListener.value();
+  }
 });
 
 // Buscar usuários
 const fetchUsers = async () => {
   await userStore.fetchAllUsers();
+};
+
+// Configuração do Datepicker
+const datePickerFormat = (date: Date) => {
+  return formatDate(date);
 };
 
 // Abrir modal para alterar papel
@@ -238,7 +292,6 @@ const toggleUserBlock = async (userId: string, isBlocked: boolean, blockReason?:
       actionSuccess.value = false;
     }, 3000);
     closeBlockModal();
-    fetchUsers(); // Recarregar a lista após alterar o status
   } catch (error: any) {
     actionError.value = error.message || 'Erro ao alterar status do usuário.';
     setTimeout(() => {
@@ -301,8 +354,8 @@ const toggleAdvancedFilters = () => {
 
 // Limpar filtros avançados
 const clearAdvancedFilters = () => {
-  dateStart.value = '';
-  dateEnd.value = '';
+  startDate.value = null;
+  endDate.value = null;
   activeFilter.value = 'all';
   hierarchyFilter.value = 'all';
 };
@@ -327,34 +380,46 @@ const isUserBlocked = (user: any) => {
   return user.isBlocked === true;
 };
 
+// Configurações do Datepicker
+const datepickerOptions = {
+  enableTimePicker: false,
+  autoApply: true,
+  locale: 'pt-BR'
+};
+
+// Função para gerar avatar padrão com a inicial do usuário
+const getDefaultAvatar = (name: string) => {
+  const seed = encodeURIComponent(name || 'user');
+  return `https://api.dicebear.com/7.x/initials/svg?seed=${seed}&backgroundColor=FF8C00`;
+};
 </script>
 
 <template>
   <div>
-    <div class="flex justify-between items-center mb-4">
-      <h2 class="text-2xl font-bold">Gerenciamento de Usuários</h2>
-      <div class="flex gap-2">
+    <!-- Header com ajustes de responsividade -->
+    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 sm:gap-2 mb-6">
+      <h2 class="text-xl md:text-2xl font-bold text-gray-800 heading-responsive">Gerenciamento de Usuários</h2>
+      
+      <!-- Botões de ação com responsividade melhorada -->
+      <div class="flex flex-wrap w-full sm:w-auto gap-2">
         <button 
           @click="fetchUsers"
-          class="bg-primary hover:bg-primary-dark text-white px-3 py-1 rounded transition-colors text-sm"
+          class="flex-1 sm:flex-none bg-primary hover:bg-primary-dark text-white px-4 py-2 sm:py-1 rounded transition-colors text-sm flex justify-center items-center"
         >
-          <span class="flex items-center">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
-            Atualizar
-          </span>
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1.5 sm:h-4 sm:w-4 sm:mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          <span>Atualizar</span>
         </button>
         <button 
           @click="viewHierarchy"
-          class="bg-secondary hover:bg-secondary-dark text-gray-800 px-3 py-1 rounded transition-colors text-sm"
+          class="flex-1 sm:flex-none bg-secondary hover:bg-secondary-dark text-gray-800 px-4 py-2 sm:py-1 rounded transition-colors text-sm flex justify-center items-center"
         >
-          <span class="flex items-center">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-            </svg>
-            Visualizar Hierarquia
-          </span>
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1.5 sm:h-4 sm:w-4 sm:mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+          </svg>
+          <span class="hidden xs:inline">Visualizar </span>
+          <span>Hierarquia</span>
         </button>
       </div>
     </div>
@@ -413,22 +478,30 @@ const isUserBlocked = (user: any) => {
       <h3 class="text-sm font-medium text-gray-700 mb-3">Filtros Avançados</h3>
       
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        <!-- Filtro por Data de Registro -->
+        <!-- Substituir os inputs de data nativos pelo Datepicker -->
         <div>
           <label class="block text-xs text-gray-600 mb-1">Data de Registro (De)</label>
-          <input 
-            v-model="dateStart" 
-            type="date" 
-            class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
+          <Datepicker 
+            v-model="startDate" 
+            :enable-time-picker="datepickerOptions.enableTimePicker"
+            :format="datePickerFormat"
+            placeholder="Selecione uma data"
+            :auto-apply="datepickerOptions.autoApply"
+            :locale="datepickerOptions.locale"
+            input-class-name="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
           />
         </div>
         
         <div>
           <label class="block text-xs text-gray-600 mb-1">Data de Registro (Até)</label>
-          <input 
-            v-model="dateEnd" 
-            type="date" 
-            class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
+          <Datepicker 
+            v-model="endDate" 
+            :enable-time-picker="datepickerOptions.enableTimePicker"
+            :format="datePickerFormat"
+            placeholder="Selecione uma data"
+            :auto-apply="datepickerOptions.autoApply"
+            :locale="datepickerOptions.locale"
+            input-class-name="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
           />
         </div>
         
@@ -509,11 +582,130 @@ const isUserBlocked = (user: any) => {
       </div>
       
       <div v-else class="overflow-x-auto">
-        <table class="min-w-full divide-y divide-gray-200">
+        <!-- Layout para dispositivos móveis (visível apenas em telas pequenas) -->
+        <div class="md:hidden">
+          <!-- Lista de usuários em formato de cards -->
+          <div class="space-y-4">
+            <div v-for="user in filteredUsers" 
+                :key="user.id" 
+                :class="['bg-white rounded-lg shadow p-4 border-l-4', 
+                        { 'border-red-500': isUserBlocked(user),
+                          'border-gray-200': !isUserBlocked(user) }]">
+              
+              <!-- Cabeçalho do card com avatar e nome -->
+              <div class="flex items-center mb-3">
+                <div class="flex-shrink-0 h-12 w-12 mr-3">
+                  <img 
+                    v-if="user.photoURL" 
+                    :src="user.photoURL" 
+                    :alt="`${user.displayName} avatar`" 
+                    class="h-12 w-12 rounded-full object-cover"
+                  />
+                  <img 
+                    v-else 
+                    :src="getDefaultAvatar(user.displayName || '')" 
+                    :alt="`${user.displayName} avatar`" 
+                    class="h-12 w-12 rounded-full bg-gray-200"
+                  />
+                </div>
+                <div>
+                  <div class="font-medium text-gray-900 flex items-center">
+                    {{ user.displayName }}
+                    <span v-if="hasNotes(user.id)" class="ml-2 text-yellow-500" title="Este usuário tem notas administrativas">
+                      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                      </svg>
+                    </span>
+                  </div>
+                  <p class="text-sm text-gray-500">{{ user.email }}</p>
+                </div>
+              </div>
+              
+              <!-- Detalhes do usuário -->
+              <div class="grid grid-cols-2 gap-3 mb-3 text-sm">
+                <div>
+                  <p class="text-gray-500 text-xs">Função</p>
+                  <span 
+                    :class="['px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full mt-1',
+                      roleBadgeColors[user.role] || 'bg-gray-100 text-gray-800']"
+                  >
+                    {{ roleNames[user.role] || 'Usuário' }}
+                  </span>
+                </div>
+                
+                <div>
+                  <p class="text-gray-500 text-xs">Status</p>
+                  <span 
+                    :class="['px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full mt-1',
+                      user.isBlocked ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800']"
+                  >
+                    {{ user.isBlocked ? 'Bloqueado' : 'Ativo' }}
+                  </span>
+                  <div v-if="user.blockReason" class="text-xs text-red-500 mt-1">
+                    {{ user.blockReason }}
+                  </div>
+                </div>
+                
+                <div>
+                  <p class="text-gray-500 text-xs">Criado em</p>
+                  <p class="text-xs">{{ user.createdAt ? formatDate(user.createdAt) : 'N/A' }}</p>
+                </div>
+              </div>
+              
+              <!-- Ações - botões maiores para mobile -->
+              <div class="border-t border-gray-100 pt-3 flex justify-between">
+                <button 
+                  @click="openRoleModal(user.id, user.role)"
+                  class="flex items-center text-primary hover:text-primary-dark px-2 py-1"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                  <span class="text-sm">Função</span>
+                </button>
+                <button 
+                  @click="openNoteModal(user.id)"
+                  class="flex items-center text-yellow-500 hover:text-yellow-700 px-2 py-1"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
+                  <span class="text-sm">Notas</span>
+                </button>
+                <button 
+                  @click="openBlockModal(user.id)"
+                  :class="['flex items-center px-2 py-1',
+                    user.isBlocked ? 'text-green-500 hover:text-green-700' : 'text-red-500 hover:text-red-700']"
+                >
+                  <svg v-if="user.isBlocked" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                  </svg>
+                  <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
+                  </svg>
+                  <span class="text-sm">{{ user.isBlocked ? 'Desbloquear' : 'Bloquear' }}</span>
+                </button>
+              </div>
+            </div>
+            
+            <!-- Mensagem quando não há resultados -->
+            <div v-if="filteredUsers.length === 0" class="text-center p-4 bg-gray-50 rounded-lg">
+              <p class="text-gray-500">Nenhum usuário encontrado</p>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Layout de tabela tradicional (escondido em telas pequenas) -->
+        <table class="min-w-full divide-y divide-gray-200 hidden md:table">
           <thead>
             <tr>
               <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Nome
+                <!-- Estrutura modificada para alinhar com o nome do usuário, não com o avatar -->
+                <div class="flex items-center">
+                  <div class="w-10 mr-3"><!-- Espaço equivalente ao avatar --></div>
+                  <span>Nome</span>
+                </div>
               </th>
               <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Email
@@ -536,9 +728,25 @@ const isUserBlocked = (user: any) => {
             <tr v-for="user in filteredUsers" :key="user.id" :class="{ 'bg-red-50': isUserBlocked(user) }">
               <td class="px-6 py-4">
                 <div class="flex items-center">
+                  <!-- Avatar ou foto de perfil -->
+                  <div class="flex-shrink-0 h-10 w-10 mr-3">
+                    <img 
+                      v-if="user.photoURL" 
+                      :src="user.photoURL" 
+                      :alt="`${user.displayName} avatar`" 
+                      class="h-10 w-10 rounded-full object-cover"
+                    />
+                    <img 
+                      v-else 
+                      :src="getDefaultAvatar(user.displayName || '')" 
+                      :alt="`${user.displayName} avatar`" 
+                      class="h-10 w-10 rounded-full bg-gray-200"
+                    />
+                  </div>
+                  
+                  <!-- Nome e indicador de notas -->
                   <div class="text-sm font-medium text-gray-900 flex items-center">
                     {{ user.displayName }}
-                    <!-- Indicador de notas -->
                     <span v-if="hasNotes(user.id)" class="ml-2 text-yellow-500" title="Este usuário tem notas administrativas">
                       <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
@@ -610,7 +818,7 @@ const isUserBlocked = (user: any) => {
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                     </svg>
                     <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m0 0v2m0-2h2m-2 0H9m3-3V7a3 3 0 00-6 0v3m12 0a2 2 0 012 2v3a2 2 0 01-2 2H7a2 2 0 01-2-2v-3a2 2 0 012-2h9z" />
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
                     </svg>
                   </button>
                 </div>

@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue';
 import { useUserStore } from '../../stores/userStore';
+import Button from '../ui/Button.vue';
+import Modal from '../ui/Modal.vue';
 
 const props = defineProps({
   show: {
@@ -9,152 +11,186 @@ const props = defineProps({
   },
   userId: {
     type: String,
-    default: undefined
+    default: ''
   }
 });
 
 const emit = defineEmits(['close', 'toggle-block']);
 const userStore = useUserStore();
-const user = ref<any>(null);
-const isBlocked = ref(false);
-const loading = ref(false);
 const blockReason = ref('');
-const blockDuration = ref<number>(7); // Padrão: 7 dias
+const blockDuration = ref<number | null>(7);
+const userIsBlocked = ref(false);
+const loading = ref(false);
+const userName = ref('');
+const showConfirmModal = ref(false);
 
-// Carregar dados do usuário quando o modal for aberto
+// Carregar status atual do usuário quando o modal for aberto
 watch(() => props.show, async (newVal) => {
   if (newVal && props.userId) {
     loading.value = true;
     try {
-      user.value = await userStore.fetchUserById(props.userId);
-      if (user.value) {
-        isBlocked.value = user.value.isBlocked || false;
-        blockReason.value = user.value.blockReason || '';
+      const user = await userStore.fetchUserById(props.userId);
+      if (user) {
+        userIsBlocked.value = user.isBlocked || false;
+        blockReason.value = user.blockReason || '';
+        userName.value = user.displayName || user.email || 'Usuário';
       }
     } catch (error) {
-      console.error('Erro ao carregar dados do usuário:', error);
+      console.error('Erro ao carregar status do usuário:', error);
     } finally {
       loading.value = false;
     }
   }
 });
 
-// Opções de duração para bloqueio
-const blockDurationOptions = [
-  { value: 1, label: '1 dia' },
-  { value: 3, label: '3 dias' },
-  { value: 7, label: '7 dias' },
-  { value: 15, label: '15 dias' },
-  { value: 30, label: '30 dias' },
-  { value: 90, label: '90 dias' },
-  { value: 0, label: 'Permanente' }
-];
-
-// Confirmar a ação de bloqueio/desbloqueio
-const confirmAction = () => {
-  if (props.userId) {
-    // Se estamos desbloqueando, não precisamos de motivo ou duração
-    if (isBlocked.value) {
-      emit('toggle-block', props.userId, false);
-    } else {
-      // Caso contrário, estamos bloqueando, então enviamos o motivo e duração
-      emit('toggle-block', props.userId, true, blockReason.value, blockDuration.value);
-    }
-  }
-};
-
-// Fechar o modal
+// Fechar modal
 const closeModal = () => {
   emit('close');
 };
+
+// Mostrar diálogo de confirmação
+const validateAndShowConfirm = () => {
+  if (!userIsBlocked.value && !blockReason.value.trim()) {
+    showConfirmModal.value = true; // Show confirmation modal with mandatory field notice
+    return;
+  }
+  
+  // Se não precisar de confirmação, prosseguir
+  handleToggleBlock();
+};
+
+// Bloquear/Desbloquear usuário
+const handleToggleBlock = () => {
+  if (props.userId) {
+    emit('toggle-block', props.userId, !userIsBlocked.value, blockReason.value, blockDuration.value);
+  }
+};
+
+// Fechar modal de confirmação
+const closeConfirmModal = () => {
+  showConfirmModal.value = false;
+};
+
+// Resetar o formulário quando o modal fechar
+watch(() => props.show, (newVal) => {
+  if (!newVal) {
+    blockReason.value = '';
+    blockDuration.value = null;
+    showConfirmModal.value = false;
+  }
+});
 </script>
 
 <template>
   <div v-if="show" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-    <div class="bg-white rounded-lg shadow-xl max-w-md w-full max-h-[90vh] flex flex-col">
+    <div class="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
       <!-- Header -->
-      <div class="p-4 border-b">
-        <h3 class="text-lg font-medium text-gray-800 flex items-center">
-          <svg v-if="isBlocked" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-          </svg>
-          <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m0 0v2m0-2h2m-2 0H9m3-3V7a3 3 0 00-6 0v3m12 0a2 2 0 012 2v3a2 2 0 01-2 2H7a2 2 0 01-2-2v-3a2 2 0 012-2h9z" />
-          </svg>
-          {{ isBlocked ? 'Desbloquear Usuário' : 'Bloquear Usuário' }}
+      <div class="mb-4">
+        <h3 class="text-lg font-medium" :class="userIsBlocked ? 'text-green-600' : 'text-red-600'">
+          {{ userIsBlocked ? 'Desbloquear Usuário' : 'Bloquear Usuário' }}
         </h3>
-        <p class="text-sm text-gray-500 mt-1">{{ user?.displayName || 'Usuário' }}</p>
+        <p class="text-sm text-gray-500">
+          {{ userIsBlocked 
+            ? `Permitir que ${userName} volte a acessar o sistema?` 
+            : `Restringir o acesso de ${userName} ao sistema` }}
+        </p>
+        <!-- Validation Message -->
+        <p v-if="!blockReason.trim()" class="text-sm text-red-600 mt-1">
+          O motivo do bloqueio é obrigatório.
+        </p>
       </div>
       
-      <!-- Content -->
-      <div class="p-4 flex-grow overflow-auto">
-        <div v-if="loading" class="flex justify-center items-center h-20">
-          <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+      <!-- Loading State -->
+      <div v-if="loading" class="text-center py-4">
+        <div class="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+        <p class="mt-2 text-sm text-gray-500">Carregando informações...</p>
+      </div>
+      
+      <!-- Block Form -->
+      <div v-else>
+        <!-- Block Reason -->
+        <div v-if="!userIsBlocked" class="mb-4">
+          <label class="block text-sm font-medium text-gray-700 mb-1">
+            Motivo do Bloqueio
+          </label>
+          <textarea
+            v-model="blockReason"
+            placeholder="Explique o motivo do bloqueio..."
+            class="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary min-h-[100px] resize-y"
+          ></textarea>
         </div>
-        <div v-else>
-          <!-- Mensagem de confirmação para desbloquear -->
-          <div v-if="isBlocked" class="bg-green-50 border border-green-200 p-3 rounded-md mb-4">
-            <p class="text-green-700">Você está prestes a <strong>desbloquear</strong> este usuário, permitindo que ele volte a acessar o sistema.</p>
-          </div>
-          
-          <!-- Form para bloquear -->
-          <div v-else>
-            <div class="bg-red-50 border border-red-200 p-3 rounded-md mb-4">
-              <p class="text-red-700">Você está prestes a <strong>bloquear</strong> este usuário, impedindo-o de acessar o sistema.</p>
-            </div>
-            
-            <div class="mb-4">
-              <label class="block text-sm font-medium text-gray-700 mb-2">
-                Motivo do Bloqueio
-              </label>
-              <textarea 
-                v-model="blockReason"
-                rows="3"
-                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
-                placeholder="Explique o motivo do bloqueio..."
-              ></textarea>
-            </div>
-            
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-2">
-                Duração do Bloqueio
-              </label>
-              <select
-                v-model="blockDuration"
-                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
-              >
-                <option 
-                  v-for="option in blockDurationOptions" 
-                  :key="option.value" 
-                  :value="option.value"
-                >
-                  {{ option.label }}
-                </option>
-              </select>
-            </div>
-          </div>
+        
+        <!-- Block Duration (Future implementation) -->
+        <div v-if="!userIsBlocked" class="mb-4">
+          <label class="block text-sm font-medium text-gray-700 mb-1">
+            Duração do Bloqueio
+          </label>
+          <select
+            v-model="blockDuration"
+            class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
+          >
+            <option :value="null">Permanente</option>
+            <option :value="1">1 dia</option>
+            <option :value="7">7 dias</option>
+            <option :value="30">30 dias</option>
+          </select>
+        </div>
+        
+        <!-- Warning Message -->
+        <div v-if="!userIsBlocked" class="bg-yellow-50 border border-yellow-200 p-3 rounded-md mb-4">
+          <p class="text-sm text-yellow-800">
+            <span class="font-medium">Atenção:</span> {{ userName }} será impedido de fazer login e suas sessões ativas serão encerradas.
+          </p>
+        </div>
+        
+        <!-- Current Block Reason -->
+        <div v-if="userIsBlocked && blockReason" class="mb-4">
+          <h4 class="text-sm font-medium text-gray-700">Motivo do Bloqueio Atual:</h4>
+          <p class="mt-1 p-2 bg-gray-50 border border-gray-200 rounded text-sm">{{ blockReason }}</p>
         </div>
       </div>
       
-      <!-- Footer -->
-      <div class="p-4 border-t flex justify-end space-x-3">
-        <button
-          @click="closeModal"
-          class="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
+      <!-- Actions -->
+      <div class="mt-6 flex justify-end space-x-2">
+        <Button 
+          @click="closeModal" 
+          variant="secondary"
+          size="sm"
         >
           Cancelar
-        </button>
-        <button
-          @click="confirmAction"
-          :class="[
-            'px-4 py-2 text-white rounded-md text-sm font-medium focus:outline-none',
-            isBlocked ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'
-          ]"
-          :disabled="loading"
+        </Button>
+        <Button 
+          @click="validateAndShowConfirm" 
+          :variant="userIsBlocked ? 'success' : 'danger'"
+          :disabled="!userIsBlocked && !blockReason.trim()"
+          size="sm"
         >
-          {{ isBlocked ? 'Confirmar Desbloqueio' : 'Confirmar Bloqueio' }}
-        </button>
+          {{ userIsBlocked ? 'Desbloquear' : 'Bloquear' }}
+        </Button>
       </div>
     </div>
   </div>
+  
+  <!-- Modal de confirmação usando o componente existente -->
+  <Modal
+    v-if="showConfirmModal"
+    :show="showConfirmModal"
+    title="Campo Obrigatório"
+    variant="warning"
+    @close="closeConfirmModal"
+    @confirm="closeConfirmModal"
+    :hideFooter="false"
+  >
+    <p>Por favor, informe o motivo do bloqueio antes de continuar.</p>
+    
+    <template #footer>
+      <Button 
+        @click="closeConfirmModal"
+        variant="primary"
+        size="sm"
+      >
+        OK
+      </Button>
+    </template>
+  </Modal>
 </template>

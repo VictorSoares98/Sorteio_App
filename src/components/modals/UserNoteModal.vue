@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { ref, watch, computed } from 'vue';
 import { useUserStore } from '../../stores/userStore';
+import Button from '../ui/Button.vue';
 
 const props = defineProps({
   show: {
@@ -9,30 +10,34 @@ const props = defineProps({
   },
   userId: {
     type: String,
-    default: undefined
+    default: ''
   }
 });
 
 const emit = defineEmits(['close', 'save']);
 const userStore = useUserStore();
-const note = ref('');
-const userName = ref('');
+const noteText = ref('');
 const loading = ref(false);
+const userName = ref('');
+
+// Verificar se o texto da nota está vazio
+const isNoteTextEmpty = computed(() => {
+  return !noteText.value || noteText.value.trim() === '';
+});
 
 // Carregar notas existentes quando o modal for aberto
 watch(() => props.show, async (newVal) => {
   if (newVal && props.userId) {
     loading.value = true;
     try {
-      // Buscar usuário atual para exibir o nome
+      const notes = await userStore.fetchUserNotes(props.userId);
+      noteText.value = notes || '';
+      
+      // Buscar informações do usuário para exibir o nome
       const user = await userStore.fetchUserById(props.userId);
       if (user) {
         userName.value = user.displayName || user.email || 'Usuário';
       }
-      
-      // Buscar notas existentes
-      await userStore.fetchUserNotes(props.userId);
-      note.value = userStore.userNotes[props.userId] || '';
     } catch (error) {
       console.error('Erro ao carregar notas:', error);
     } finally {
@@ -41,69 +46,103 @@ watch(() => props.show, async (newVal) => {
   }
 });
 
-// Salvar a nota
+// Fechar modal
+const closeModal = () => {
+  emit('close');
+};
+
+// Salvar nota - adicionada validação para evitar notas vazias
 const saveNote = () => {
-  if (props.userId) {
-    emit('save', props.userId, note.value);
+  if (props.userId && !isNoteTextEmpty.value) {
+    emit('save', props.userId, noteText.value.trim());
   }
 };
 
-// Fechar o modal
-const closeModal = () => {
-  emit('close');
+// Limpar nota
+import ConfirmationModal from '../ui/Modal.vue';
+
+const showConfirmation = ref(false);
+
+const clearNote = () => {
+  if (noteText.value.trim() !== '') {
+    showConfirmation.value = true;
+  }
+};
+
+const confirmClearNote = () => {
+  noteText.value = '';
+  showConfirmation.value = false;
 };
 </script>
 
 <template>
   <div v-if="show" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-    <div class="bg-white rounded-lg shadow-xl max-w-md w-full max-h-[90vh] flex flex-col">
+    <div class="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
       <!-- Header -->
-      <div class="p-4 border-b">
-        <h3 class="text-lg font-medium text-gray-800 flex items-center">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2 text-yellow-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-          </svg>
-          Notas Administrativas
-        </h3>
-        <p class="text-sm text-gray-500 mt-1">{{ userName }}</p>
+      <div class="mb-4">
+        <h3 class="text-lg font-medium text-gray-900">Notas do Usuário</h3>
+        <p class="text-sm text-gray-500">
+          Adicione notas administrativas sobre {{ userName }}
+        </p>
       </div>
       
-      <!-- Content -->
-      <div class="p-4 flex-grow overflow-auto">
-        <div v-if="loading" class="flex justify-center items-center h-20">
-          <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
-        </div>
-        <div v-else>
-          <label class="block text-sm font-medium text-gray-700 mb-2">
-            Adicione ou edite notas administrativas para este usuário:
-          </label>
-          <textarea 
-            v-model="note"
-            rows="6"
-            class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
-            placeholder="Escreva suas notas aqui..."
-          ></textarea>
-          <p class="text-xs text-gray-500 mt-1">
-            Estas notas são visíveis apenas para administradores e não são exibidas ao usuário.
-          </p>
-        </div>
+      <!-- Loading State -->
+      <div v-if="loading" class="text-center py-4">
+        <div class="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+        <p class="mt-2 text-sm text-gray-500">Carregando notas...</p>
       </div>
       
-      <!-- Footer -->
-      <div class="p-4 border-t flex justify-end space-x-3">
+      <!-- Note Content -->
+      <div v-else>
+        <textarea
+          v-model="noteText"
+          placeholder="Escreva suas notas aqui..."
+          class="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary min-h-[150px] resize-y"
+        ></textarea>
+        
+        <!-- Mensagem de aviso quando o campo estiver vazio -->
+        <p v-if="isNoteTextEmpty" class="mt-2 text-xs text-amber-600">
+          Digite alguma informação para salvar as notas.
+        </p>
+      </div>
+      
+      <!-- Actions -->
+      <div class="mt-6 flex items-center justify-between">
         <button
-          @click="closeModal"
-          class="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
+          @click="clearNote"
+          type="button"
+          class="text-red-600 hover:text-red-800 text-sm"
         >
-          Cancelar
+          Limpar Notas
         </button>
-        <button
-          @click="saveNote"
-          class="px-4 py-2 bg-primary hover:bg-primary-dark text-white rounded-md text-sm font-medium focus:outline-none"
-          :disabled="loading"
-        >
-          Salvar
-        </button>
+
+        <!-- Confirmation Modal -->
+        <ConfirmationModal
+          v-if="showConfirmation"
+          title="Confirmação"
+          message="Tem certeza que deseja limpar todas as notas?"
+          @confirm="confirmClearNote"
+          @cancel="showConfirmation = false"
+        />
+        
+        <div class="flex space-x-2">
+          <Button 
+            @click="closeModal" 
+            variant="secondary"
+            size="sm"
+          >
+            Cancelar
+          </Button>
+          <Button 
+            @click="saveNote" 
+            variant="primary"
+            size="sm"
+            :disabled="isNoteTextEmpty"
+            :class="{ 'opacity-50 cursor-not-allowed': isNoteTextEmpty }"
+          >
+            Salvar Notas
+          </Button>
+        </div>
       </div>
     </div>
   </div>
