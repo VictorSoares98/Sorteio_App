@@ -40,74 +40,15 @@ const loadRaffles = async () => {
   error.value = null;
   
   try {
-    // Obter todos os sorteios do banco de dados
-    const allRaffles = await fetchAllRaffles();
-    
-    // Filtrar os sorteios com base nas permissões e visibilidade configurada
-    if (!authStore.currentUser) {
-      // Usuários não autenticados só veem sorteios universais e ativos
-      raffles.value = allRaffles.filter(raffle => 
-        raffle.isActive || raffle.visibility === 'universal'
-      );
-      return;
-    }
+    // Obter dados do usuário atual para filtros
+    const userId = authStore.currentUser?.id || null;
+    const userAffiliationId = authStore.currentUser?.affiliatedToId || null;
+    const isAdminUser = isAdmin.value;
 
-    // Para usuários autenticados, aplicar regras de visibilidade
-    raffles.value = allRaffles.filter(raffle => {
-      // O criador sempre vê seu próprio sorteio
-      if (raffle.createdBy === authStore.currentUser?.id) return true;
-      
-      // Sorteios ativos são sempre visíveis
-      if (raffle.isActive) return true;
-      
-      // Aplicar regras baseadas na configuração de visibilidade
-      switch (raffle.visibility) {
-        case 'universal':
-          // Modificação: Usuários comuns só veem sorteios universais se forem ativos
-          if (!hasAffiliations.value && !isAdmin.value && raffle.createdBy !== authStore.currentUser?.id) {
-            return raffle.isActive;
-          }
-          return true;
-          
-        case 'private':
-          return raffle.createdBy === authStore.currentUser?.id; // Apenas o criador
-          
-        case 'affiliates':
-          // Verificar se faz parte da rede de afiliação
-          if (!authStore.currentUser) return false;
-          return (
-            // Criador vê
-            raffle.createdBy === authStore.currentUser.id ||
-            // Afiliador vê sorteios de seus afiliados
-            (authStore.currentUser.affiliates && 
-             authStore.currentUser.affiliates.includes(raffle.createdBy)) ||
-            // Afiliado vê sorteios de seu afiliador
-            (authStore.currentUser.affiliatedTo === raffle.createdBy)
-          );
-          
-        case 'admin':
-          // Modificação: Administradores só veem se criaram ou têm vínculo explícito
-          return isAdmin.value && (
-            // Sorteio próprio
-            raffle.createdBy === authStore.currentUser?.id ||
-            // Vínculo via afiliação
-            (authStore.currentUser?.affiliates && 
-             authStore.currentUser.affiliates.includes(raffle.createdBy)) ||
-            (authStore.currentUser?.affiliatedTo === raffle.createdBy)
-          );
-          
-        default:
-          // Comportamento padrão (retrocompatibilidade)
-          if (isAdmin.value) {
-            return authStore.currentUser && raffle.createdBy === authStore.currentUser.id;
-          } else if (hasAffiliations.value) {
-            // Lógica para usuários com afiliações
-            // ...existing code for affiliations...
-          } else {
-            return raffle.isActive;
-          }
-      }
-    });
+    // Usar a versão atualizada do fetchAllRaffles com filtros de visibilidade
+    raffles.value = await fetchAllRaffles(false, userId, userAffiliationId, isAdminUser);
+    
+    console.log(`[RaffleList] ${raffles.value.length} sorteios carregados`);
   } catch (err) {
     console.error('[RaffleList] Erro ao carregar sorteios:', err);
     error.value = 'Não foi possível carregar a lista de sorteios.';

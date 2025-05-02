@@ -17,6 +17,11 @@ const isAdmin = computed(() => {
          authStore.currentUser?.role === UserRole.TESOUREIRO;
 });
 
+// Verificar se está afiliado a alguém
+const isAffiliated = computed(() => {
+  return !!authStore.currentUser?.affiliatedTo;
+});
+
 // Verificar a cada transição de rota se os dados do usuário precisam ser atualizados
 onMounted(() => {
   // Força a atualização dos dados do usuário ao montar o componente
@@ -135,7 +140,7 @@ const getProfilePicture = (user: any) => {
               Sorteio
             </button>
             <button 
-              v-if="isAdmin" 
+              v-if="isAdmin || !isAffiliated" 
               @click="navigateTo('/painel')" 
               class="px-3 py-2 rounded hover:bg-primary-dark text-sm md:text-base transition-colors"
             >
@@ -216,7 +221,7 @@ const getProfilePicture = (user: any) => {
               Sorteio
             </button>
             <button 
-              v-if="isAdmin" 
+              v-if="isAdmin || !isAffiliated" 
               @click="navigateTo('/painel')" 
               class="block w-full text-left px-3 py-2 rounded hover:bg-primary-dark transition-colors"
             >

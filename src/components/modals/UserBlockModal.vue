@@ -23,6 +23,7 @@ const userIsBlocked = ref(false);
 const loading = ref(false);
 const userName = ref('');
 const showConfirmModal = ref(false);
+const showValidationError = ref(false); // Nova ref para controlar a exibição do erro de validação
 
 // Carregar status atual do usuário quando o modal for aberto
 watch(() => props.show, async (newVal) => {
@@ -51,6 +52,7 @@ const closeModal = () => {
 // Mostrar diálogo de confirmação
 const validateAndShowConfirm = () => {
   if (!userIsBlocked.value && !blockReason.value.trim()) {
+    showValidationError.value = true; // Ativar a exibição do erro
     showConfirmModal.value = true; // Show confirmation modal with mandatory field notice
     return;
   }
@@ -77,6 +79,7 @@ watch(() => props.show, (newVal) => {
     blockReason.value = '';
     blockDuration.value = null;
     showConfirmModal.value = false;
+    showValidationError.value = false; // Resetar o estado do erro de validação
   }
 });
 </script>
@@ -94,8 +97,8 @@ watch(() => props.show, (newVal) => {
             ? `Permitir que ${userName} volte a acessar o sistema?` 
             : `Restringir o acesso de ${userName} ao sistema` }}
         </p>
-        <!-- Validation Message -->
-        <p v-if="!blockReason.trim()" class="text-sm text-red-600 mt-1">
+        <!-- Validation Message - Mostrar apenas quando houver tentativa de submissão -->
+        <p v-if="showValidationError && !userIsBlocked && !blockReason.trim()" class="text-sm text-red-600 mt-1">
           O motivo do bloqueio é obrigatório.
         </p>
       </div>
@@ -117,6 +120,8 @@ watch(() => props.show, (newVal) => {
             v-model="blockReason"
             placeholder="Explique o motivo do bloqueio..."
             class="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary min-h-[100px] resize-y"
+            :class="{'border-red-500': showValidationError && !blockReason.trim()}"
+            @input="showValidationError && blockReason.trim() ? showValidationError = false : null"
           ></textarea>
         </div>
         
@@ -162,7 +167,7 @@ watch(() => props.show, (newVal) => {
         <Button 
           @click="validateAndShowConfirm" 
           :variant="userIsBlocked ? 'success' : 'danger'"
-          :disabled="!userIsBlocked && !blockReason.trim()"
+          :disabled="!userIsBlocked && !blockReason.trim() && showValidationError"
           size="sm"
         >
           {{ userIsBlocked ? 'Desbloquear' : 'Bloquear' }}

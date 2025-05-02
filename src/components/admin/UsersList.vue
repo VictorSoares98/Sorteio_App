@@ -15,9 +15,13 @@ import '@vuepic/vue-datepicker/dist/main.css';
 // Importações para o Firestore
 import { collection, onSnapshot, query } from 'firebase/firestore';
 import { db } from '../../firebase';
+import { useAuthStore } from '../../stores/authStore';
+import { useRouter } from 'vue-router';
 
 // Store
 const userStore = useUserStore();
+const authStore = useAuthStore();
+const router = useRouter();
 
 // Estado local
 const selectedUserId = ref<string | null>(null);
@@ -392,6 +396,18 @@ const getDefaultAvatar = (name: string) => {
   const seed = encodeURIComponent(name || 'user');
   return `https://api.dicebear.com/7.x/initials/svg?seed=${seed}&backgroundColor=FF8C00`;
 };
+
+// Verificar se o usuário está afiliado a alguém
+const isUserAffiliated = computed(() => {
+  return !!authStore.currentUser?.affiliatedTo;
+});
+
+// Navegar para o perfil - seção de afiliados
+const navigateToAffiliateProgram = () => {
+  router.push({
+    name: 'perfil-afiliados'
+  });
+};
 </script>
 
 <template>
@@ -571,14 +587,32 @@ const getDefaultAvatar = (name: string) => {
         <p class="mt-2">Carregando usuários...</p>
       </div>
       
-      <div v-else-if="userStore.error" class="text-center py-6 text-danger">
-        <p>{{ userStore.error }}</p>
-        <button 
-          @click="fetchUsers" 
-          class="mt-2 bg-primary text-white px-4 py-2 rounded"
-        >
-          Tentar novamente
-        </button>
+      <div v-else-if="userStore.error" class="text-center py-6">
+        <!-- Caso 1: Usuário sem afiliação -->
+        <div v-if="!isUserAffiliated && !authStore.isAdmin" class="bg-yellow-50 border border-yellow-200 rounded-lg p-6">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mx-auto text-yellow-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+          </svg>
+          <h3 class="text-lg font-medium text-yellow-700 mb-2">Você ainda não está vinculado a nenhum grupo de afiliados.</h3>
+          <p class="text-yellow-600 mb-4">Para gerenciar usuários, é necessário fazer parte de um grupo de afiliação ou criar o seu próprio.</p>
+          <button 
+            @click="navigateToAffiliateProgram" 
+            class="mt-2 bg-primary text-white px-4 py-2 rounded hover:bg-primary-dark transition-colors"
+          >
+            Acessar Programa de Afiliação
+          </button>
+        </div>
+        
+        <!-- Caso 2: Erro padrão para outros casos (usuários com afiliação mas sem permissão) -->
+        <div v-else class="text-danger">
+          <p>{{ userStore.error }}</p>
+          <button 
+            @click="fetchUsers" 
+            class="mt-2 bg-primary text-white px-4 py-2 rounded"
+          >
+            Tentar novamente
+          </button>
+        </div>
       </div>
       
       <div v-else class="overflow-x-auto">

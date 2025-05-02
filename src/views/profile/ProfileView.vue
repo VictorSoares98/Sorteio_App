@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, watch } from 'vue';
 import { useAuthStore } from '../../stores/authStore';
 import { useOrderStore } from '../../stores/orderStore';
+import { useRouter, useRoute } from 'vue-router';
 import { formatUserRole } from '../../utils/formatters';
 import { UserRole } from '../../types/user';
 import ProfileEdit from '../../components/profile/ProfileEdit.vue';
@@ -14,9 +15,33 @@ import OfflineSyncStatus from '../../components/offline/OfflineSyncStatus.vue';
 
 const authStore = useAuthStore();
 const orderStore = useOrderStore();
+const router = useRouter();
+const route = useRoute();
 const isLoading = ref(true);
-const activeTab = ref('sales'); // Inicia com a tab de vendas ativa
-const affiliateLinkKey = ref(0); // Chave para forçar recreação do componente AffiliateLink
+const affiliateLinkKey = ref(0); // Chave para forçar recriação do componente AffiliateLink
+
+// Mapeamento entre rotas e identificadores das abas
+const routeToTabMap = {
+  'perfil-vendas': 'sales',
+  'perfil-painel': 'dashboard',
+  'perfil-afiliados': 'affiliate',
+  'perfil-ranking': 'ranking',
+  'perfil-informacoes': 'profile'
+};
+
+// Mapeamento inverso para navegação
+const tabToRouteMap = {
+  'sales': 'perfil-vendas',
+  'dashboard': 'perfil-painel',
+  'affiliate': 'perfil-afiliados',
+  'ranking': 'perfil-ranking',
+  'profile': 'perfil-informacoes'
+};
+
+// Propriedade computada para determinar a aba ativa com base na rota
+const activeTab = computed(() => {
+  return routeToTabMap[route.name as keyof typeof routeToTabMap] || 'sales';
+});
 
 // Verificar se o usuário tem permissão para ver o Painel de Controle
 const showDashboard = computed(() => {
@@ -63,19 +88,24 @@ const fixAdminRole = async () => {
   }
 };
 
-// Função para alternar entre abas com reinicialização para o componente de afiliados
-const switchTab = (tab: string) => {
-  // Se já estiver na mesma aba, não fazer nada
+// Definindo um tipo para as chaves válidas de tabToRouteMap
+type TabName = keyof typeof tabToRouteMap;
+
+// Função atualizada para usar o router para navegação
+const switchTab = (tab: TabName) => {
+  // If already on the same tab, no need to do anything
   if (activeTab.value === tab) {
-    console.log('[ProfileView] Já está na aba:', tab);
+    console.log('[ProfileView] Already on tab:', tab);
     return;
   }
   
-  // Se estiver mudando para a aba de afiliados, incrementar a chave
+  // If switching to affiliate tab, increment the key
   if (tab === 'affiliate') {
     affiliateLinkKey.value++;
   }
-  activeTab.value = tab;
+  
+  // Navigate to the corresponding route
+  router.push({ name: tabToRouteMap[tab] });
 };
 
 // Observar mudanças no papel do usuário

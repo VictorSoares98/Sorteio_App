@@ -7,6 +7,7 @@ import { isAdmin } from '../utils/permissions';
 import { onAuthStateChanged } from 'firebase/auth';
 import type { User } from 'firebase/auth';
 import ForgotPasswordView from '../views/auth/ForgotPasswordView.vue';
+import { useAuthStore } from '../stores/authStore';
 
 // Melhor abordagem: Estender a interface RouteMeta no módulo do vue-router
 // Isso fará com que o TypeScript reconheça automaticamente seus meta personalizados
@@ -52,9 +53,45 @@ const routes: RouteRecordRaw[] = [
   // Rotas de Perfil
   {
     path: '/perfil',
-    name: 'perfil',
-    component: () => import(/* webpackChunkName: "profile" */ '../views/profile/ProfileView.vue'),
-    meta: { requiresAuth: true, title: 'Perfil' }
+    component: () => import('../views/profile/ProfileView.vue'),
+    meta: { requiresAuth: true },
+    children: [
+      {
+        path: '',
+        name: 'perfil',
+        redirect: '/perfil/vendas'
+      },
+      {
+        path: 'vendas',
+        name: 'perfil-vendas',
+        component: () => import('../views/profile/ProfileView.vue'),
+        meta: { title: 'Minhas Vendas' }
+      },
+      {
+        path: 'painel',
+        name: 'perfil-painel',
+        component: () => import('../views/profile/ProfileView.vue'),
+        meta: { title: 'Painel de Controle' }
+      },
+      {
+        path: 'afiliados',
+        name: 'perfil-afiliados',
+        component: () => import('../views/profile/ProfileView.vue'),
+        meta: { title: 'Programa de Afiliados' }
+      },
+      {
+        path: 'ranking',
+        name: 'perfil-ranking',
+        component: () => import('../views/profile/ProfileView.vue'),
+        meta: { title: 'Ranking de Vendas' }
+      },
+      {
+        path: 'informacoes',
+        name: 'perfil-informacoes',
+        component: () => import('../views/profile/ProfileView.vue'),
+        meta: { title: 'Informações do Perfil' }
+      }
+    ]
   },
 
   // Nova rota para a página de sorteio
@@ -82,6 +119,41 @@ const routes: RouteRecordRaw[] = [
     name: 'painel',
     component: () => import(/* webpackChunkName: "admin" */ '../views/admin/AdminView.vue'),
     meta: { requiresAuth: true, requiresAdmin: true, title: 'Administração' }
+  },
+
+  // Rota do Dashboard com proteção
+  {
+    path: '/dashboard',
+    name: 'dashboard',
+    component: () => import('../views/DashboardView.vue'),
+    meta: { requiresAuth: true },
+    beforeEnter: (to, from, next) => {
+      const authStore = useAuthStore();
+      
+      // Registrar de onde o usuário está vindo e para onde está indo
+      console.log(`Navegação para dashboard: de ${from.path} para ${to.path}`);
+      
+      // Verificar se está logado
+      if (!authStore.currentUser) {
+        // Salvar a rota original para redirecionamento após login
+        return next({ path: '/login', query: { redirect: to.fullPath } });
+      }
+      
+      // Verificar se é admin ou não tem afiliação
+      const isAdmin = [UserRole.ADMIN, UserRole.SECRETARIA, UserRole.TESOUREIRO].includes(authStore.currentUser.role);
+      const isAffiliated = !!authStore.currentUser.affiliatedTo;
+      
+      if (isAdmin || !isAffiliated) {
+        // Se vindo da página de login, mostrar mensagem de boas-vindas
+        if (from.path === '/login') {
+          console.log(`Bem-vindo ao Dashboard! Acessando: ${String(to.name)}`);
+        }
+        return next(); // Pode acessar
+      } else {
+        console.log(`Usuário ${authStore.currentUser.email} não tem permissão. Redirecionando de ${to.path} para /sorteio`);
+        return next('/sorteio'); // Redirecionar para sorteio
+      }
+    }
   },
   
   // Redirecionamentos
@@ -184,8 +256,12 @@ router.beforeEach(async (to, from, next) => {
       const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
       const userData = userDoc.data();
       
-      if (!isAdmin(userData?.role as UserRole)) {
-        console.log('[Router] Usuário não é admin, redirecionando para home');
+      // Verificar se o usuário não tem afiliação (pode acessar mesmo sem ser admin)
+      const isAffiliated = !!userData?.affiliatedTo;
+      
+      // Permitir acesso se for admin OU não estiver afiliado a ninguém
+      if (!isAdmin(userData?.role as UserRole) && isAffiliated) {
+        console.log('[Router] Usuário afiliado sem papel administrativo, redirecionando para home');
         return next({ name: 'inicio' });
       }
     } catch (error) {

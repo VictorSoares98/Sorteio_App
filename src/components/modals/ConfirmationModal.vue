@@ -24,7 +24,7 @@ const totalValue = computed(() => {
 // Fechar o modal e redirecionar para a página de vendas
 const goToSales = () => {
   emit('close');
-  router.push('/profile?tab=sales');
+  router.push({ name: 'perfil-vendas' });
 };
 
 // Apenas fechar o modal sem redirecionar

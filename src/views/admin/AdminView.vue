@@ -1,34 +1,37 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
-import { useAuthStore } from '../../stores/authStore';
+import { ref, onMounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
+import { useAuthStore } from '../../stores/authStore';
 import UsersList from '../../components/admin/UsersList.vue';
 import SalesReportDashboard from '../../components/reports/SalesReportDashboard.vue';
 import RaffleManagement from '../../components/admin/RaffleManagement.vue';
 import NumberSystemMaintenance from '../../components/admin/NumberSystemMaintenance.vue';
+import { UserRole } from '../../types/user';
 
-const authStore = useAuthStore();
 const router = useRouter();
-const isLoading = ref(true);
+const authStore = useAuthStore();
 const activeSection = ref<string | null>(null);
+const isLoading = ref(false);
 
-// Verifica permissões de administrador ao montar o componente
-onMounted(async () => {
-  try {
-    if (!authStore.currentUser) {
-      await authStore.fetchUserData();
-    }
-    
-    // Verificação adicional de segurança no componente
-    if (!authStore.isAdmin) {
-      router.push({ name: 'home' });
-    }
-  } finally {
-    isLoading.value = false;
+// Verificar permissões
+const canAccessAdmin = computed(() => {
+  const isAdmin = authStore.currentUser?.role === UserRole.ADMIN || 
+                  authStore.currentUser?.role === UserRole.SECRETARIA || 
+                  authStore.currentUser?.role === UserRole.TESOUREIRO;
+  const isAffiliated = !!authStore.currentUser?.affiliatedTo;
+  
+  return isAdmin || !isAffiliated;
+});
+
+// Verificar permissões ao montar componente
+onMounted(() => {
+  if (!canAccessAdmin.value) {
+    // Corrigido: Usar o nome 'inicio' ao invés de 'home'
+    router.push({ name: 'inicio' });
   }
 });
 
-// Navega entre as seções do painel
+// Função para alternar entre as seções do painel
 const showSection = (section: string) => {
   activeSection.value = activeSection.value === section ? null : section;
 };

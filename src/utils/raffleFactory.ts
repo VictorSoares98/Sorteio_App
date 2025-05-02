@@ -9,6 +9,8 @@ export const createDefaultRaffle = (): RaffleData => {
   const today = new Date();
   const formattedDate = today.toISOString().split('T')[0];
   
+  console.log('[raffleFactory] Criando sorteio padrão com visibilidade universal');
+  
   // Criar novo sorteio com valores padrão atualizados
   return {
     id: '', // ID vazio para novos sorteios
@@ -24,6 +26,6 @@ export const createDefaultRaffle = (): RaffleData => {
     winner: null,
     seller: null,
     createdBy: '', // Adicionar propriedade obrigatória
-    visibility: 'private' // Visibilidade padrão
+    visibility: 'universal' // Garantir que a visibilidade padrão seja 'universal'
   };
 };

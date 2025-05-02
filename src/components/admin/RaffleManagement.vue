@@ -17,6 +17,8 @@ import Alert from '../ui/Alert.vue';
 import Modal from '../ui/Modal.vue';
 import { useRaffleValidation } from '../../composables/useRaffleValidation';
 import RaffleEditor from '../raffle/RaffleEditor.vue';
+import { useAuthStore } from '../../stores/authStore';
+import { UserRole } from '../../types/user';
 
 // Estado local
 const raffles = ref<RaffleData[]>([]);
@@ -56,7 +58,13 @@ const loadRaffles = async () => {
   error.value = null;
   
   try {
-    raffles.value = await fetchAllRaffles();
+    // Obter os dados do usuário atual para filtros
+    const userId = authStore.currentUser?.id || null;
+    const userAffiliationId = authStore.currentUser?.affiliatedToId || null;
+    
+    // Chamar fetchAllRaffles com os parâmetros corretos
+    raffles.value = await fetchAllRaffles(false, userId, userAffiliationId, isAdmin.value);
+    
     console.log(`[RaffleManagement] ${raffles.value.length} sorteios carregados`);
   } catch (err) {
     console.error('[RaffleManagement] Erro ao carregar sorteios:', err);
@@ -94,8 +102,30 @@ const editRaffle = async (raffleId: string) => {
   }
 };
 
+// Verificar se o usuário está afiliado a alguém
+const authStore = useAuthStore();
+const isAffiliated = computed(() => {
+  return !!authStore.currentUser?.affiliatedTo;
+});
+
+// Verificar se o usuário pode criar sorteios (admin OU não afiliado)
+const isAdmin = computed(() => 
+  authStore.currentUser?.role === UserRole.ADMIN || 
+  authStore.currentUser?.role === UserRole.SECRETARIA || 
+  authStore.currentUser?.role === UserRole.TESOUREIRO
+);
+const canCreateRaffles = computed(() => {
+  return isAdmin.value || !isAffiliated.value;
+});
+
 // Criar um novo sorteio
 const createNewRaffle = () => {
+  // Verificar se o usuário pode criar sorteios
+  if (!canCreateRaffles.value) {
+    error.value = "Você não tem permissão para criar sorteios pois está vinculado a um grupo de afiliação.";
+    return;
+  }
+
   // Criar modelo padrão usando a fábrica
   const defaultRaffle = createDefaultRaffle();
   // Remover o ID fixo para que um novo seja gerado
@@ -120,6 +150,22 @@ const saveRaffleChanges = async (updatedRaffle: RaffleData) => {
       return;
     }
     
+    // Log para depuração
+    console.log('[RaffleManagement] Salvando sorteio:', 
+      {
+        id: updatedRaffle.id,
+        title: updatedRaffle.title,
+        createdBy: updatedRaffle.createdBy,
+        visibility: updatedRaffle.visibility || 'não definida'
+      }
+    );
+    
+    // Garantir que a visibilidade esteja definida
+    if (!updatedRaffle.visibility) {
+      updatedRaffle.visibility = 'universal';
+      console.log('[RaffleManagement] Definindo visibilidade padrão como universal');
+    }
+    
     // Importar o serviço dinamicamente para reduzir o tamanho do bundle inicial
     const { saveRaffleData } = await import('../../services/raffle');
     await saveRaffleData(updatedRaffle);
@@ -136,6 +182,11 @@ const saveRaffleChanges = async (updatedRaffle: RaffleData) => {
     
     // Recarregar a lista de sorteios
     await loadRaffles();
+
+    console.log(`[RaffleManagement] Lista de sorteios atualizada: ${raffles.value.length} sorteios`);
+    raffles.value.forEach(raffle => {
+      console.log(`- ${raffle.id}: ${raffle.title} (visibilidade: ${raffle.visibility || 'não definida'})`);
+    });
   } catch (err) {
     console.error('[RaffleManagement] Erro ao salvar sorteio:', err);
     error.value = 'Não foi possível salvar o sorteio.';
@@ -403,26 +454,20 @@ const activeRaffle = computed(() => {
       <!-- Ações -->
       <div class="mb-6 flex justify-between items-center">
         <div>
-          <button 
-            @click="loadRaffles"
-            class="bg-gray-900 hover:bg-black text-white py-2 px-4 rounded transition-colors mr-2"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 inline-block mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
-            Atualizar
-          </button>
+          <h3 class="text-lg font-semibold">Lista de Sorteios</h3>
         </div>
-        
-        <button 
-          @click="createNewRaffle"
-          class="bg-primary hover:bg-primary-dark text-white py-2 px-4 rounded transition-colors"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 inline-block mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-          </svg>
-          Novo Sorteio
-        </button>
+        <div>
+          <button 
+            v-if="canCreateRaffles"
+            @click="createNewRaffle"
+            class="bg-primary hover:bg-primary-dark text-white py-2 px-4 rounded transition-colors"
+          >
+            Criar Novo Sorteio
+          </button>
+          <div v-else-if="isAffiliated" class="text-sm text-yellow-600">
+            Você está em um grupo de afiliação e não pode criar sorteios próprios.
+          </div>
+        </div>
       </div>
       
       <!-- Cards dos sorteios -->
@@ -477,7 +522,7 @@ const activeRaffle = computed(() => {
                 @click="activateRaffle(raffle.id)"
                 class="bg-green-500 hover:bg-green-600 text-white py-1 px-3 rounded text-sm transition-colors flex items-center justify-center"
               >
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 24 24" stroke="currentColor">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
                 Ativar

@@ -36,6 +36,16 @@ const isAdmin = computed(() => {
          authStore.currentUser?.role === UserRole.TESOUREIRO;
 });
 
+// Verificar se o usuário está afiliado a alguém
+const isAffiliated = computed(() => {
+  return !!authStore.currentUser?.affiliatedTo;
+});
+
+// Verificar se o usuário pode criar sorteios (admin OU não afiliado)
+const canCreateRaffles = computed(() => {
+  return isAdmin.value || !isAffiliated.value;
+});
+
 // Obter o raffleId da rota, se houver
 const raffleId = computed(() => route.params.id as string | undefined);
 
@@ -132,7 +142,13 @@ const fetchRaffleDataFromFirestore = async () => {
 // Carregar todos os sorteios disponíveis
 const loadAllRaffles = async () => {
   try {
-    allRaffles.value = await fetchAllRaffles();
+    // Obter os dados do usuário atual para filtros
+    const userId = authStore.currentUser?.id || null;
+    const userAffiliationId = authStore.currentUser?.affiliatedToId || null;
+    
+    // Passar parâmetros corretos para fetchAllRaffles
+    allRaffles.value = await fetchAllRaffles(false, userId, userAffiliationId, isAdmin.value);
+    console.log(`[RaffleView] ${allRaffles.value.length} sorteios carregados`);
   } catch (err) {
     console.error('Erro ao carregar lista de sorteios:', err);
   }
@@ -188,6 +204,18 @@ const saveRaffleChanges = async (updatedData: RaffleData) => {
         console.log(`[RaffleView] Salvando horário: ${updatedData.raffleTime}`);
       }
     }
+
+    // Garantir que a visibilidade esteja definida
+    if (!updatedData.visibility) {
+      updatedData.visibility = 'universal';
+      console.log('[RaffleView] Definindo visibilidade padrão como universal');
+    }
+    
+    // Garantir que o criador esteja definido
+    if (!updatedData.createdBy && authStore.currentUser?.id) {
+      updatedData.createdBy = authStore.currentUser.id;
+      console.log(`[RaffleView] Definindo criador como ${updatedData.createdBy}`);
+    }
     
     // Importar o serviço dinamicamente para reduzir o tamanho do bundle
     const { saveRaffleData } = await import('../../services/raffle');
@@ -204,6 +232,11 @@ const saveRaffleChanges = async (updatedData: RaffleData) => {
     // Mostrar mensagem de sucesso
     successMessage.value = 'Informações do sorteio atualizadas com sucesso!';
     
+    // Recarregar a lista de sorteios após salvar
+    if (isAdmin.value) {
+      await loadAllRaffles();
+    }
+    
     // Esconder a mensagem após 5 segundos
     setTimeout(() => {
       successMessage.value = null;
@@ -218,6 +251,12 @@ const saveRaffleChanges = async (updatedData: RaffleData) => {
 
 // Criar um novo sorteio
 const createNewRaffle = () => {
+  // Verificar se o usuário pode criar sorteios
+  if (!canCreateRaffles.value) {
+    error.value = "Você não tem permissão para criar sorteios pois está vinculado a um grupo de afiliação.";
+    return;
+  }
+
   raffleData.value = createDefaultRaffle();
   // Set the current user as creator if authenticated
   if (authStore.currentUser?.id) {
@@ -335,13 +374,19 @@ onMounted(() => {
       <h3 class="text-lg font-medium text-gray-600 mb-2">Nenhum sorteio encontrado</h3>
       <p class="text-gray-500">No momento não há sorteios disponíveis.</p>
       
-      <div v-if="isAdmin" class="mt-6">
+      <div v-if="canCreateRaffles" class="mt-6">
         <button 
           @click="createNewRaffle"
           class="bg-primary hover:bg-primary-dark text-white py-2 px-4 rounded transition-colors"
         >
           Criar Novo Sorteio
         </button>
+      </div>
+      <div v-else-if="isAffiliated" class="mt-6 max-w-md mx-auto">
+        <p class="text-sm text-yellow-600 bg-yellow-50 p-3 rounded-lg border border-yellow-200">
+          Você está vinculado a um grupo de afiliação e não pode criar sorteios próprios.
+          Apenas os sorteios do seu grupo estarão disponíveis para você.
+        </p>
       </div>
     </div>
   </div>

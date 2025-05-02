@@ -115,11 +115,19 @@ export const fetchRaffleById = async (raffleId: string): Promise<RaffleData | nu
 };
 
 /**
- * Busca todos os sorteios
+ * Busca todos os sorteios com filtros de visibilidade
  * @param activeOnly Se true, retorna apenas sorteios ativos
- * @returns Promise com array de sorteios
+ * @param userId ID do usuário atual
+ * @param userAffiliationId ID da afiliação do usuário (se houver)
+ * @param isAdmin Se o usuário é administrador
+ * @returns Promise com array de sorteios filtrados por visibilidade
  */
-export const fetchAllRaffles = async (activeOnly: boolean = false): Promise<RaffleData[]> => {
+export const fetchAllRaffles = async (
+  activeOnly: boolean = false,
+  userId: string | null = null,
+  userAffiliationId: string | null = null,
+  isAdmin: boolean = false
+): Promise<RaffleData[]> => {
   try {
     const rafflesRef = collection(db, 'raffles');
     const q = query(rafflesRef, orderBy('createdAt', 'desc'));
@@ -127,15 +135,58 @@ export const fetchAllRaffles = async (activeOnly: boolean = false): Promise<Raff
     
     const raffles: RaffleData[] = [];
     
+    console.log(`[raffle] Encontrados ${querySnapshot.size} sorteios no banco de dados`);
+    
     querySnapshot.forEach(doc => {
       const data = doc.data();
       const raffle = { id: doc.id, ...data } as RaffleData;
       
-      if (!activeOnly || raffle.isActive) {
+      // Log para debug
+      console.log(`[raffle] Processando sorteio: ${raffle.id}, título: ${raffle.title}, visibilidade: ${raffle.visibility || 'não definida'}, criador: ${raffle.createdBy || 'não definido'}`);
+      
+      // Filtro por 'active only'
+      if (activeOnly && !raffle.isActive) return;
+      
+      // Se não tiver visibilidade definida, considerar como universal (retrocompatibilidade)
+      if (!raffle.visibility) {
+        raffle.visibility = 'universal';
+      }
+      
+      // Regras de visibilidade:
+      // 1. Sorteios universais são visíveis para todos
+      if (raffle.visibility === 'universal') {
         raffles.push(raffle);
+        return;
+      }
+      
+      // 2. Admins veem seus próprios sorteios e sorteios de sua rede de afiliação
+      if (isAdmin && userId) {
+        if (raffle.createdBy === userId) {
+          raffles.push(raffle);
+          return;
+        }
+      }
+      
+      // 3. Verificação de afiliação
+      if (userAffiliationId && raffle.createdBy === userAffiliationId) {
+        raffles.push(raffle); // Sorteio criado pelo afiliador do usuário
+        return;
+      }
+
+      // 4. Sempre mostrar sorteios próprios para o criador
+      if (userId && raffle.createdBy === userId) {
+        raffles.push(raffle);
+        return;
+      }
+      
+      // 5. Se é admin e não caiu em nenhuma regra anterior, permite ver
+      if (isAdmin) {
+        raffles.push(raffle);
+        return;
       }
     });
     
+    console.log(`[raffle] Retornando ${raffles.length} sorteios após filtragem`);
     return raffles;
   } catch (error) {
     console.error('Erro ao buscar sorteios:', error);
@@ -159,9 +210,10 @@ export const saveRaffleData = async (raffleData: RaffleData): Promise<void> => {
       });
     } else {
       // Criar novo sorteio
+      // Remover o campo ID do objeto antes de enviá-lo para o Firestore
+      const { id, ...raffleDataWithoutId } = raffleData;
       await addDoc(collection(db, 'raffles'), {
-        ...raffleData,
-        id: undefined, // Remover o campo ID para que o Firestore gere um automático
+        ...raffleDataWithoutId,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       });
