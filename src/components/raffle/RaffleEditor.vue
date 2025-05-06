@@ -130,6 +130,27 @@ const visibilityOptions = [
   { value: 'admin', label: 'Administrativo - Visível para administradores' }
 ];
 
+// Estado para controlar visibilidade bloqueada
+const visibilityLocked = ref(false);
+const visibilityLockedMessage = ref('');
+
+// Verificar se o sorteio tem vendas ao montar o componente
+onMounted(async () => {
+  if (props.raffleData.id && props.raffleData.visibility === 'universal') {
+    try {
+      const { checkIfRaffleHasSales } = await import('../../services/raffle');
+      const hasSales = await checkIfRaffleHasSales(props.raffleData.id);
+      
+      if (hasSales) {
+        visibilityLocked.value = true;
+        visibilityLockedMessage.value = 'A visibilidade não pode ser alterada pois este sorteio já possui vendas registradas.';
+      }
+    } catch (error) {
+      console.error('Erro ao verificar vendas do sorteio:', error);
+    }
+  }
+});
+
 // Preparar para salvar alterações
 const prepareToSave = () => {
   // Verificar especificamente se a data está vazia para destacar o campo com erro
@@ -513,12 +534,18 @@ onMounted(() => {
         <select
           v-model="editedData.visibility"
           class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary h-[42px]"
+          :disabled="visibilityLocked"
         >
           <option v-for="option in visibilityOptions" :key="option.value" :value="option.value">
             {{ option.label }}
           </option>
         </select>
-        <p class="text-xs text-gray-500 mt-1">
+        
+        <!-- Mensagem de visibilidade bloqueada -->
+        <p v-if="visibilityLocked" class="text-xs text-orange-600 mt-1">
+          {{ visibilityLockedMessage }}
+        </p>
+        <p v-else class="text-xs text-gray-500 mt-1">
           Defina quem pode ver este sorteio no sistema
         </p>
       </div>
@@ -684,4 +711,3 @@ onMounted(() => {
   border-radius: 0.375rem;
 }
 </style>
-``` 

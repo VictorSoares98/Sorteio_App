@@ -36,6 +36,40 @@ const isAdmin = computed(() => {
          authStore.currentUser?.role === UserRole.TESOUREIRO;
 });
 
+// Verificar se o usuário tem permissão para editar o sorteio atual
+const canEditRaffle = computed(() => {
+  if (!raffleData.value || !authStore.currentUser?.id) return false;
+  
+  // Admins geralmente podem editar
+  if (isAdmin.value) {
+    // Exceto para sorteios universais, que só podem ser editados pelo criador
+    if (raffleData.value.visibility === 'universal') {
+      // Converter explicitamente para string para garantir comparação adequada
+      const creatorId = String(raffleData.value.createdBy || '');
+      const currentUserId = String(authStore.currentUser.id || '');
+      
+      // Log detalhado para debug
+      if (import.meta.env.DEV) {
+        console.log(`[RaffleView] Verificação de permissão para sorteio ${raffleData.value.id}:`, {
+          creatorId,
+          currentUserId,
+          isMatch: creatorId === currentUserId,
+          raffleVisibility: raffleData.value.visibility
+        });
+      }
+      
+      // Verificar se o usuário atual é o criador
+      return creatorId === currentUserId;
+    }
+    
+    // Para outras visibilidades, qualquer admin pode editar
+    return true;
+  }
+  
+  // Usuários não-admin nunca podem editar
+  return false;
+});
+
 // Verificar se o usuário está afiliado a alguém
 const isAffiliated = computed(() => {
   return !!authStore.currentUser?.affiliatedTo;
@@ -220,8 +254,8 @@ const saveRaffleChanges = async (updatedData: RaffleData) => {
     // Importar o serviço dinamicamente para reduzir o tamanho do bundle
     const { saveRaffleData } = await import('../../services/raffle');
     
-    // Salvar no Firestore
-    await saveRaffleData(updatedData);
+    // Salvar no Firestore, passando o ID do usuário atual
+    await saveRaffleData(updatedData, authStore.currentUser?.id);
     
     // Atualizar dados locais
     raffleData.value = { ...updatedData };
@@ -307,7 +341,7 @@ onMounted(() => {
         </button>
 
         <button 
-          v-if="!isEditing && !showRaffleList" 
+          v-if="!isEditing && !showRaffleList && canEditRaffle" 
           @click="toggleEdit" 
           class="bg-primary hover:bg-primary-dark text-white py-2 px-4 rounded transition-colors flex items-center"
         >
@@ -316,6 +350,16 @@ onMounted(() => {
           </svg>
           Editar Informações
         </button>
+        
+        <!-- Adicionar mensagem informativa quando o usuário não pode editar um sorteio universal -->
+        <div v-if="isAdmin && !canEditRaffle && raffleData?.visibility === 'universal'" class="w-full mt-2">
+          <div class="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-2 rounded-md text-sm">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 inline-block mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            Apenas o criador pode editar sorteios com visibilidade universal.
+          </div>
+        </div>
         
         <button 
           v-else-if="isEditing" 
@@ -350,6 +394,9 @@ onMounted(() => {
         class="mb-8"
       />
       
+      <!-- Exibição normal para todos os usuários -->
+      <RaffleDisplay v-else-if="compatibleRaffleData && !showRaffleList" :raffle-data="compatibleRaffleData" />
+      
       <!-- Modo de edição para administradores -->
       <RaffleEditor 
         v-if="isAdmin && isEditing" 
@@ -357,37 +404,26 @@ onMounted(() => {
         @save="saveRaffleChanges" 
       />
       
-      <!-- Exibição normal para todos os usuários -->
-      <RaffleDisplay v-else-if="compatibleRaffleData && !showRaffleList" :raffle-data="compatibleRaffleData" />
-      
-      <!-- Fallback caso compatibleRaffleData seja null (improvável, mas para garantir tipagem correta) -->
-      <div v-else-if="!showRaffleList" class="text-center py-8 bg-gray-50 rounded-lg shadow-sm">
-        <p class="text-gray-500">Ocorreu um erro ao processar os dados do sorteio.</p>
-      </div>
+      <!-- Mensagem de erro caso raffleData seja null (improvável, mas para garantir tipagem correta) -->
+      <p v-else class="text-gray-500">Ocorreu um erro ao processar os dados do sorteio.</p>
     </div>
     
-    <!-- Fallback quando não há dados -->
-    <div v-else class="text-center py-12 bg-gray-50 rounded-lg border border-gray-200">
-      <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mx-auto text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-      </svg>
-      <h3 class="text-lg font-medium text-gray-600 mb-2">Nenhum sorteio encontrado</h3>
-      <p class="text-gray-500">No momento não há sorteios disponíveis.</p>
-      
-      <div v-if="canCreateRaffles" class="mt-6">
-        <button 
-          @click="createNewRaffle"
-          class="bg-primary hover:bg-primary-dark text-white py-2 px-4 rounded transition-colors"
-        >
-          Criar Novo Sorteio
-        </button>
-      </div>
-      <div v-else-if="isAffiliated" class="mt-6 max-w-md mx-auto">
-        <p class="text-sm text-yellow-600 bg-yellow-50 p-3 rounded-lg border border-yellow-200">
-          Você está vinculado a um grupo de afiliação e não pode criar sorteios próprios.
-          Apenas os sorteios do seu grupo estarão disponíveis para você.
-        </p>
-      </div>
+    <!-- Botão para criar novo sorteio (apenas para quem pode criar) -->
+    <div v-if="canCreateRaffles" class="mt-6">
+      <button 
+        @click="createNewRaffle"
+        class="bg-primary hover:bg-primary-dark text-white py-2 px-4 rounded transition-colors"
+      >
+        Criar Novo Sorteio
+      </button>
+    </div>
+    
+    <!-- Mensagem para usuários afiliados que não podem criar sorteios -->
+    <div v-else-if="isAffiliated" class="mt-6 max-w-md mx-auto">
+      <p class="text-sm text-yellow-600 bg-yellow-50 p-3 rounded-lg border border-yellow-200">
+        Você está vinculado a um grupo de afiliação e não pode criar sorteios próprios.
+        Apenas os sorteios do seu grupo estarão disponíveis para você.
+      </p>
     </div>
   </div>
 </template>

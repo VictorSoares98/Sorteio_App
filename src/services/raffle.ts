@@ -1,4 +1,4 @@
-import { doc, getDoc, updateDoc, serverTimestamp, collection, getDocs, addDoc, deleteDoc, query, orderBy, limit } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, serverTimestamp, collection, getDocs, addDoc, deleteDoc, query, orderBy, limit, where } from 'firebase/firestore';
 import { db } from '../firebase';
 
 // Interface para dados do sorteio
@@ -195,13 +195,76 @@ export const fetchAllRaffles = async (
 };
 
 /**
+ * Verifica se um sorteio possui vendas registradas
+ * @param raffleId ID do sorteio
+ * @returns Promise<boolean> indicando se há vendas
+ */
+export const checkIfRaffleHasSales = async (raffleId: string): Promise<boolean> => {
+  try {
+    // Consultar coleção de pedidos (orders) que contenham o ID do sorteio
+    const ordersRef = collection(db, 'orders');
+    const q = query(ordersRef, 
+      where('raffleId', '==', raffleId),
+      // Considerar apenas pedidos não cancelados
+      where('status', 'not-in', ['cancelled'])
+    );
+    
+    const snapshot = await getDocs(q);
+    return !snapshot.empty;
+  } catch (error) {
+    console.error(`Erro ao verificar vendas do sorteio ${raffleId}:`, error);
+    // Em caso de erro, assumir que há vendas (por segurança)
+    return true;
+  }
+};
+
+/**
  * Salva um novo sorteio ou atualiza o existente
  * @param raffleData Dados do sorteio
+ * @param userId ID do usuário que está realizando a operação
  * @returns Promise que resolve quando a operação for concluída
  */
-export const saveRaffleData = async (raffleData: RaffleData): Promise<void> => {
+export const saveRaffleData = async (raffleData: RaffleData, userId?: string): Promise<void> => {
   try {
     if (raffleData.id) {
+      // Verificar permissão para sorteios existentes com visibilidade universal
+      if (raffleData.visibility === 'universal' && userId) {
+        // Buscar dados originais do sorteio
+        const existingRaffle = await fetchRaffleById(raffleData.id);
+        
+        if (existingRaffle) {
+          // Converter explicitamente para string para garantir comparação adequada
+          const existingCreatedBy = String(existingRaffle.createdBy || '');
+          const currentUserId = String(userId || '');
+          
+          // Log detalhado para debug
+          if (process.env.NODE_ENV === 'development') {
+            console.log(`[RaffleService] Verificação de permissão para sorteio ${raffleData.id}:`, {
+              existingCreatedBy,
+              currentUserId,
+              isMatch: existingCreatedBy === currentUserId,
+              raffleVisibility: existingRaffle.visibility
+            });
+          }
+          
+          if (existingRaffle.visibility === 'universal' && existingCreatedBy !== currentUserId) {
+            throw new Error('Apenas o criador pode editar sorteios com visibilidade universal');
+          }
+        }
+        
+        // Se está tentando mudar a visibilidade de universal para outra
+        if (existingRaffle && 
+            existingRaffle.visibility === 'universal' && 
+            raffleData.visibility !== 'universal') {
+          
+          // Verificar se tem vendas
+          const hasSales = await checkIfRaffleHasSales(raffleData.id);
+          if (hasSales) {
+            throw new Error('Não é possível alterar a visibilidade de um sorteio com vendas registradas');
+          }
+        }
+      }
+      
       // Atualizar sorteio existente
       const raffleRef = doc(db, 'raffles', raffleData.id);
       await updateDoc(raffleRef, {
@@ -220,7 +283,7 @@ export const saveRaffleData = async (raffleData: RaffleData): Promise<void> => {
     }
   } catch (error) {
     console.error('Erro ao salvar dados do sorteio:', error);
-    throw new Error('Não foi possível salvar os dados do sorteio.');
+    throw error instanceof Error ? error : new Error('Não foi possível salvar os dados do sorteio.');
   }
 };
 

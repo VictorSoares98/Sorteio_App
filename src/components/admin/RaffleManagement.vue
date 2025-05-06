@@ -118,6 +118,35 @@ const canCreateRaffles = computed(() => {
   return isAdmin.value || !isAffiliated.value;
 });
 
+// Verificar se o usuário pode editar um sorteio específico
+const canEditRaffle = (raffle: RaffleData): boolean => {
+  // Se não for admin, não pode editar
+  if (!isAdmin.value || !authStore.currentUser?.id) return false;
+  
+  // Para sorteios com visibilidade universal, verificar se é o criador
+  if (raffle.visibility === 'universal') {
+    // Converter explicitamente para string para garantir comparação adequada
+    const creatorId = String(raffle.createdBy || '');
+    const currentUserId = String(authStore.currentUser.id || '');
+    
+    // Log detalhado para debug
+    if (import.meta.env.DEV) {
+      console.log(`[RaffleManagement] Verificação de permissão para sorteio ${raffle.id}:`, {
+        creatorId,
+        currentUserId,
+        isMatch: creatorId === currentUserId,
+        raffleVisibility: raffle.visibility
+      });
+    }
+    
+    // Verificar se o usuário atual é o criador
+    return creatorId === currentUserId;
+  }
+  
+  // Para outras visibilidades, qualquer admin pode editar
+  return true;
+};
+
 // Criar um novo sorteio
 const createNewRaffle = () => {
   // Verificar se o usuário pode criar sorteios
@@ -132,7 +161,8 @@ const createNewRaffle = () => {
   selectedRaffle.value = {
     ...defaultRaffle,
     id: '',
-    isActive: false
+    isActive: false,
+    createdBy: authStore.currentUser?.id || '' // Definir o criador explicitamente
   };
   
   showNewRaffleForm.value = true;
@@ -148,6 +178,12 @@ const saveRaffleChanges = async (updatedRaffle: RaffleData) => {
     if (!validationResult.isValid) {
       error.value = validationResult.message ?? null;
       return;
+    }
+    
+    // Garantir que o createdBy esteja definido para sorteios novos
+    if (!updatedRaffle.createdBy && authStore.currentUser?.id) {
+      updatedRaffle.createdBy = authStore.currentUser.id;
+      console.log(`[RaffleManagement] Definindo criador como ${updatedRaffle.createdBy}`);
     }
     
     // Log para depuração
@@ -168,7 +204,7 @@ const saveRaffleChanges = async (updatedRaffle: RaffleData) => {
     
     // Importar o serviço dinamicamente para reduzir o tamanho do bundle inicial
     const { saveRaffleData } = await import('../../services/raffle');
-    await saveRaffleData(updatedRaffle);
+    await saveRaffleData(updatedRaffle, authStore.currentUser?.id);
     
     success.value = 'Sorteio salvo com sucesso!';
     setTimeout(() => {
@@ -203,10 +239,24 @@ const cancelEdit = () => {
 };
 
 // Confirmar exclusão de sorteio
-const confirmDelete = (raffleId: string) => {
-  raffleToDelete.value = raffleId;
-  showDeleteModal.value = true;
-  deleteError.value = null;
+const confirmDelete = async (raffleId: string) => {
+  try {
+    raffleToDelete.value = raffleId;
+    deleteError.value = null;
+    
+    // Buscar os detalhes do sorteio para garantir que selectedRaffle esteja atualizado
+    const raffle = await fetchRaffleById(raffleId);
+    
+    if (raffle) {
+      selectedRaffle.value = raffle;
+      showDeleteModal.value = true;
+    } else {
+      error.value = 'Sorteio não encontrado.';
+    }
+  } catch (err) {
+    console.error(`[RaffleManagement] Erro ao preparar sorteio para exclusão:`, err);
+    error.value = 'Erro ao carregar os dados do sorteio para exclusão.';
+  }
 };
 
 // Executar exclusão de sorteio
@@ -507,6 +557,7 @@ const activeRaffle = computed(() => {
             
             <div class="grid grid-cols-3 gap-2 w-full">
               <button 
+                v-if="canEditRaffle(raffle)"
                 @click="editRaffle(raffle.id)"
                 class="bg-gray-900 hover:bg-black text-white py-1 px-3 rounded text-sm transition-colors flex items-center justify-center"
               >
@@ -515,10 +566,16 @@ const activeRaffle = computed(() => {
                 </svg>
                 Editar
               </button>
+              <span v-else class="bg-gray-100 text-gray-400 py-1 px-3 rounded text-sm flex items-center justify-center">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                </svg>
+                Restrito
+              </span>
               
               <!-- Slot 2: Ativar / Pausar / Retomar -->
               <button 
-                v-if="!raffle.isActive && !raffle.isPaused"
+                v-if="!raffle.isActive && !raffle.isPaused && canEditRaffle(raffle)"
                 @click="activateRaffle(raffle.id)"
                 class="bg-green-500 hover:bg-green-600 text-white py-1 px-3 rounded text-sm transition-colors flex items-center justify-center"
               >
@@ -528,7 +585,7 @@ const activeRaffle = computed(() => {
                 Ativar
               </button>
               <button 
-                v-else-if="raffle.isActive && !raffle.isPaused"
+                v-else-if="raffle.isActive && !raffle.isPaused && canEditRaffle(raffle)"
                 @click="confirmPauseRaffle(raffle.id)"
                 class="bg-yellow-500 hover:bg-yellow-600 text-white py-1 px-3 rounded text-sm transition-colors flex items-center justify-center"
               >
@@ -538,7 +595,7 @@ const activeRaffle = computed(() => {
                 Pausar
               </button>
               <button 
-                v-else-if="raffle.isPaused"
+                v-else-if="raffle.isPaused && canEditRaffle(raffle)"
                 @click="resumeRaffleAction(raffle.id)"
                 class="bg-blue-500 hover:bg-blue-600 text-white py-1 px-3 rounded text-sm transition-colors flex items-center justify-center"
               >
@@ -548,10 +605,16 @@ const activeRaffle = computed(() => {
                 </svg>
                 Retomar
               </button>
+              <span v-else class="bg-gray-100 text-gray-400 py-1 px-3 rounded text-sm flex items-center justify-center">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                </svg>
+                Restrito
+              </span>
               
               <!-- Slot 3: Excluir / Cancelar / Bloqueado -->
               <button 
-                v-if="!raffle.isActive && !raffle.isCompleted"
+                v-if="!raffle.isActive && !raffle.isCompleted && canEditRaffle(raffle)"
                 @click="confirmDelete(raffle.id)"
                 class="bg-red-500 hover:bg-red-600 text-white py-1 px-3 rounded text-sm transition-colors flex items-center justify-center"
               >
@@ -561,7 +624,7 @@ const activeRaffle = computed(() => {
                 Excluir
               </button>
               <button 
-                v-else-if="raffle.isActive"
+                v-else-if="raffle.isActive && canEditRaffle(raffle)"
                 @click="confirmCancelRaffle(raffle.id)"
                 class="bg-orange-500 hover:bg-orange-600 text-white py-1 px-3 rounded text-sm transition-colors flex items-center justify-center"
               >
@@ -570,16 +633,14 @@ const activeRaffle = computed(() => {
                 </svg>
                 Cancelar
               </button>
-              <button 
-                v-else-if="raffle.isCompleted" 
+              <span v-else-if="raffle.isCompleted || !canEditRaffle(raffle)" 
                 class="bg-gray-200 text-gray-400 py-1 px-3 rounded text-sm flex items-center justify-center cursor-not-allowed"
-                disabled
               >
-                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
-                 </svg>
-                 Bloqueado
-              </button>
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                </svg>
+                Bloqueado
+              </span>
             </div>
           </div>
         </Card>
