@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue';
-import { useRouter } from 'vue-router';
+import { ref, onMounted, computed, watch } from 'vue';
+import { useRouter, useRoute } from 'vue-router';
 import { useAuthStore } from '../../stores/authStore';
 import UsersList from '../../components/admin/UsersList.vue';
 import SalesReportDashboard from '../../components/reports/SalesReportDashboard.vue';
@@ -9,6 +9,7 @@ import NumberSystemMaintenance from '../../components/admin/NumberSystemMaintena
 import { UserRole } from '../../types/user';
 
 const router = useRouter();
+const route = useRoute();
 const authStore = useAuthStore();
 const activeSection = ref<string | null>(null);
 const isLoading = ref(false);
@@ -23,18 +24,58 @@ const canAccessAdmin = computed(() => {
   return isAdmin || !isAffiliated;
 });
 
-// Verificar permissões ao montar componente
-onMounted(() => {
-  if (!canAccessAdmin.value) {
-    // Corrigido: Usar o nome 'inicio' ao invés de 'home'
-    router.push({ name: 'inicio' });
-  }
-});
+// Mapeamento entre rotas e seções
+const routeToSectionMap = {
+  'painel-usuarios': 'users',
+  'painel-relatorios': 'reports',
+  'painel-sorteios': 'raffles',
+  'painel-configuracoes': 'settings',
+  'painel': null // Menu principal
+};
 
 // Função para alternar entre as seções do painel
 const showSection = (section: string) => {
-  activeSection.value = activeSection.value === section ? null : section;
+  if (activeSection.value === section) {
+    // Se já estamos nesta seção, voltar ao menu principal
+    router.push({ name: 'painel' });
+  } else {
+    // Caso contrário, navegar para a seção específica
+    const routeName = getRouteNameForSection(section);
+    if (routeName) {
+      router.push({ name: routeName });
+    }
+  }
 };
+
+// Obter nome da rota correspondente à seção
+const getRouteNameForSection = (section: string): string | null => {
+  switch (section) {
+    case 'users': return 'painel-usuarios';
+    case 'reports': return 'painel-relatorios';
+    case 'raffles': return 'painel-sorteios';
+    case 'settings': return 'painel-configuracoes';
+    default: return 'painel';
+  }
+};
+
+// Obter seção correspondente ao nome da rota
+const getSectionForRouteName = (routeName: string): string | null => {
+  return routeToSectionMap[routeName as keyof typeof routeToSectionMap] || null;
+};
+
+// Atualizar a seção ativa quando a rota mudar
+watch(() => route.name, (newRouteName) => {
+  if (typeof newRouteName === 'string') {
+    activeSection.value = getSectionForRouteName(newRouteName);
+  }
+}, { immediate: true });
+
+// Verificar permissões ao montar componente
+onMounted(() => {
+  if (!canAccessAdmin.value) {
+    router.push({ name: 'inicio' });
+  }
+});
 </script>
 
 <template>
@@ -50,7 +91,7 @@ const showSection = (section: string) => {
       <div v-if="activeSection === 'users'">
         <div class="mb-4">
           <button 
-            @click="showSection('menu')" 
+            @click="router.push({ name: 'painel' })" 
             class="flex items-center text-primary hover:text-primary-dark"
           >
             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">
@@ -66,7 +107,7 @@ const showSection = (section: string) => {
       <div v-else-if="activeSection === 'reports'">
         <div class="mb-4">
           <button 
-            @click="showSection('menu')" 
+            @click="router.push({ name: 'painel' })" 
             class="flex items-center text-primary hover:text-primary-dark"
           >
             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">
@@ -82,7 +123,7 @@ const showSection = (section: string) => {
       <div v-else-if="activeSection === 'raffles'">
         <div class="mb-4">
           <button 
-            @click="showSection('menu')" 
+            @click="router.push({ name: 'painel' })" 
             class="flex items-center text-primary hover:text-primary-dark"
           >
             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">
@@ -98,7 +139,7 @@ const showSection = (section: string) => {
       <div v-else-if="activeSection === 'settings'">
         <div class="mb-4">
           <button 
-            @click="showSection('menu')" 
+            @click="router.push({ name: 'painel' })" 
             class="flex items-center text-primary hover:text-primary-dark"
           >
             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">

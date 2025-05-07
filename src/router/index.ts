@@ -116,9 +116,40 @@ const routes: RouteRecordRaw[] = [
   // Rotas de Administração
   {
     path: '/painel',
-    name: 'painel',
     component: () => import(/* webpackChunkName: "admin" */ '../views/admin/AdminView.vue'),
-    meta: { requiresAuth: true, requiresAdmin: true, title: 'Administração' }
+    meta: { requiresAuth: true, requiresAdmin: true },
+    children: [
+      {
+        path: '',
+        name: 'painel',
+        component: () => import('../views/admin/AdminView.vue'),
+        meta: { title: 'Administração - Menu Principal' }
+      },
+      {
+        path: 'usuarios',
+        name: 'painel-usuarios',
+        component: () => import('../views/admin/AdminView.vue'),
+        meta: { title: 'Administração - Gerenciamento de Usuários' }
+      },
+      {
+        path: 'relatorios',
+        name: 'painel-relatorios',
+        component: () => import('../views/admin/AdminView.vue'),
+        meta: { title: 'Administração - Relatórios de Vendas' }
+      },
+      {
+        path: 'sorteios',
+        name: 'painel-sorteios',
+        component: () => import('../views/admin/AdminView.vue'),
+        meta: { title: 'Administração - Gerenciar Sorteios' }
+      },
+      {
+        path: 'configuracoes',
+        name: 'painel-configuracoes',
+        component: () => import('../views/admin/AdminView.vue'),
+        meta: { title: 'Administração - Configurações' }
+      }
+    ]
   },
 
   // Rota do Dashboard com proteção
