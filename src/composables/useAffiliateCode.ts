@@ -84,12 +84,15 @@ export function useAffiliateCode() {
   };
   
   // Verificar se um código é válido com base em sua data de expiração
-  const isCodeValid = computed(() => {
+  const isCodeValid = computed<boolean>(() => {
     if (!currentUser.value?.affiliateCode) return false;
-    if (!currentUser.value.affiliateCodeExpiry) return true;
+    
+    // Verificar se há expiração (usando type assertion segura)
+    const user = currentUser.value as any;
+    if (!user.affiliateCodeExpiry) return true;
     
     // Converter Timestamp para Date
-    const expiryTimestamp = currentUser.value.affiliateCodeExpiry;
+    const expiryTimestamp = user.affiliateCodeExpiry;
     let expiryDate: Date;
     
     if (expiryTimestamp && typeof expiryTimestamp === 'object' && 'toDate' in expiryTimestamp) {
@@ -101,17 +104,19 @@ export function useAffiliateCode() {
       return false;
     }
     
-    return expiryDate > new Date();
-  });
-  
+    // Comparar com a data atual e retornar o resultado
+    const now = new Date();
+    return expiryDate > now;
+    });    
   // Calcular tempo restante para expiração do código
   const timeRemaining = computed(() => {
-    if (!currentUser.value?.affiliateCode || !currentUser.value.affiliateCodeExpiry) {
+    const user = currentUser.value as any;
+    if (!user?.affiliateCode || !user.affiliateCodeExpiry) {
       return 'Código permanente';
     }
     
     // Converter o timestamp para Date
-    const expiryTimestamp = currentUser.value.affiliateCodeExpiry;
+    const expiryTimestamp = user.affiliateCodeExpiry;
     let expiryDate: Date;
     
     if (expiryTimestamp && typeof expiryTimestamp === 'object' && 'toDate' in expiryTimestamp) {
