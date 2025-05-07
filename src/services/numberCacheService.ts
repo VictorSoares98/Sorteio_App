@@ -67,9 +67,9 @@ export const useNumberStore = defineStore('numbers', () => {
     const counts = await getNumbersStatusCount();
     
     statsCache.value = {
-      available: counts[NUMBER_STATUS.AVAILABLE] || 0,
-      pending: counts[NUMBER_STATUS.PENDING] || 0,
-      sold: counts[NUMBER_STATUS.SOLD] || 0,
+      available: counts.availableCount || 0,
+      pending: counts.reservedCount || 0,
+      sold: counts.soldCount || 0,
       timestamp: now
     };
     
