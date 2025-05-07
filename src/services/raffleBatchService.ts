@@ -247,3 +247,7 @@ export const getNumbersStatusCount = async (raffleId?: string) => {
     throw error;
   }
 };
+
+export function markNumbersAsSold(generatedNumbers: string[], arg1: { orderId: string; buyerId: string; buyerName: string; sellerId: string; }) {
+  throw new Error('Function not implemented.');
+}
