@@ -430,12 +430,12 @@ export const affiliateToUser = async (
 
     console.log('[ProfileService] Afiliação concluída com sucesso');
     return {
-      success: true,
-      message: 'Afiliação realizada com sucesso!',
-      affiliatedUser: {
-        id: targetUserId,
-        displayName: targetUserData.displayName
-      }
+    success: true,
+    message: 'Afiliação realizada com sucesso!',
+    affiliatedUser: {
+      id: targetUserId,
+      displayName: targetUserData.displayName ?? 'Usuário'
+    }
     };
   } catch (error) {
     console.error('[ProfileService] Erro ao afiliar usuário:', error);

@@ -17,6 +17,7 @@ export interface User {
   createdAt?: Date;
   lastLogin?: Date;
   affiliateCode?: string;
+  affiliateCodeExpiry?: FirebaseTimestamp | Date | null; // Adicionando propriedade para expiração do código de afiliado
   affiliates?: string[];
   affiliatedTo?: string;
   affiliatedToId?: string;
