@@ -14,11 +14,11 @@ import OrderFormFields from './OrderFormFields.vue';
 // Form data
 const formData = ref<OrderFormData>({
   buyerName: '',
-  paymentMethod: undefined, // Inicialmente nenhum método selecionado
+  paymentMethod: undefined,
   contactNumber: '',
   addressOrCongregation: '',
   observations: '',
-  numTickets: 0 // Iniciar com zero para não mostrar valor no input
+  numTickets: 0
 });
 
 // Estados do formulário
@@ -81,7 +81,7 @@ const updateFormData = (newFormData: OrderFormData) => {
   formData.value = newFormData;
 };
 
-// Processa o envio do formulário otimizado
+// Processa o envio do formulário
 const submitForm = async () => {
   // Bloquear múltiplos cliques imediatamente
   if (buttonDisabled.value || isSubmitting.value || isGenerating.value) return;
@@ -133,7 +133,7 @@ const submitForm = async () => {
     
     // 3. Construir objeto do pedido localmente sem busca adicional
     const username = authStore.currentUser.username || 
-                   authStore.currentUser.displayName.toLowerCase().replace(/\s+/g, "_");
+                   authStore.currentUser.displayName?.toLowerCase().replace(/\s+/g, "_") || "";
     
     // Usar dados que já temos em memória para o modal
     createdOrder.value = {
@@ -229,7 +229,7 @@ const resetForm = () => {
     </div>
   </form>
   
-  <!-- Modal de confirmação simplificado -->
+  <!-- Modal de confirmação -->
   <ConfirmationModal
     v-if="showConfirmation"
     :show="showConfirmation"
