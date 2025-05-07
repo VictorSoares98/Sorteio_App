@@ -32,7 +32,7 @@ const fetchSystemStats = async () => {
     
     if (isBatchInitialized) {
       // Buscar contagens por status usando o sistema de batches
-      const statusCounts = await getNumbersStatusCount();
+      const statusCounts = await getNumbersStatusCount() as Record<string, number>;
       availableCount.value = statusCounts[NUMBER_STATUS.AVAILABLE] || 0;
       pendingCount.value = statusCounts[NUMBER_STATUS.PENDING] || 0;
       soldCount.value = statusCounts[NUMBER_STATUS.SOLD] || 0;
