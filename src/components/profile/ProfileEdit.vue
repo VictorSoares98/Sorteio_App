@@ -37,7 +37,7 @@ const isEditMode = ref(false); // Novo estado para controlar o modo de edição
 const fileInputRef = ref<HTMLInputElement | null>(null);
 
 // Função para gerar avatar padrão baseado no nome do usuário
-const getDefaultAvatar = (name: string) => {
+const getDefaultAvatar = (name: string | undefined) => {
   // Usando Dicebear como serviço de avatar padrão
   const seed = encodeURIComponent(name || 'user');
   return `https://api.dicebear.com/7.x/initials/svg?seed=${seed}&backgroundColor=FF8C00`;
