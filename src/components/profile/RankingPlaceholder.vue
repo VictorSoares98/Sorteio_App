@@ -24,7 +24,7 @@ const affiliatorInfo = computed(() => {
     return {
       name: currentUser.affiliatedToInfo.displayName,
       email: currentUser.affiliatedToInfo.email,
-      congregation: currentUser.affiliatedToInfo.congregation || '',
+      congregation: (currentUser.affiliatedToInfo as any).congregation || '',
       photoURL: currentUser.affiliatedToInfo.photoURL || ''
       // Removida a propriedade providerData que não existe no tipo
     };
