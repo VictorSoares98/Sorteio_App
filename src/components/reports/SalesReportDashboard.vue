@@ -250,6 +250,7 @@ onMounted(() => {
           subtitle="bilhetes vendidos"
           variant="primary"
           :trend="reportData.growth.salesGrowth"
+          :trendVariant="growthVariant(reportData.growth.salesGrowth)"
         />
         
         <StatCard 
@@ -258,6 +259,7 @@ onMounted(() => {
           subtitle="pedidos realizados"
           variant="secondary"
           :trend="reportData.growth.ordersGrowth"
+          :trendVariant="growthVariant(reportData.growth.ordersGrowth)"
         />
         
         <StatCard 
@@ -266,6 +268,7 @@ onMounted(() => {
           subtitle="compradores únicos"
           variant="success"
           :trend="reportData.growth.buyersGrowth"
+          :trendVariant="growthVariant(reportData.growth.buyersGrowth)"
         />
         
         <StatCard 
@@ -274,6 +277,7 @@ onMounted(() => {
           subtitle="vendedores ativos"
           variant="info"
           :trend="reportData.growth.sellersGrowth"
+          :trendVariant="growthVariant(reportData.growth.sellersGrowth)"
         />
       </div>
       
