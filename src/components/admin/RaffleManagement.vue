@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { 
   fetchAllRaffles, 
   fetchRaffleById, 
@@ -19,6 +19,8 @@ import { useRaffleValidation } from '../../composables/useRaffleValidation';
 import RaffleEditor from '../raffle/RaffleEditor.vue';
 import { useAuthStore } from '../../stores/authStore';
 import { UserRole } from '../../types/user';
+import { collection, onSnapshot, query } from 'firebase/firestore';
+import { db } from '../../firebase';
 
 // Estado local
 const raffles = ref<RaffleData[]>([]);
@@ -47,10 +49,8 @@ const deleteError = ref<string | null>(null);
 // Pegar os métodos do composable de validação
 const { validateForm } = useRaffleValidation();
 
-// Buscar todos os sorteios ao montar o componente
-onMounted(async () => {
-  await loadRaffles();
-});
+// Referência para unsubscribe do listener em tempo real
+const unsubscribeRafflesListener = ref<(() => void) | null>(null);
 
 // Função para carregar todos os sorteios
 const loadRaffles = async () => {
@@ -65,6 +65,9 @@ const loadRaffles = async () => {
     // Chamar fetchAllRaffles com os parâmetros corretos
     raffles.value = await fetchAllRaffles(false, userId, userAffiliationId, isAdmin.value);
     
+    // Configurar listener em tempo real apenas após carregamento inicial
+    setupRealtimeRafflesListener();
+    
     console.log(`[RaffleManagement] ${raffles.value.length} sorteios carregados`);
   } catch (err) {
     console.error('[RaffleManagement] Erro ao carregar sorteios:', err);
@@ -73,6 +76,54 @@ const loadRaffles = async () => {
     loading.value = false;
   }
 };
+
+// Nova função para configurar listener em tempo real para sorteios
+const setupRealtimeRafflesListener = () => {
+  // Remover listener anterior se existir
+  if (unsubscribeRafflesListener.value) {
+    unsubscribeRafflesListener.value();
+    unsubscribeRafflesListener.value = null;
+  }
+  
+  try {
+    // Criar query para a coleção de sorteios
+    const rafflesRef = collection(db, 'raffles');
+    const rafflesQuery = query(rafflesRef);
+    
+    console.log('[RaffleManagement] Configurando listener em tempo real para sorteios');
+    
+    unsubscribeRafflesListener.value = onSnapshot(rafflesQuery, async (snapshot) => {
+      // Verificar se há mudanças relevantes
+      if (snapshot.docChanges().length > 0) {
+        console.log('[RaffleManagement] Detectadas alterações em sorteios, atualizando lista');
+        
+        // Recarregar sorteios completos, respeitando as permissões
+        const userId = authStore.currentUser?.id || null;
+        const userAffiliationId = authStore.currentUser?.affiliatedToId || null;
+        
+        raffles.value = await fetchAllRaffles(false, userId, userAffiliationId, isAdmin.value);
+      }
+    }, (error) => {
+      console.error('[RaffleManagement] Erro no listener de sorteios:', error);
+    });
+  } catch (err) {
+    console.error('[RaffleManagement] Erro ao configurar listener de sorteios:', err);
+  }
+};
+
+// Buscar todos os sorteios ao montar o componente
+onMounted(async () => {
+  await loadRaffles();
+});
+
+// Adicionar hook de desmontagem para limpar listener
+onUnmounted(() => {
+  if (unsubscribeRafflesListener.value) {
+    console.log('[RaffleManagement] Removendo listener de sorteios');
+    unsubscribeRafflesListener.value();
+    unsubscribeRafflesListener.value = null;
+  }
+});
 
 // Formatar data para exibição
 const formatDate = (dateString: string) => {

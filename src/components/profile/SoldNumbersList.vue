@@ -1,12 +1,17 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, computed, onUnmounted } from 'vue';
 import { useOrderStore } from '../../stores/orderStore';
 import Card from '../ui/Card.vue';
 import { formatDate } from '../../utils/formatters';
+import { collection, query, where, onSnapshot, orderBy } from 'firebase/firestore';
+import { db } from '../../firebase';
+import { useAuthStore } from '../../stores/authStore';
 
 const orderStore = useOrderStore();
+const authStore = useAuthStore();
 const isLoading = ref(true);
 const debugMode = ref(false);
+const unsubscribeNumbersListener = ref<(() => void) | null>(null);
 
 // Lista de números ordenados por data de venda (mais recentes primeiro)
 const soldNumbers = computed(() => {
@@ -55,33 +60,73 @@ const filteredNumbers = computed(() => {
   );
 });
 
-// Toggle modo de depuração
+// Função para recarregar pedidos
+const reloadOrders = async () => {
+  isLoading.value = true;
+  await orderStore.fetchUserOrders();
+  isLoading.value = false;
+};
+
+// Alternar modo de depuração
 const toggleDebugMode = () => {
   debugMode.value = !debugMode.value;
 };
 
-// Forçar recarga dos pedidos
-const reloadOrders = async () => {
-  isLoading.value = true;
+// Nova função para configurar listener em tempo real
+const setupRealtimeNumbersListener = () => {
+  // Verificar se o usuário está autenticado
+  if (!authStore.currentUser?.id) {
+    console.warn('[SoldNumbersList] Usuário não autenticado, não é possível configurar listener');
+    return;
+  }
+
+  const userId = authStore.currentUser.id;
+  
   try {
-    await orderStore.fetchUserOrders();
-    console.log(`[SoldNumbersList] Recarregados ${orderStore.userOrders.length} pedidos`);
-  } catch (error) {
-    console.error('[SoldNumbersList] Erro ao recarregar pedidos:', error);
-  } finally {
-    isLoading.value = false;
+    // Remover listener anterior se existir
+    if (unsubscribeNumbersListener.value) {
+      unsubscribeNumbersListener.value();
+      unsubscribeNumbersListener.value = null;
+    }
+    
+    console.log('[SoldNumbersList] Configurando listener em tempo real para números vendidos');
+    
+    // Query para pedidos onde o usuário é vendedor (usando originalSellerId)
+    const ordersQuery = query(
+      collection(db, 'orders'),
+      where('originalSellerId', '==', userId),
+      orderBy('createdAt', 'desc')
+    );
+    
+    unsubscribeNumbersListener.value = onSnapshot(ordersQuery, (snapshot) => {
+      const hasChanges = snapshot.docChanges().some(
+        change => change.type === 'added' || change.type === 'modified'
+      );
+      
+      if (hasChanges) {
+        console.log('[SoldNumbersList] Detectadas alterações em pedidos, atualizando');
+        reloadOrders();
+      }
+    }, (error) => {
+      console.error('[SoldNumbersList] Erro no listener de pedidos:', error);
+    });
+  } catch (err) {
+    console.error('[SoldNumbersList] Erro ao configurar listener em tempo real:', err);
   }
 };
 
 onMounted(async () => {
-  console.log('[SoldNumbersList] Componente montado');
-  if (orderStore.orders.length === 0) {
-    console.log('[SoldNumbersList] Nenhum pedido encontrado, carregando...');
-    await orderStore.fetchUserOrders();
-  } else {
-    console.log(`[SoldNumbersList] ${orderStore.orders.length} pedidos já carregados`);
-  }
+  await orderStore.fetchUserOrders();
+  setupRealtimeNumbersListener();
   isLoading.value = false;
+});
+
+onUnmounted(() => {
+  if (unsubscribeNumbersListener.value) {
+    console.log('[SoldNumbersList] Removendo listener de números vendidos');
+    unsubscribeNumbersListener.value();
+    unsubscribeNumbersListener.value = null;
+  }
 });
 </script>
 

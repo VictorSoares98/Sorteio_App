@@ -7,6 +7,8 @@ import Card from '../ui/Card.vue';
 import Button from '../ui/Button.vue';
 import Alert from '../ui/Alert.vue';
 import ResetSalesButton from './ResetSalesButton.vue';
+import { collection, query, onSnapshot, where } from 'firebase/firestore';
+import { db } from '../../firebase';
 
 const availableCount = ref<number>(0);
 const pendingCount = ref<number>(0);
@@ -19,6 +21,7 @@ const error = ref<string | null>(null);
 const success = ref<string | null>(null);
 const usingBatchSystem = ref<boolean>(false);
 const cleanupInterval = ref<number | null>(null);
+const unsubscribeRealtimeStats = ref<(() => void) | null>(null);
 
 // Obter estatísticas do sistema
 const fetchSystemStats = async () => {
@@ -36,6 +39,9 @@ const fetchSystemStats = async () => {
       availableCount.value = statusCounts[NUMBER_STATUS.AVAILABLE] || 0;
       pendingCount.value = statusCounts[NUMBER_STATUS.PENDING] || 0;
       soldCount.value = statusCounts[NUMBER_STATUS.SOLD] || 0;
+
+      // Configurar listener para atualizações em tempo real
+      setupRealtimeStatsListener();
     } else {
       // Usar método legado
       availableCount.value = await raffleService.getAvailableNumbersCount();
@@ -144,6 +150,54 @@ const setupAutomaticCleanup = () => {
   }, 5 * 60 * 1000); // 5 minutos
 };
 
+// Configurar listener em tempo real de estatísticas
+const setupRealtimeStatsListener = async () => {
+  // Cancelar listener anterior se existir
+  if (unsubscribeRealtimeStats.value) {
+    unsubscribeRealtimeStats.value();
+    unsubscribeRealtimeStats.value = null;
+  }
+  
+  // Só configurar listener se estiver usando o sistema de batches
+  if (!usingBatchSystem.value) return;
+  
+  try {
+    // Query para o sistema de batches
+    const batchesRef = collection(db, 'numberBatches');
+    let batchesQuery = query(batchesRef, where('raffleId', '==', null));
+    
+    console.log('[NumberSystemMaintenance] Configurando listener de estatísticas em tempo real');
+    
+    unsubscribeRealtimeStats.value = onSnapshot(batchesQuery, (snapshot) => {
+      console.log('[NumberSystemMaintenance] Atualizando estatísticas em tempo real');
+      
+      // Recalcular totais
+      let available = 0;
+      let sold = 0;
+      let reserved = 0;
+      
+      snapshot.docs.forEach(batchDoc => {
+        // Ignorar documento de metadados
+        if (batchDoc.id === 'metadata') return;
+        
+        const batchData = batchDoc.data();
+        available += batchData.availableCount || 0;
+        sold += batchData.soldCount || 0;
+        reserved += batchData.reservedCount || 0;
+      });
+      
+      // Atualizar refs com os novos valores
+      availableCount.value = available;
+      soldCount.value = sold;
+      pendingCount.value = reserved;
+    }, (error) => {
+      console.error('[NumberSystemMaintenance] Erro no listener de estatísticas:', error);
+    });
+  } catch (err) {
+    console.error('[NumberSystemMaintenance] Erro ao configurar listener de estatísticas:', err);
+  }
+};
+
 // Lifecycle hooks
 onMounted(() => {
   fetchSystemStats();
@@ -153,6 +207,13 @@ onMounted(() => {
 onUnmounted(() => {
   if (cleanupInterval.value !== null) {
     clearInterval(cleanupInterval.value);
+  }
+  
+  // Remover listener de estatísticas em tempo real
+  if (unsubscribeRealtimeStats.value) {
+    console.log('[NumberSystemMaintenance] Removendo listener de estatísticas em tempo real');
+    unsubscribeRealtimeStats.value();
+    unsubscribeRealtimeStats.value = null;
   }
 });
 </script>

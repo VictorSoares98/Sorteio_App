@@ -402,7 +402,7 @@ export const getAvailableNumbersCount = async (): Promise<number> => {
     // Se o sistema de batches estiver inicializado, usar o método otimizado
     if (await isBatchSystemInitialized()) {
       const statusCounts = await batchService.getNumbersStatusCount();
-      return statusCounts[NUMBER_STATUS.AVAILABLE] || 0;
+      return statusCounts.availableCount || 0;
     }
     
     // Implementação legada (mantida para compatibilidade)

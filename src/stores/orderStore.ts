@@ -228,7 +228,7 @@ export const useOrderStore = defineStore('order', () => {
     
     try {
       // Verificar se o username está disponível
-      const username = authStore.currentUser.username || authStore.currentUser.displayName.toLowerCase().replace(/\s+/g, "_");
+      const username = authStore.currentUser.username || authStore.currentUser.displayName?.toLowerCase().replace(/\s+/g, "_") || `user_${Date.now()}`;
       
       // Garantir que paymentMethod está definido
       if (orderData.paymentMethod === undefined) {
