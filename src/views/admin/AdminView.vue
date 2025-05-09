@@ -5,7 +5,7 @@ import { useAuthStore } from '../../stores/authStore';
 import UsersList from '../../components/admin/UsersList.vue';
 import SalesReportDashboard from '../../components/reports/SalesReportDashboard.vue';
 import RaffleManagement from '../../components/admin/RaffleManagement.vue';
-import NumberSystemMaintenance from '../../components/admin/NumberSystemMaintenance.vue';
+import AppSettings from '../../components/admin/AppSettings.vue';
 import { UserRole } from '../../types/user';
 
 const router = useRouter();
@@ -148,7 +148,7 @@ onMounted(() => {
             Voltar ao Menu
           </button>
         </div>
-        <NumberSystemMaintenance />
+        <AppSettings />
       </div>
       
       <!-- Menu principal do painel administrativo -->
