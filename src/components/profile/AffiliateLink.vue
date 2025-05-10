@@ -580,7 +580,7 @@ const confirmAffiliation = async () => {
     // Normalizar o código para maiúsculas antes de enviar
     const normalizedTarget = isEmailTarget 
       ? target 
-      : normalizeAffiliateCode(target);
+      : normalizeAffiliateCode(target || '');
     
     const response = await affiliateToUser(normalizedTarget, isEmailTarget);
     
@@ -1269,7 +1269,7 @@ onUnmounted(() => {
                 <img 
                   :src="user.photoURL && user.photoURL.trim() !== '' 
                     ? user.photoURL 
-                    : getDefaultAvatar(user.displayName)" 
+                    : getDefaultAvatar(user.displayName || 'user')" 
                   :alt="user.displayName"
                   class="w-12 h-12 rounded-full object-cover border border-gray-200"
                 />

@@ -19,7 +19,23 @@ export interface ExportConfig {
 export function formatDateForExport(date: Date | string | number, dateFormat: string): string {
   if (!date) return '';
   
-  const dateObj = date instanceof Date ? date : new Date(date);
+  // Garantir que a conversão para Date seja feita corretamente
+  let dateObj: Date;
+  
+  if (date instanceof Date) {
+    dateObj = date;
+  } else if (date === null || date === undefined) {
+    dateObj = new Date(); // Valor padrão se date for nulo ou indefinido
+  } else {
+    try {
+      dateObj = new Date(date);
+      if (isNaN(dateObj.getTime())) {
+        dateObj = new Date(); // Usar atual se date for inválido
+      }
+    } catch {
+      dateObj = new Date(); // Em caso de erro, usar data atual
+    }
+  }
   
   try {
     // Mapear formatos para o date-fns

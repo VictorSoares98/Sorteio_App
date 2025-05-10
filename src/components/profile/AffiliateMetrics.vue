@@ -126,7 +126,7 @@ const selectAffiliate = (id: string) => {
                     <img 
                       :src="affiliate.photoURL && affiliate.photoURL.trim() !== '' 
                         ? affiliate.photoURL 
-                        : getDefaultAvatar(affiliate.displayName)" 
+                        : getDefaultAvatar(affiliate.displayName || '')" 
                       :alt="affiliate.displayName"
                       class="w-12 h-12 rounded-full object-cover border-2"
                       :class="selectedAffiliateId === affiliate.id ? 'border-primary' : 'border-gray-200'"
@@ -181,7 +181,7 @@ const selectAffiliate = (id: string) => {
                   <img 
                     :src="selectedAffiliate.photoURL && selectedAffiliate.photoURL.trim() !== '' 
                       ? selectedAffiliate.photoURL 
-                      : getDefaultAvatar(selectedAffiliate.displayName)" 
+                      : getDefaultAvatar(selectedAffiliate.displayName || '')" 
                     :alt="selectedAffiliate.displayName"
                     class="w-16 h-16 rounded-full object-cover border-2 border-white"
                   />
@@ -195,7 +195,7 @@ const selectAffiliate = (id: string) => {
                       {{ selectedAffiliate.congregation || 'Sem congregação' }}
                     </span>
                     <span class="px-2 py-0.5 text-xs rounded-full bg-white bg-opacity-20 backdrop-filter backdrop-blur-sm">
-                      Afiliado desde {{ new Date(selectedAffiliate.createdAt).toLocaleDateString('pt-BR') }}
+                      Afiliado desde {{ new Date(selectedAffiliate.createdAt || Date.now()).toLocaleDateString('pt-BR') }}
                     </span>
                   </div>
                 </div>

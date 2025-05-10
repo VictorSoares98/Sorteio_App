@@ -52,9 +52,13 @@ const requirePasswordChange = computed({
 // Última alteração de senha
 const lastPasswordChange = computed(() => {
   const settings = userSettingsStore.userSettings[props.userId];
-  return settings?.security.lastPasswordChange 
-    ? new Date(settings.security.lastPasswordChange).toLocaleDateString('pt-BR')
-    : 'Nunca';
+  if (!settings?.security.lastPasswordChange) return 'Nunca';
+  
+  try {
+    return new Date(settings.security.lastPasswordChange).toLocaleDateString('pt-BR');
+  } catch (e) {
+    return 'Data inválida';
+  }
 });
 
 // Timeout de inatividade

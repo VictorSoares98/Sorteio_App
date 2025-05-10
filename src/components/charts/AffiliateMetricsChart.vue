@@ -49,7 +49,7 @@ const prepareChartData = () => {
   const labels = [];
   const now = new Date();
   for (let i = 5; i >= 0; i--) {
-    const d = new Date();
+    const d = new Date(now);
     d.setMonth(now.getMonth() - i);
     labels.push(d.toLocaleDateString('pt-BR', { month: 'short' }));
   }
