@@ -8,6 +8,7 @@ import RaffleDisplay from '../../components/raffle/RaffleDisplay.vue';
 import { UserRole } from '../../types/user';
 import { fetchRaffleData, fetchRaffleById, fetchAllRaffles, setActiveRaffle, type RaffleData } from '../../services/raffle';
 import { createDefaultRaffle } from '../../utils/raffleFactory';
+import Card from '../../components/ui/Card.vue';
 
 // Importação condicional do editor apenas quando necessário (para administradores)
 const RaffleEditor = defineAsyncComponent(() => 
@@ -395,7 +396,7 @@ onMounted(() => {
       />
       
       <!-- Exibição normal para todos os usuários -->
-      <RaffleDisplay v-else-if="compatibleRaffleData && !showRaffleList" :raffle-data="compatibleRaffleData" />
+      <RaffleDisplay v-else-if="compatibleRaffleData && !showRaffleList && !isEditing" :raffle-data="compatibleRaffleData" />
       
       <!-- Modo de edição para administradores -->
       <RaffleEditor 
@@ -406,6 +407,48 @@ onMounted(() => {
       
       <!-- Mensagem de erro caso raffleData seja null (improvável, mas para garantir tipagem correta) -->
       <p v-else class="text-gray-500">Ocorreu um erro ao processar os dados do sorteio.</p>
+    </div>
+    
+    <!-- Mensagem quando não houver sorteios -->
+    <div v-else class="max-w-md mx-auto">
+      <Card class="p-8 text-center">
+        <div class="flex flex-col items-center">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <h2 class="text-xl font-semibold text-gray-700 mb-2">Nenhum sorteio ativo no momento</h2>
+          <p class="text-gray-600 mb-6">Não encontramos nenhum sorteio disponível para participação no momento.</p>
+          
+          <!-- Botões de ação -->
+          <div class="space-y-3 w-full">
+            <button 
+              @click="fetchRaffleDataFromFirestore" 
+              class="w-full bg-gray-200 hover:bg-gray-300 text-gray-800 py-2 px-4 rounded transition-colors flex items-center justify-center"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              Atualizar
+            </button>
+            
+            <button 
+              v-if="isAdmin"
+              @click="createNewRaffle" 
+              class="w-full bg-primary hover:bg-primary-dark text-white py-2 px-4 rounded transition-colors flex items-center justify-center"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+              </svg>
+              Criar Sorteio
+            </button>
+          </div>
+          
+          <p class="text-xs text-gray-500 mt-6">
+            Os sorteios ficam disponíveis quando ativados pelo administrador.
+            <br>Volte mais tarde para verificar novos sorteios!
+          </p>
+        </div>
+      </Card>
     </div>
     
     <!-- Botão para criar novo sorteio (apenas para quem pode criar) -->
