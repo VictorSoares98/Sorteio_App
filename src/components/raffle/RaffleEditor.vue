@@ -13,6 +13,7 @@ const VueDatePicker = defineAsyncComponent(() =>
 import { useRaffleValidation } from '../../composables/useRaffleValidation';
 import { useImageProcessing } from '../../composables/useImageProcessing';
 import type { RaffleData } from '../../services/raffle';
+import { MAX_AVAILABLE_NUMBERS, MIN_AVAILABLE_NUMBERS } from '../../utils/constants';
 
 const props = defineProps<{
   raffleData: RaffleData;
@@ -43,9 +44,13 @@ const editedData = ref({ ...props.raffleData });
 // Controlar se o horário específico está habilitado
 const enableSpecificTime = ref(!!props.raffleData.raffleTime);
 const priceInput = ref('');
+const availableNumbersInput = ref('');
 
 // Valores pré-definidos para o preço do bilhete
 const priceOptions = [1, 2, 5, 10, 20, 50];
+
+// Valores pré-definidos para quantidade de números disponíveis
+const numbersOptions = [100, 500, 1000, 2000, 5000, 10000];
 
 // Obter o limite máximo de preço do composable
 const MAX_PRICE_LIMIT = getPriceLimit();
@@ -217,6 +222,11 @@ const formatPriceToBRL = (value: number) => {
   }).format(value);
 };
 
+// Formatar número com separadores de milhar
+const formatNumberWithSeparators = (value: number): string => {
+  return new Intl.NumberFormat('pt-BR').format(value);
+};
+
 // Lidar com entrada de preço
 const handlePriceInput = (event: Event) => {
   // Obter apenas dígitos da entrada
@@ -241,9 +251,46 @@ const handlePriceInput = (event: Event) => {
   priceInput.value = formatPriceToBRL(numericValue);
 };
 
+// Lidar com entrada de quantidade de números
+const handleAvailableNumbersInput = (event: Event) => {
+  // Obter apenas dígitos da entrada
+  const input = (event.target as HTMLInputElement).value.replace(/\D/g, '');
+  
+  // Converter para número
+  let numericValue = input ? parseInt(input) : 0;
+  
+  // Limitar o valor ao máximo permitido
+  if (numericValue > MAX_AVAILABLE_NUMBERS) {
+    numericValue = MAX_AVAILABLE_NUMBERS;
+    // Atualizar o campo com valor formatado limitado
+    setTimeout(() => {
+      availableNumbersInput.value = formatNumberWithSeparators(MAX_AVAILABLE_NUMBERS);
+    }, 0);
+  }
+  
+  // Garantir o valor mínimo
+  if (numericValue < MIN_AVAILABLE_NUMBERS) {
+    numericValue = MIN_AVAILABLE_NUMBERS;
+  }
+  
+  // Armazenar o valor numérico real
+  editedData.value.availableNumbers = numericValue;
+  
+  // Formatar para exibição com separadores de milhar
+  availableNumbersInput.value = formatNumberWithSeparators(numericValue);
+};
+
 // Formatar preço ao perder o foco
 const formatPrice = () => {
   priceInput.value = formatPriceToBRL(editedData.value.price);
+};
+
+// Formatar número ao perder o foco
+const formatAvailableNumbers = () => {
+  if (!editedData.value.availableNumbers || editedData.value.availableNumbers < MIN_AVAILABLE_NUMBERS) {
+    editedData.value.availableNumbers = MIN_AVAILABLE_NUMBERS;
+  }
+  availableNumbersInput.value = formatNumberWithSeparators(editedData.value.availableNumbers);
 };
 
 // Função para selecionar um valor pré-definido
@@ -253,6 +300,15 @@ const selectPriceValue = (value: number) => {
   
   // Formatar para exibição
   priceInput.value = formatPriceToBRL(value);
+};
+
+// Função para selecionar um valor pré-definido de números
+const selectNumbersValue = (value: number) => {
+  // Atualizar o valor numérico real
+  editedData.value.availableNumbers = value;
+  
+  // Formatar para exibição
+  availableNumbersInput.value = formatNumberWithSeparators(value);
 };
 
 // Lidar com alterações na data do datepicker
@@ -392,6 +448,15 @@ onMounted(() => {
   if (editedData.value.price) {
     priceInput.value = formatPriceToBRL(editedData.value.price);
   }
+  
+  // Inicializar o campo de números disponíveis
+  if (editedData.value.availableNumbers) {
+    availableNumbersInput.value = formatNumberWithSeparators(editedData.value.availableNumbers);
+  } else {
+    // Valor padrão se não estiver definido
+    editedData.value.availableNumbers = 1000;
+    availableNumbersInput.value = formatNumberWithSeparators(1000);
+  }
 });
 </script>
 
@@ -524,6 +589,49 @@ onMounted(() => {
             </button>
           </div>
         </div>
+      </div>
+      
+      <!-- Quantidade de números disponíveis -->
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1" for="availableNumbers">
+          Quantidade de Números Disponíveis
+        </label>
+        
+        <div class="flex flex-col md:flex-row md:items-center gap-2">
+          <!-- Input com largura total em mobile e reduzida em desktop -->
+          <div class="relative w-full md:w-1/3 md:min-w-[144px] mb-2 md:mb-0">
+            <input 
+              id="availableNumbers"
+              v-model="availableNumbersInput"
+              type="text"
+              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary h-[42px]"
+              @input="handleAvailableNumbersInput"
+              @blur="formatAvailableNumbers"
+              placeholder="1000"
+            />
+          </div>
+          
+          <!-- Container para botões de valores pré-definidos com grid responsivo -->
+          <div class="w-full md:flex-1 grid grid-cols-3 md:grid-cols-6 gap-2">
+            <button
+              v-for="option in numbersOptions"
+              :key="option"
+              type="button"
+              @click="selectNumbersValue(option)"
+              :class="[
+                'h-10 rounded-md px-3 text-sm flex items-center justify-center transition-colors',
+                editedData.availableNumbers === option 
+                  ? 'bg-primary text-white' 
+                  : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
+              ]"
+            >
+              {{ formatNumberWithSeparators(option) }}
+            </button>
+          </div>
+        </div>
+        <p class="text-xs text-gray-500 mt-1">
+          Defina quantos números estarão disponíveis para compra neste sorteio (máximo: {{ formatNumberWithSeparators(MAX_AVAILABLE_NUMBERS) }}).
+        </p>
       </div>
       
       <!-- Visibilidade do sorteio -->

@@ -31,6 +31,7 @@ export interface RaffleData {
   isPaused?: boolean;
   cancelReason?: string;
   pauseReason?: string;
+  availableNumbers?: number; // Quantidade de números disponíveis para o sorteio
 }
 
 // ID do documento do sorteio no Firestore

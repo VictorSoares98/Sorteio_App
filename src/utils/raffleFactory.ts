@@ -26,6 +26,7 @@ export const createDefaultRaffle = (): RaffleData => {
     winner: null,
     seller: null,
     createdBy: '', // Adicionar propriedade obrigatória
-    visibility: 'universal' // Garantir que a visibilidade padrão seja 'universal'
+    visibility: 'universal', // Garantir que a visibilidade padrão seja 'universal'
+    availableNumbers: 1000 // Definir valor padrão para quantidade de números
   };
 };
